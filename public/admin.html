@@ -459,13 +459,43 @@
                 <h2>THÔNG TIN HÔM NAY</h2>
                 <div id="todayMessage"></div>
 
-                <div class="form-group">
-                    <label for="todayMenu">MENU HÔM NAY</label>
-                    <textarea id="todayMenu" placeholder="Nhập menu hôm nay..."></textarea>
-                </div>
+                <div style="background: #f0ebe0; padding: 25px; border-radius: 10px; margin-bottom: 20px;">
+                    <h3 style="color: #A0826D; margin-bottom: 20px; font-size: 16px;">MENU HÔM NAY</h3>
+                    
+                    <div class="form-group">
+                        <label for="monChinh">Món chính</label>
+                        <input type="text" id="monChinh" placeholder="Ví dụ: Thịt rang cháy cạnh + Thịt chưng mắm tép">
+                    </div>
 
-                <div class="button-group">
-                    <button class="btn-primary" onclick="updateMenu()">CẬP NHẬT MENU</button>
+                    <div class="form-group">
+                        <label for="monPhu">Món phụ</label>
+                        <input type="text" id="monPhu" placeholder="Ví dụ: Đậu sốt + Lạc">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="rau">Rau</label>
+                        <input type="text" id="rau" placeholder="Ví dụ: Bắp cải luộc">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="canh">Canh</label>
+                        <input type="text" id="canh" placeholder="Ví dụ: Canh rau cần thịt bằm">
+                    </div>
+
+                    <div style="background: white; padding: 12px; border-radius: 6px; margin: 15px 0; border-left: 4px solid #A0826D;">
+                        <p style="font-size: 13px; color: #8B7355; line-height: 1.5;">
+                            <strong>Ghi chú:</strong> Xuất bình thường sẽ gồm: Món chính, Món phụ, Rau và Canh.
+                        </p>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="alternativeItems">Các món thay thế (ngăn cách bởi dấu + )</label>
+                        <input type="text" id="alternativeItems" placeholder="Ví dụ: Trứng ốp la + Trứng tráng + Trứng luộc">
+                    </div>
+
+                    <div class="button-group">
+                        <button class="btn-primary" onclick="updateMenu()">CẬP NHẬT MENU</button>
+                    </div>
                 </div>
 
                 <hr style="margin: 25px 0; border: none; border-top: 2px solid #f0ebe0;">
@@ -532,23 +562,79 @@
             fetch(`${API_BASE}/api/today`)
                 .then(res => res.json())
                 .then(data => {
-                    document.getElementById('todayMenu').value = data.menu;
+                    // Parse menu data
+                    if (typeof data.menu === 'string') {
+                        // If it's a simple string, try to parse it or use as is
+                        const menuObj = parseMenu(data.menu);
+                        document.getElementById('monChinh').value = menuObj.monChinh || '';
+                        document.getElementById('monPhu').value = menuObj.monPhu || '';
+                        document.getElementById('rau').value = menuObj.rau || '';
+                        document.getElementById('canh').value = menuObj.canh || '';
+                        document.getElementById('alternativeItems').value = menuObj.alternatives || '';
+                    } else if (typeof data.menu === 'object') {
+                        // If it's already an object
+                        document.getElementById('monChinh').value = data.menu.monChinh || '';
+                        document.getElementById('monPhu').value = data.menu.monPhu || '';
+                        document.getElementById('rau').value = data.menu.rau || '';
+                        document.getElementById('canh').value = data.menu.canh || '';
+                        document.getElementById('alternativeItems').value = data.menu.alternatives || '';
+                    }
                     document.getElementById('dailyQuantity').value = data.quantity;
                 })
                 .catch(err => console.error('Lỗi:', err));
         }
 
+        function parseMenu(menuString) {
+            // Try to parse menu string - format: Món chính: xxx | Món phụ: xxx | Rau: xxx | Canh: xxx
+            const result = { monChinh: '', monPhu: '', rau: '', canh: '', alternatives: '' };
+            
+            if (!menuString) return result;
+            
+            // This is a simple parser - you may need to adjust based on your format
+            const parts = menuString.split('|').map(p => p.trim());
+            parts.forEach(part => {
+                if (part.includes('Món chính')) {
+                    result.monChinh = part.replace(/.*Món chính\s*:?\s*/, '').trim();
+                } else if (part.includes('Món phụ')) {
+                    result.monPhu = part.replace(/.*Món phụ\s*:?\s*/, '').trim();
+                } else if (part.includes('Rau')) {
+                    result.rau = part.replace(/.*Rau\s*:?\s*/, '').trim();
+                } else if (part.includes('Canh')) {
+                    result.canh = part.replace(/.*Canh\s*:?\s*/, '').trim();
+                }
+            });
+            
+            return result;
+        }
+
         function updateMenu() {
-            const menu = document.getElementById('todayMenu').value.trim();
-            if (!menu) {
-                showMessage('todayMessage', 'Vui lòng nhập menu', 'error');
+            const monChinh = document.getElementById('monChinh').value.trim();
+            const monPhu = document.getElementById('monPhu').value.trim();
+            const rau = document.getElementById('rau').value.trim();
+            const canh = document.getElementById('canh').value.trim();
+            const alternatives = document.getElementById('alternativeItems').value.trim();
+
+            if (!monChinh || !monPhu || !rau || !canh) {
+                showMessage('todayMessage', 'Vui lòng điền đầy đủ thông tin menu', 'error');
                 return;
             }
+
+            // Create menu object
+            const menuData = {
+                monChinh,
+                monPhu,
+                rau,
+                canh,
+                alternatives
+            };
+
+            // Format menu string for display
+            const menuString = `Món chính: ${monChinh} | Món phụ: ${monPhu} | Rau: ${rau} | Canh: ${canh}${alternatives ? ' | Thay thế: ' + alternatives : ''}`;
 
             fetch(`${API_BASE}/api/admin/menu`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ menu })
+                body: JSON.stringify({ menu: menuData, menuString })
             })
             .then(res => res.json())
             .then(data => {
