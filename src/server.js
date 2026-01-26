@@ -91,7 +91,8 @@ app.post('/api/admin/menu', (req, res) => {
   }
   
   // Lưu menu object dưới dạng JSON
-  const menuJson = JSON.stringify(menu);
+  // Nếu menu đã là string, dùng trực tiếp; nếu là object, stringify nó
+  let menuJson = typeof menu === 'string' ? menu : JSON.stringify(menu);
   console.log('📝 Lưu menu JSON:', menuJson);
   
   db.updateTodayMenu(menuJson, (err) => {
