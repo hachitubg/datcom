@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cơm Gia Đình</title>
+    <title>Cơm Cô Giang</title>
     <style>
         * {
             margin: 0;
@@ -85,6 +85,89 @@
 
         .content {
             padding: 40px;
+        }
+
+        .menu-section {
+            background: linear-gradient(135deg, #f0ebe0 0%, #ead8c3 100%);
+            padding: 35px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            border-left: 5px solid #A0826D;
+            animation: fadeInUp 0.8s ease-out 0.2s both;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+        }
+
+        .menu-items {
+            margin-bottom: 25px;
+        }
+
+        .menu-item {
+            display: flex;
+            margin-bottom: 16px;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(160, 130, 109, 0.15);
+        }
+
+        .menu-item:last-child {
+            border-bottom: none;
+        }
+
+        .menu-label {
+            color: #A0826D;
+            font-weight: 600;
+            min-width: 90px;
+            display: block;
+            font-size: 14px;
+        }
+
+        .menu-value {
+            color: #8B7355;
+            font-size: 14px;
+            flex: 1;
+            line-height: 1.4;
+        }
+
+        .menu-note {
+            background: rgba(255, 255, 255, 0.6);
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            color: #8B7355;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .menu-note p {
+            margin: 0;
+        }
+
+        .alternative-items {
+            background: rgba(255, 255, 255, 0.5);
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .alternatives {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .alt-item {
+            background: white;
+            color: #A0826D;
+            padding: 8px 14px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 500;
+            border: 1px solid #D4A574;
+            display: inline-block;
+        }
+
+        .price-section {
+            text-align: center;
+            padding-top: 10px;
         }
 
         .info-section {
@@ -432,19 +515,55 @@
 <body>
     <div class="container">
         <header>
-            <h1>CƠM GIA ĐÌNH</h1>
+            <h1>CƠM CÔ GIANG</h1>
             <p class="subtitle">Cơm ngon, giá tốt, ấm cúm</p>
         </header>
 
         <div class="content">
-            <div class="info-section">
-                <div class="menu-display" id="menuDisplay">Đang tải...</div>
-                <div class="menu-price">40.000 VNĐ / xuất</div>
+            <div class="menu-section">
+                <h2 style="color: #A0826D; margin-bottom: 20px; font-size: 20px; text-align: center;">Menu hôm nay</h2>
+                
+                <div class="menu-items">
+                    <div class="menu-item">
+                        <span class="menu-label">Món chính:</span>
+                        <span class="menu-value">Thịt rang cháy cạnh + Thịt chưng mắm tép</span>
+                    </div>
+                    <div class="menu-item">
+                        <span class="menu-label">Món phụ:</span>
+                        <span class="menu-value">Đậu sốt + Lạc</span>
+                    </div>
+                    <div class="menu-item">
+                        <span class="menu-label">Rau:</span>
+                        <span class="menu-value">Bắp cải luộc</span>
+                    </div>
+                    <div class="menu-item">
+                        <span class="menu-label">Canh:</span>
+                        <span class="menu-value">Canh rau cần thịt bằm</span>
+                    </div>
+                </div>
+
+                <div class="menu-note">
+                    <p><strong>Xuất bình thường</strong> sẽ gồm: Món chính, Món phụ, Rau và Canh.</p>
+                    <p style="margin-top: 10px;">Nếu ai không ăn được gì hoặc muốn đổi món, có thêm các tùy chọn:</p>
+                </div>
+
+                <div class="alternative-items">
+                    <h3 style="color: #A0826D; font-size: 16px; margin-bottom: 12px;">Các món thay thế:</h3>
+                    <div class="alternatives">
+                        <span class="alt-item">Trứng ốp la</span>
+                        <span class="alt-item">Trứng tráng</span>
+                        <span class="alt-item">Trứng luộc</span>
+                    </div>
+                </div>
+
+                <div class="price-section">
+                    <div class="menu-price">40.000 VNĐ / xuất</div>
+                </div>
             </div>
 
             <div class="countdown">
                 <div class="countdown-label">Số xuất còn lại hôm nay</div>
-                <div class="countdown-number" id="remainingCount">10</div>
+                <div class="countdown-number" id="remainingCount">15</div>
                 <div class="countdown-text">Đã có <span id="orderedCount">0</span> xuất được đặt</div>
             </div>
 
@@ -534,7 +653,6 @@
             fetch(`${API_BASE}/api/today`)
                 .then(res => res.json())
                 .then(data => {
-                    document.getElementById('menuDisplay').textContent = data.menu;
                     document.getElementById('remainingCount').textContent = data.remaining;
                     document.getElementById('orderedCount').textContent = data.ordered;
 
@@ -544,6 +662,10 @@
                         orderBtn.disabled = true;
                         orderBtn.classList.add('disabled');
                         orderBtn.textContent = '❌ Hết xuất';
+                    } else {
+                        orderBtn.disabled = false;
+                        orderBtn.classList.remove('disabled');
+                        orderBtn.textContent = 'ĐẶT CƠM';
                     }
 
                     // Update max quantity
