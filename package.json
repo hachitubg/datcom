@@ -1,0 +1,16 @@
+{
+  "name": "datcom-website",
+  "version": "1.0.0",
+  "description": "Website đặt cơm đơn giản",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node src/server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "body-parser": "^1.20.2",
+    "sqlite3": "^5.1.6",
+    "cors": "^2.8.5"
+  }
+}

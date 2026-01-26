@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Đặt Cơm Online</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px 20px;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .info-section {
+            background: #f8f9ff;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            border-left: 4px solid #667eea;
+        }
+
+        .menu-display {
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+
+        .menu-price {
+            font-size: 18px;
+            color: #e74c3c;
+            margin-bottom: 15px;
+        }
+
+        .countdown {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            border: 2px solid #667eea;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .countdown-label {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+
+        .countdown-number {
+            font-size: 48px;
+            font-weight: bold;
+            color: #e74c3c;
+        }
+
+        .countdown-text {
+            color: #666;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+
+        .buttons-group {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        button {
+            flex: 1;
+            padding: 15px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #27ae60;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #229954;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(39, 174, 96, 0.4);
+        }
+
+        .btn-admin {
+            background: #f39c12;
+            color: white;
+        }
+
+        .btn-admin:hover {
+            background: #e67e22;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(243, 156, 18, 0.4);
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 5% auto;
+            padding: 30px;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }
+
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            line-height: 20px;
+        }
+
+        .close:hover {
+            color: #000;
+        }
+
+        .modal h2 {
+            margin-bottom: 20px;
+            color: #667eea;
+            font-size: 24px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #333;
+            font-weight: 500;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            font-family: inherit;
+        }
+
+        input[type="text"]:focus,
+        input[type="number"]:focus,
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 5px rgba(102, 126, 234, 0.3);
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .form-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .btn-submit {
+            flex: 1;
+            padding: 12px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 16px;
+        }
+
+        .btn-submit:hover {
+            background: #5568d3;
+        }
+
+        .btn-cancel {
+            flex: 1;
+            padding: 12px;
+            background: #bdc3c7;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 16px;
+        }
+
+        .btn-cancel:hover {
+            background: #95a5a6;
+        }
+
+        .orders-list {
+            background: #f8f9ff;
+            border-radius: 8px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .order-item {
+            padding: 15px;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+        }
+
+        .order-item:last-child {
+            border-bottom: none;
+        }
+
+        .order-info h4 {
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+
+        .order-info p {
+            color: #666;
+            font-size: 14px;
+            margin: 3px 0;
+        }
+
+        .order-time {
+            color: #999;
+            font-size: 12px;
+        }
+
+        .success-message {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            border-left: 4px solid #28a745;
+        }
+
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            border-left: 4px solid #f5c6cb;
+        }
+
+        .admin-link {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #f39c12;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: bold;
+            box-shadow: 0 5px 15px rgba(243, 156, 18, 0.4);
+            transition: all 0.3s ease;
+        }
+
+        .admin-link:hover {
+            background: #e67e22;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(243, 156, 18, 0.6);
+        }
+
+        @media (max-width: 600px) {
+            h1 {
+                font-size: 24px;
+            }
+
+            .countdown-number {
+                font-size: 36px;
+            }
+
+            .buttons-group {
+                flex-direction: column;
+            }
+        }
+
+        .disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .disabled:hover {
+            background: #bdc3c7 !important;
+            transform: none !important;
+            box-shadow: none !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🍚 Đặt Cơm Online</h1>
+            <p class="subtitle">Cơm ngon - Giá rẻ - Nhanh chóng</p>
+        </header>
+
+        <div class="content">
+            <div class="info-section">
+                <div class="menu-display" id="menuDisplay">Đang tải...</div>
+                <div class="menu-price">40.000 VNĐ / xuất</div>
+            </div>
+
+            <div class="countdown">
+                <div class="countdown-label">Số xuất còn lại hôm nay</div>
+                <div class="countdown-number" id="remainingCount">10</div>
+                <div class="countdown-text">Còn <span id="orderedCount">0</span> xuất đã được đặt</div>
+            </div>
+
+            <div class="buttons-group">
+                <button class="btn-primary" id="btnOrder">📝 Đặt Cơm</button>
+                <button class="btn-secondary" id="btnList">📋 Danh Sách Đơn</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Đặt Cơm -->
+    <div id="orderModal" class="modal">
+        <div class="modal-content">
+            <span class="close" id="closeOrder">&times;</span>
+            <h2>Đặt Cơm</h2>
+            <div id="orderMessage"></div>
+            <form id="orderForm">
+                <div class="form-group">
+                    <label for="customerName">Họ và tên *</label>
+                    <input type="text" id="customerName" placeholder="Nhập tên của bạn" required>
+                </div>
+                <div class="form-group">
+                    <label for="quantity">Số lượng (xuất) *</label>
+                    <input type="number" id="quantity" min="1" max="10" value="1" required>
+                </div>
+                <div class="form-group">
+                    <label for="description">Ghi chú (tùy chọn)</label>
+                    <textarea id="description" placeholder="Ví dụ: Ít mặn, thêm rau..."></textarea>
+                </div>
+                <div class="form-buttons">
+                    <button type="submit" class="btn-submit">Đặt Hàng</button>
+                    <button type="button" class="btn-cancel" id="cancelOrder">Hủy</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Danh sách đơn -->
+    <div id="listModal" class="modal">
+        <div class="modal-content">
+            <span class="close" id="closeList">&times;</span>
+            <h2>📋 Danh Sách Đơn Hôm Nay</h2>
+            <div id="ordersList" class="orders-list">
+                <div style="padding: 20px; text-align: center; color: #999;">Đang tải...</div>
+            </div>
+        </div>
+    </div>
+
+    <a href="/admin" class="admin-link">⚙️ Quản Lý</a>
+
+    <script>
+        const API_BASE = '';
+
+        // Modal controls
+        const orderModal = document.getElementById('orderModal');
+        const listModal = document.getElementById('listModal');
+
+        document.getElementById('btnOrder').addEventListener('click', () => {
+            document.getElementById('orderMessage').innerHTML = '';
+            document.getElementById('orderForm').reset();
+            orderModal.style.display = 'block';
+        });
+
+        document.getElementById('btnList').addEventListener('click', loadOrders);
+
+        document.getElementById('closeOrder').addEventListener('click', () => {
+            orderModal.style.display = 'none';
+        });
+
+        document.getElementById('closeList').addEventListener('click', () => {
+            listModal.style.display = 'none';
+        });
+
+        document.getElementById('cancelOrder').addEventListener('click', () => {
+            orderModal.style.display = 'none';
+        });
+
+        window.addEventListener('click', (e) => {
+            if (e.target === orderModal) {
+                orderModal.style.display = 'none';
+            }
+            if (e.target === listModal) {
+                listModal.style.display = 'none';
+            }
+        });
+
+        // Load today info
+        function loadTodayInfo() {
+            fetch(`${API_BASE}/api/today`)
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById('menuDisplay').textContent = data.menu;
+                    document.getElementById('remainingCount').textContent = data.remaining;
+                    document.getElementById('orderedCount').textContent = data.ordered;
+
+                    // Update button state
+                    const orderBtn = document.getElementById('btnOrder');
+                    if (data.remaining <= 0) {
+                        orderBtn.disabled = true;
+                        orderBtn.classList.add('disabled');
+                        orderBtn.textContent = '❌ Hết xuất';
+                    }
+
+                    // Update max quantity
+                    const quantityInput = document.getElementById('quantity');
+                    quantityInput.max = Math.max(1, data.remaining);
+                })
+                .catch(err => console.error('Lỗi:', err));
+        }
+
+        // Load orders list
+        function loadOrders() {
+            fetch(`${API_BASE}/api/orders/today`)
+                .then(res => res.json())
+                .then(orders => {
+                    const ordersList = document.getElementById('ordersList');
+                    if (orders.length === 0) {
+                        ordersList.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">Chưa có đơn hàng</div>';
+                    } else {
+                        ordersList.innerHTML = orders.map(order => {
+                            const time = new Date(order.created_at).toLocaleTimeString('vi-VN');
+                            const date = new Date(order.created_at).toLocaleDateString('vi-VN');
+                            return `
+                                <div class="order-item">
+                                    <div class="order-info">
+                                        <h4>${order.name}</h4>
+                                        <p><strong>Số lượng:</strong> ${order.quantity} xuất</p>
+                                        ${order.description ? `<p><strong>Ghi chú:</strong> ${order.description}</p>` : ''}
+                                        <p class="order-time">${date} ${time}</p>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('');
+                    }
+                    listModal.style.display = 'block';
+                })
+                .catch(err => console.error('Lỗi:', err));
+        }
+
+        // Submit order
+        document.getElementById('orderForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+
+            const name = document.getElementById('customerName').value.trim();
+            const quantity = parseInt(document.getElementById('quantity').value);
+            const description = document.getElementById('description').value.trim();
+
+            if (!name) {
+                showOrderMessage('Vui lòng nhập tên', 'error');
+                return;
+            }
+
+            fetch(`${API_BASE}/api/orders`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, quantity, description })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.error) {
+                    showOrderMessage(data.error, 'error');
+                } else {
+                    showOrderMessage('Đặt cơm thành công! 🎉', 'success');
+                    setTimeout(() => {
+                        orderModal.style.display = 'none';
+                        loadTodayInfo();
+                    }, 1500);
+                }
+            })
+            .catch(err => showOrderMessage('Lỗi: ' + err.message, 'error'));
+        });
+
+        function showOrderMessage(message, type) {
+            const messageDiv = document.getElementById('orderMessage');
+            const className = type === 'error' ? 'error-message' : 'success-message';
+            messageDiv.innerHTML = `<div class="${className}">${message}</div>`;
+        }
+
+        // Load on page load
+        loadTodayInfo();
+        setInterval(loadTodayInfo, 5000); // Refresh every 5 seconds
+    </script>
+</body>
+</html>

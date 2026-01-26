@@ -1,0 +1,8 @@
+# Các file không cần commit lên server
+node_modules/
+datcom.db
+.env
+*.log
+.DS_Store
+.idea/
+.vscode/
