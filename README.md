@@ -40,8 +40,12 @@ npm start
 Kết nối SSH vào server:
 ```bash
 ssh root@103.200.20.160
-# Nhập password: qV0ZWWybI7mBrV8p1iGm
+# Nhập password của bạn
 ```
+
+⚠️ **QUAN TRỌNG BẢO MẬT**: 
+- Không bao giờ chia sẻ password hoặc SSH key công khai trên GitHub
+- Nếu vừa rồi bạn thấy password trong file này, hãy **THAY ĐỔI NGAY** password root trên server
 
 ### Bước 2: Cài Đặt Node.js và npm
 
@@ -60,14 +64,15 @@ npm --version
 
 ### Bước 3: Upload Dự Án Lên Server
 
-**Cách 1: Dùng Git (nếu có)**
+**Cách 1: Dùng Git (KHUYẾN KHÍCH)**
 ```bash
-# Trên server
+# Trên server - DÙNG HTTPS (không dùng SSH)
 cd /var/www
-git clone <link-repo-của-bạn> datcom
+git clone https://github.com/hachitubg/datcom.git
 cd datcom
 npm install
 ```
+Khi được hỏi username, nhập tên GitHub của bạn. Khi được hỏi password, dùng GitHub Personal Access Token (tạo tại https://github.com/settings/tokens)
 
 **Cách 2: Dùng SFTP/FTP**
 - Copy toàn bộ folder `datcom` lên `/var/www/datcom` trên server
