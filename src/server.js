@@ -77,20 +77,14 @@ app.get('/api/admin/day/:date', (req, res) => {
 // Cập nhật menu hôm nay
 app.post('/api/admin/menu', (req, res) => {
   const { menu, menuString } = req.body;
-  if (!menu && !menuString) {
+  if (!menu) {
     return res.status(400).json({ error: 'Menu không được để trống' });
   }
   
-  // Nếu có menuString, sử dụng nó; nếu không thì convert menu object to string
-  let menuToStore = menuString;
-  if (!menuToStore && typeof menu === 'object') {
-    // Convert menu object to string format
-    const m = menu;
-    menuToStore = `Món chính: ${m.monChinh || ''} | Món phụ: ${m.monPhu || ''} | Rau: ${m.rau || ''} | Canh: ${m.canh || ''}${m.alternatives ? ' | Thay thế: ' + m.alternatives : ''}`;
-  }
+  // Lưu menu object dưới dạng JSON
+  const menuJson = JSON.stringify(menu);
   
-  // Store as JSON string for better data structure
-  db.updateTodayMenu(JSON.stringify(menu || {}), menuToStore, (err) => {
+  db.updateTodayMenu(menuJson, (err) => {
     if (err) {
       return res.status(500).json({ error: err.message });
     }

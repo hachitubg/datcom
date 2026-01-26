@@ -80,10 +80,19 @@ class Database {
               } else {
                 const ordered = (orderRow && orderRow.ordered) || 0;
                 const remaining = row.quantity - ordered;
+                
+                // Parse menu nếu là JSON string
+                let menu = row.menu;
+                try {
+                  menu = JSON.parse(row.menu);
+                } catch (e) {
+                  // Nếu không phải JSON, giữ nguyên string
+                }
+                
                 callback(null, {
                   id: row.id,
                   date: row.date,
-                  menu: row.menu,
+                  menu: menu,
                   quantity: row.quantity,
                   ordered: ordered,
                   remaining: Math.max(0, remaining),
@@ -214,13 +223,11 @@ class Database {
     );
   }
 
-  updateTodayMenu(menuJson, menuString, callback) {
+  updateTodayMenu(menuJson, callback) {
     const today = this.getDateString();
-    // Store the menu - if we have both, store the string version which is more readable
-    const menuToStore = menuString || menuJson;
     this.db.run(
       `UPDATE days SET menu = ? WHERE date = ?`,
-      [menuToStore, today],
+      [menuJson, today],
       callback
     );
   }

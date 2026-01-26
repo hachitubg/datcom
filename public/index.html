@@ -942,16 +942,25 @@
             fetch(`${API_BASE}/api/today`)
                 .then(res => res.json())
                 .then(data => {
-                    // Update menu items
+                    console.log('API Data:', data); // Debug log
+                    
+                    // Update menu items - menu should now be an object from the API
                     let menuObj = {};
                     
                     if (typeof data.menu === 'object' && data.menu !== null) {
-                        // If menu is already an object
+                        // Menu is already an object
                         menuObj = data.menu;
                     } else if (typeof data.menu === 'string') {
-                        // Try to parse menu string
-                        menuObj = parseMenu(data.menu);
+                        // Try to parse if it's a string
+                        try {
+                            menuObj = JSON.parse(data.menu);
+                        } catch (e) {
+                            // If it's not JSON, try to parse as formatted string
+                            menuObj = parseMenu(data.menu);
+                        }
                     }
+                    
+                    console.log('Menu Object:', menuObj); // Debug log
                     
                     // Update menu display
                     updateMenuDisplay(menuObj);
