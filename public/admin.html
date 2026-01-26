@@ -411,32 +411,301 @@
         }
 
         @media (max-width: 768px) {
-            .tab-buttons {
-                flex-direction: column;
+            body {
+                padding: 12px;
             }
 
-            .tab-btn {
-                width: 100%;
-                text-align: center;
+            .container {
+                max-width: 100%;
             }
 
             header {
                 flex-direction: column;
                 gap: 15px;
                 text-align: center;
+                padding: 20px;
+                border-radius: 10px;
+            }
+
+            h1 {
+                font-size: 24px;
+            }
+
+            .back-btn {
+                width: 100%;
+                padding: 10px 15px;
+                font-size: 14px;
+            }
+
+            .tab-buttons {
+                flex-direction: column;
+                gap: 8px;
+                margin-bottom: 20px;
+            }
+
+            .tab-btn {
+                width: 100%;
+                text-align: center;
+                padding: 10px 16px;
+                font-size: 14px;
+            }
+
+            .tab-content {
+                padding: 20px;
+            }
+
+            .section {
+                margin-bottom: 20px;
+            }
+
+            .section h2 {
+                font-size: 18px;
+                margin-bottom: 15px;
+                padding-bottom: 8px;
+            }
+
+            .form-group {
+                margin-bottom: 12px;
+            }
+
+            label {
+                font-size: 12px;
+                margin-bottom: 5px;
+            }
+
+            input[type="text"],
+            input[type="number"],
+            textarea,
+            select {
+                padding: 10px;
+                font-size: 13px;
+            }
+
+            textarea {
+                min-height: 80px;
+            }
+
+            .button-group {
+                gap: 8px;
+                margin-top: 15px;
+            }
+
+            button {
+                padding: 10px 16px;
+                font-size: 13px;
+                flex: 1;
+            }
+
+            .modal-content {
+                width: 95%;
+                margin: 20% auto;
+                padding: 20px;
+                border-radius: 10px;
+            }
+
+            .modal h2 {
+                font-size: 18px;
+                margin-bottom: 15px;
             }
 
             .day-header {
                 flex-direction: column;
                 align-items: flex-start;
+                gap: 10px;
+            }
+
+            .day-stats {
+                flex-direction: column;
+                gap: 8px;
+                font-size: 12px;
+            }
+
+            .table-wrapper {
+                overflow-x: auto;
             }
 
             table {
-                font-size: 12px;
+                font-size: 11px;
             }
 
             th, td {
                 padding: 8px;
+            }
+
+            .order-row {
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .btn-small {
+                width: 100%;
+                padding: 10px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            body {
+                padding: 10px;
+            }
+
+            header {
+                padding: 16px;
+                margin-bottom: 16px;
+            }
+
+            h1 {
+                font-size: 20px;
+                letter-spacing: 0.5px;
+            }
+
+            .back-btn {
+                padding: 10px 12px;
+                font-size: 12px;
+            }
+
+            .tab-buttons {
+                gap: 6px;
+                margin-bottom: 16px;
+            }
+
+            .tab-btn {
+                padding: 10px 12px;
+                font-size: 12px;
+            }
+
+            .tab-btn.active {
+                font-size: 12px;
+            }
+
+            .tab-content {
+                padding: 16px;
+            }
+
+            .section {
+                margin-bottom: 16px;
+            }
+
+            .section h2 {
+                font-size: 16px;
+                margin-bottom: 12px;
+                padding-bottom: 8px;
+            }
+
+            .form-group {
+                margin-bottom: 10px;
+            }
+
+            label {
+                font-size: 11px;
+                margin-bottom: 4px;
+                font-weight: 600;
+            }
+
+            input[type="text"],
+            input[type="number"],
+            textarea,
+            select {
+                padding: 8px;
+                font-size: 12px;
+            }
+
+            textarea {
+                min-height: 70px;
+            }
+
+            .button-group {
+                gap: 6px;
+                margin-top: 12px;
+            }
+
+            button {
+                padding: 10px 12px;
+                font-size: 12px;
+            }
+
+            .modal-content {
+                width: 92%;
+                margin: 30% auto;
+                padding: 16px;
+            }
+
+            .modal h2 {
+                font-size: 16px;
+                margin-bottom: 12px;
+            }
+
+            .day-item {
+                padding: 12px;
+                border-radius: 8px;
+                margin-bottom: 10px;
+            }
+
+            .day-date {
+                font-size: 14px;
+            }
+
+            .day-stats {
+                flex-direction: column;
+                gap: 6px;
+                font-size: 11px;
+            }
+
+            .stat {
+                gap: 4px;
+            }
+
+            .day-menu {
+                font-size: 12px;
+                margin-bottom: 10px;
+            }
+
+            table {
+                font-size: 10px;
+            }
+
+            th {
+                padding: 6px;
+                font-size: 10px;
+            }
+
+            td {
+                padding: 6px;
+            }
+
+            .order-row {
+                padding: 10px;
+                flex-direction: column;
+                gap: 8px;
+            }
+
+            .order-info {
+                width: 100%;
+            }
+
+            .order-name {
+                font-size: 13px;
+            }
+
+            .order-details {
+                font-size: 11px;
+            }
+
+            .btn-small {
+                width: 100%;
+                padding: 8px 10px;
+                font-size: 11px;
+            }
+
+            .loading {
+                font-size: 12px;
+                padding: 15px;
+            }
+
+            .success-message,
+            .error-message {
+                padding: 10px;
+                font-size: 11px;
+                margin-bottom: 10px;
             }
         }
     </style>

@@ -497,17 +497,306 @@
             box-shadow: none !important;
         }
 
-        @media (max-width: 600px) {
+        @media (max-width: 768px) {
+            body {
+                padding: 12px;
+            }
+
+            .container {
+                border-radius: 12px;
+            }
+
+            header {
+                padding: 35px 16px;
+            }
+
             h1 {
-                font-size: 28px;
+                font-size: 32px;
+                margin-bottom: 8px;
+            }
+
+            .subtitle {
+                font-size: 15px;
+            }
+
+            .content {
+                padding: 24px;
+            }
+
+            .menu-section {
+                padding: 20px;
+                margin-bottom: 20px;
+                border-radius: 10px;
+            }
+
+            .menu-section h2 {
+                font-size: 18px;
+                margin-bottom: 16px;
+            }
+
+            .menu-item {
+                display: block;
+                margin-bottom: 14px;
+                padding: 10px 0;
+            }
+
+            .menu-label {
+                min-width: auto;
+                margin-bottom: 4px;
+                display: block;
+                font-size: 13px;
+            }
+
+            .menu-value {
+                font-size: 13px;
+                display: block;
+            }
+
+            .menu-note {
+                padding: 12px;
+                font-size: 12px;
+                margin: 15px 0;
+            }
+
+            .menu-note p {
+                margin: 4px 0;
+            }
+
+            .alternative-items {
+                padding: 12px;
+                margin-bottom: 15px;
+            }
+
+            .alternative-items h3 {
+                font-size: 14px;
+                margin-bottom: 10px;
+            }
+
+            .alternatives {
+                gap: 8px;
+            }
+
+            .alt-item {
+                padding: 6px 12px;
+                font-size: 12px;
+            }
+
+            .menu-price {
+                font-size: 18px;
+                margin-bottom: 15px;
+            }
+
+            .countdown {
+                padding: 20px;
+                margin-bottom: 20px;
+            }
+
+            .countdown-label {
+                font-size: 12px;
+                margin-bottom: 10px;
             }
 
             .countdown-number {
-                font-size: 42px;
+                font-size: 48px;
+            }
+
+            .countdown-text {
+                font-size: 14px;
+                margin-top: 10px;
             }
 
             .buttons-group {
                 flex-direction: column;
+                gap: 10px;
+                margin-top: 16px;
+            }
+
+            button {
+                padding: 14px 16px;
+                font-size: 15px;
+                width: 100%;
+            }
+
+            .modal-content {
+                width: 95%;
+                margin: 20% auto;
+                padding: 20px;
+            }
+
+            .modal h2 {
+                font-size: 20px;
+                margin-bottom: 16px;
+            }
+
+            .form-group {
+                margin-bottom: 14px;
+            }
+
+            label {
+                font-size: 13px;
+                margin-bottom: 6px;
+            }
+
+            input[type="text"],
+            input[type="number"],
+            textarea {
+                padding: 10px;
+                font-size: 14px;
+            }
+
+            .form-buttons {
+                gap: 8px;
+                margin-top: 16px;
+            }
+
+            .close {
+                font-size: 24px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            body {
+                padding: 10px;
+            }
+
+            .container {
+                border-radius: 10px;
+            }
+
+            header {
+                padding: 25px 12px;
+            }
+
+            h1 {
+                font-size: 26px;
+                letter-spacing: 1px;
+            }
+
+            .subtitle {
+                font-size: 13px;
+            }
+
+            .content {
+                padding: 16px;
+            }
+
+            .menu-section {
+                padding: 16px;
+                margin-bottom: 16px;
+            }
+
+            .menu-section h2 {
+                font-size: 16px;
+                margin-bottom: 12px;
+            }
+
+            .menu-item {
+                margin-bottom: 12px;
+                padding: 8px 0;
+            }
+
+            .menu-label {
+                font-size: 12px;
+                font-weight: 600;
+                color: #A0826D;
+                margin-bottom: 3px;
+            }
+
+            .menu-value {
+                font-size: 12px;
+            }
+
+            .menu-note {
+                padding: 10px;
+                font-size: 11px;
+                margin: 12px 0;
+                line-height: 1.4;
+            }
+
+            .alternative-items {
+                padding: 10px;
+                margin-bottom: 12px;
+            }
+
+            .alternative-items h3 {
+                font-size: 13px;
+                margin-bottom: 8px;
+            }
+
+            .alternatives {
+                gap: 6px;
+            }
+
+            .alt-item {
+                padding: 5px 10px;
+                font-size: 11px;
+            }
+
+            .menu-price {
+                font-size: 16px;
+            }
+
+            .countdown {
+                padding: 16px;
+                margin-bottom: 16px;
+            }
+
+            .countdown-label {
+                font-size: 11px;
+                margin-bottom: 8px;
+            }
+
+            .countdown-number {
+                font-size: 40px;
+            }
+
+            .countdown-text {
+                font-size: 12px;
+                margin-top: 8px;
+            }
+
+            button {
+                padding: 12px 14px;
+                font-size: 14px;
+            }
+
+            .modal-content {
+                width: 92%;
+                margin: 30% auto;
+                padding: 16px;
+                border-radius: 10px;
+            }
+
+            .modal h2 {
+                font-size: 18px;
+                margin-bottom: 12px;
+            }
+
+            .form-group {
+                margin-bottom: 12px;
+            }
+
+            label {
+                font-size: 12px;
+                margin-bottom: 5px;
+            }
+
+            input[type="text"],
+            input[type="number"],
+            textarea {
+                padding: 8px;
+                font-size: 13px;
+            }
+
+            textarea {
+                min-height: 70px;
+            }
+
+            .success-message,
+            .error-message {
+                padding: 10px;
+                font-size: 12px;
+                margin-bottom: 12px;
             }
         }
     </style>
@@ -653,6 +942,20 @@
             fetch(`${API_BASE}/api/today`)
                 .then(res => res.json())
                 .then(data => {
+                    // Update menu items
+                    let menuObj = {};
+                    
+                    if (typeof data.menu === 'object' && data.menu !== null) {
+                        // If menu is already an object
+                        menuObj = data.menu;
+                    } else if (typeof data.menu === 'string') {
+                        // Try to parse menu string
+                        menuObj = parseMenu(data.menu);
+                    }
+                    
+                    // Update menu display
+                    updateMenuDisplay(menuObj);
+                    
                     document.getElementById('remainingCount').textContent = data.remaining;
                     document.getElementById('orderedCount').textContent = data.ordered;
 
@@ -673,6 +976,59 @@
                     quantityInput.max = Math.max(1, data.remaining);
                 })
                 .catch(err => console.error('Lỗi:', err));
+        }
+
+        // Parse menu string to object
+        function parseMenu(menuString) {
+            const result = { monChinh: '', monPhu: '', rau: '', canh: '', alternatives: '' };
+            
+            if (!menuString) return result;
+            
+            const parts = menuString.split('|').map(p => p.trim());
+            parts.forEach(part => {
+                if (part.includes('Món chính')) {
+                    result.monChinh = part.replace(/.*Món chính\s*:?\s*/, '').trim();
+                } else if (part.includes('Món phụ')) {
+                    result.monPhu = part.replace(/.*Món phụ\s*:?\s*/, '').trim();
+                } else if (part.includes('Rau')) {
+                    result.rau = part.replace(/.*Rau\s*:?\s*/, '').trim();
+                } else if (part.includes('Canh')) {
+                    result.canh = part.replace(/.*Canh\s*:?\s*/, '').trim();
+                } else if (part.includes('Thay thế')) {
+                    result.alternatives = part.replace(/.*Thay thế\s*:?\s*/, '').trim();
+                }
+            });
+            
+            return result;
+        }
+
+        // Update menu display on homepage
+        function updateMenuDisplay(menuObj) {
+            if (menuObj.monChinh) {
+                document.querySelectorAll('.menu-item')[0].querySelector('.menu-value').textContent = menuObj.monChinh;
+            }
+            if (menuObj.monPhu) {
+                document.querySelectorAll('.menu-item')[1].querySelector('.menu-value').textContent = menuObj.monPhu;
+            }
+            if (menuObj.rau) {
+                document.querySelectorAll('.menu-item')[2].querySelector('.menu-value').textContent = menuObj.rau;
+            }
+            if (menuObj.canh) {
+                document.querySelectorAll('.menu-item')[3].querySelector('.menu-value').textContent = menuObj.canh;
+            }
+            
+            // Update alternatives
+            if (menuObj.alternatives) {
+                const alternativesText = menuObj.alternatives;
+                const altItems = alternativesText.split('+').map(item => item.trim());
+                const alternativesDiv = document.querySelector('.alternatives');
+                
+                if (alternativesDiv) {
+                    alternativesDiv.innerHTML = altItems.map(item => 
+                        `<span class="alt-item">${item}</span>`
+                    ).join('');
+                }
+            }
         }
 
         // Load orders list
