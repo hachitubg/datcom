@@ -78,7 +78,7 @@ class Database {
               if (err) {
                 callback(err);
               } else {
-                const ordered = orderRow?.ordered || 0;
+                const ordered = (orderRow && orderRow.ordered) || 0;
                 const remaining = row.quantity - ordered;
                 callback(null, {
                   id: row.id,
@@ -155,7 +155,7 @@ class Database {
               `SELECT SUM(quantity) as ordered FROM orders WHERE day_id = ?`,
               [row.id],
               (err, orderRow) => {
-                const ordered = orderRow?.ordered || 0;
+                const ordered = (orderRow && orderRow.ordered) || 0;
                 row.ordered = ordered;
                 row.remaining = Math.max(0, row.quantity - ordered);
                 completedRows++;

@@ -43,10 +43,6 @@ ssh root@103.200.20.160
 # Nhập password của bạn
 ```
 
-⚠️ **QUAN TRỌNG BẢO MẬT**: 
-- Không bao giờ chia sẻ password hoặc SSH key công khai trên GitHub
-- Nếu vừa rồi bạn thấy password trong file này, hãy **THAY ĐỔI NGAY** password root trên server
-
 ### Bước 2: Cài Đặt Node.js và npm
 
 ```bash
