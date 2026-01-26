@@ -12,7 +12,7 @@
         }
 
         body {
-            font-family: 'Georgia', serif;
+            font-family: 'Segoe UI', 'Arial', sans-serif;
             background: linear-gradient(135deg, #f5f1e8 0%, #e8dcc8 100%);
             min-height: 100vh;
             padding: 20px;
@@ -198,29 +198,6 @@
             background: #A0826D;
             transform: translateY(-3px);
             box-shadow: 0 8px 20px rgba(184, 149, 106, 0.3);
-        }
-
-        .btn-admin {
-            position: fixed;
-            bottom: 30px;
-            right: 30px;
-            background: #D4A574;
-            color: white;
-            padding: 15px 30px;
-            border-radius: 50px;
-            text-decoration: none;
-            font-weight: 600;
-            box-shadow: 0 8px 25px rgba(212, 165, 116, 0.3);
-            transition: all 0.3s ease;
-            border: none;
-            cursor: pointer;
-            font-family: 'Georgia', serif;
-        }
-
-        .btn-admin:hover {
-            background: #B8956A;
-            transform: translateY(-5px);
-            box-shadow: 0 12px 35px rgba(212, 165, 116, 0.4);
         }
 
         .modal {
@@ -449,12 +426,6 @@
             .buttons-group {
                 flex-direction: column;
             }
-
-            .btn-admin {
-                bottom: 20px;
-                right: 20px;
-                padding: 12px 24px;
-            }
         }
     </style>
 </head>
@@ -521,8 +492,6 @@
             </div>
         </div>
     </div>
-
-    <a href="/admin" class="btn-admin">QUẢN LÝ</a>
 
     <script>
         const API_BASE = '';
