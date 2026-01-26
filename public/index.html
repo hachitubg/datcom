@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Đặt Cơm Online</title>
+    <title>Cơm Gia Đình</title>
     <style>
         * {
             margin: 0;
@@ -12,8 +12,8 @@
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Georgia', serif;
+            background: linear-gradient(135deg, #f5f1e8 0%, #e8dcc8 100%);
             min-height: 100vh;
             padding: 20px;
         }
@@ -21,129 +21,206 @@
         .container {
             max-width: 800px;
             margin: 0 auto;
-            background: white;
-            border-radius: 10px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            background: #fefcf9;
+            border-radius: 15px;
+            box-shadow: 0 15px 50px rgba(0,0,0,0.15);
             overflow: hidden;
+            animation: slideIn 0.6s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 40px 20px;
+            background: linear-gradient(135deg, #A0826D 0%, #8B7355 100%);
+            color: #fefcf9;
+            padding: 50px 20px;
             text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -10%;
+            width: 300px;
+            height: 300px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 50%;
+            animation: float 6s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(20px); }
+        }
+
+        header > * {
+            position: relative;
+            z-index: 1;
         }
 
         h1 {
-            font-size: 32px;
+            font-size: 42px;
             margin-bottom: 10px;
+            font-weight: 600;
+            letter-spacing: 2px;
         }
 
         .subtitle {
-            font-size: 16px;
-            opacity: 0.9;
+            font-size: 18px;
+            opacity: 0.95;
+            font-style: italic;
         }
 
         .content {
-            padding: 30px;
+            padding: 40px;
         }
 
         .info-section {
-            background: #f8f9ff;
-            padding: 20px;
-            border-radius: 8px;
+            background: linear-gradient(135deg, #f0ebe0 0%, #ead8c3 100%);
+            padding: 30px;
+            border-radius: 12px;
             margin-bottom: 30px;
-            border-left: 4px solid #667eea;
+            border-left: 5px solid #A0826D;
+            animation: fadeInUp 0.8s ease-out 0.2s both;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         .menu-display {
-            font-size: 24px;
-            font-weight: bold;
-            color: #667eea;
+            font-size: 28px;
+            font-weight: 600;
+            color: #8B7355;
             margin-bottom: 15px;
+            letter-spacing: 1px;
         }
 
         .menu-price {
-            font-size: 18px;
-            color: #e74c3c;
+            font-size: 20px;
+            color: #D4A574;
             margin-bottom: 15px;
+            font-weight: 500;
         }
 
         .countdown {
             background: white;
-            padding: 20px;
-            border-radius: 8px;
-            border: 2px solid #667eea;
+            padding: 30px;
+            border-radius: 12px;
+            border: 2px solid #D4A574;
             text-align: center;
-            margin-bottom: 20px;
+            margin-bottom: 30px;
+            animation: fadeInUp 0.8s ease-out 0.3s both;
+            transition: all 0.3s ease;
+        }
+
+        .countdown:hover {
+            box-shadow: 0 10px 30px rgba(160, 130, 109, 0.2);
+            transform: translateY(-5px);
         }
 
         .countdown-label {
-            color: #666;
+            color: #8B7355;
             font-size: 14px;
-            margin-bottom: 10px;
+            margin-bottom: 15px;
+            font-weight: 500;
         }
 
         .countdown-number {
-            font-size: 48px;
+            font-size: 56px;
             font-weight: bold;
-            color: #e74c3c;
+            color: #D4A574;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
         }
 
         .countdown-text {
-            color: #666;
+            color: #8B7355;
             font-size: 16px;
-            margin-top: 10px;
+            margin-top: 15px;
         }
 
         .buttons-group {
             display: flex;
             gap: 15px;
             margin-top: 20px;
+            animation: fadeInUp 0.8s ease-out 0.4s both;
         }
 
         button {
             flex: 1;
-            padding: 15px 20px;
+            padding: 16px 20px;
             border: none;
             border-radius: 8px;
             font-size: 16px;
-            font-weight: bold;
+            font-weight: 600;
             cursor: pointer;
             transition: all 0.3s ease;
+            font-family: 'Georgia', serif;
+            letter-spacing: 1px;
         }
 
         .btn-primary {
-            background: #667eea;
+            background: #A0826D;
             color: white;
         }
 
-        .btn-primary:hover {
-            background: #5568d3;
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        .btn-primary:hover:not(.disabled) {
+            background: #8B7355;
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(160, 130, 109, 0.3);
         }
 
         .btn-secondary {
-            background: #27ae60;
+            background: #B8956A;
             color: white;
         }
 
-        .btn-secondary:hover {
-            background: #229954;
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(39, 174, 96, 0.4);
+        .btn-secondary:hover:not(.disabled) {
+            background: #A0826D;
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(184, 149, 106, 0.3);
         }
 
         .btn-admin {
-            background: #f39c12;
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: #D4A574;
             color: white;
+            padding: 15px 30px;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: 600;
+            box-shadow: 0 8px 25px rgba(212, 165, 116, 0.3);
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+            font-family: 'Georgia', serif;
         }
 
         .btn-admin:hover {
-            background: #e67e22;
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(243, 156, 18, 0.4);
+            background: #B8956A;
+            transform: translateY(-5px);
+            box-shadow: 0 12px 35px rgba(212, 165, 116, 0.4);
         }
 
         .modal {
@@ -154,66 +231,88 @@
             top: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(0,0,0,0.5);
+            background-color: rgba(0,0,0,0.4);
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
         }
 
         .modal-content {
-            background-color: white;
+            background-color: #fefcf9;
             margin: 5% auto;
-            padding: 30px;
-            border-radius: 10px;
+            padding: 35px;
+            border-radius: 15px;
             width: 90%;
             max-width: 500px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            box-shadow: 0 15px 50px rgba(0,0,0,0.3);
+            animation: slideInDown 0.4s ease-out;
+        }
+
+        @keyframes slideInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         .close {
-            color: #aaa;
+            color: #8B7355;
             float: right;
             font-size: 28px;
             font-weight: bold;
             cursor: pointer;
             line-height: 20px;
+            transition: color 0.3s ease;
         }
 
         .close:hover {
-            color: #000;
+            color: #A0826D;
         }
 
         .modal h2 {
             margin-bottom: 20px;
-            color: #667eea;
+            color: #8B7355;
             font-size: 24px;
+            font-weight: 600;
         }
 
         .form-group {
-            margin-bottom: 15px;
+            margin-bottom: 18px;
         }
 
         label {
             display: block;
-            margin-bottom: 5px;
-            color: #333;
-            font-weight: 500;
+            margin-bottom: 8px;
+            color: #8B7355;
+            font-weight: 600;
         }
 
         input[type="text"],
         input[type="number"],
         textarea {
             width: 100%;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
+            padding: 12px;
+            border: 2px solid #e8dcc8;
+            border-radius: 8px;
             font-size: 14px;
             font-family: inherit;
+            transition: all 0.3s ease;
         }
 
         input[type="text"]:focus,
         input[type="number"]:focus,
         textarea:focus {
             outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 5px rgba(102, 126, 234, 0.3);
+            border-color: #A0826D;
+            box-shadow: 0 0 8px rgba(160, 130, 109, 0.2);
+            background: #fefcf9;
         }
 
         textarea {
@@ -224,43 +323,49 @@
         .form-buttons {
             display: flex;
             gap: 10px;
-            margin-top: 20px;
+            margin-top: 25px;
         }
 
         .btn-submit {
             flex: 1;
             padding: 12px;
-            background: #667eea;
+            background: #A0826D;
             color: white;
             border: none;
-            border-radius: 5px;
+            border-radius: 8px;
             cursor: pointer;
-            font-weight: bold;
+            font-weight: 600;
             font-size: 16px;
+            transition: all 0.3s ease;
+            font-family: inherit;
         }
 
         .btn-submit:hover {
-            background: #5568d3;
+            background: #8B7355;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(160, 130, 109, 0.3);
         }
 
         .btn-cancel {
             flex: 1;
             padding: 12px;
-            background: #bdc3c7;
-            color: white;
+            background: #d4c4b0;
+            color: #8B7355;
             border: none;
-            border-radius: 5px;
+            border-radius: 8px;
             cursor: pointer;
-            font-weight: bold;
+            font-weight: 600;
             font-size: 16px;
+            transition: all 0.3s ease;
+            font-family: inherit;
         }
 
         .btn-cancel:hover {
-            background: #95a5a6;
+            background: #c9b5a0;
         }
 
         .orders-list {
-            background: #f8f9ff;
+            background: #f0ebe0;
             border-radius: 8px;
             max-height: 400px;
             overflow-y: auto;
@@ -268,10 +373,15 @@
 
         .order-item {
             padding: 15px;
-            border-bottom: 1px solid #e0e0e0;
+            border-bottom: 1px solid #d4c4b0;
             display: flex;
             justify-content: space-between;
             align-items: start;
+            transition: background 0.3s ease;
+        }
+
+        .order-item:hover {
+            background: #e8dcc8;
         }
 
         .order-item:last-child {
@@ -279,71 +389,41 @@
         }
 
         .order-info h4 {
-            color: #667eea;
+            color: #A0826D;
             margin-bottom: 5px;
+            font-weight: 600;
         }
 
         .order-info p {
-            color: #666;
+            color: #8B7355;
             font-size: 14px;
-            margin: 3px 0;
+            margin: 4px 0;
         }
 
         .order-time {
-            color: #999;
+            color: #A0826D;
             font-size: 12px;
+            opacity: 0.8;
         }
 
         .success-message {
-            background: #d4edda;
-            color: #155724;
+            background: #d4e8d4;
+            color: #2d5f2d;
             padding: 15px;
-            border-radius: 5px;
+            border-radius: 8px;
             margin-bottom: 20px;
-            border-left: 4px solid #28a745;
+            border-left: 4px solid #5a9a5a;
+            animation: slideInDown 0.4s ease-out;
         }
 
         .error-message {
-            background: #f8d7da;
-            color: #721c24;
+            background: #e8d4d4;
+            color: #5f2d2d;
             padding: 15px;
-            border-radius: 5px;
+            border-radius: 8px;
             margin-bottom: 20px;
-            border-left: 4px solid #f5c6cb;
-        }
-
-        .admin-link {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background: #f39c12;
-            color: white;
-            padding: 10px 20px;
-            border-radius: 50px;
-            text-decoration: none;
-            font-weight: bold;
-            box-shadow: 0 5px 15px rgba(243, 156, 18, 0.4);
-            transition: all 0.3s ease;
-        }
-
-        .admin-link:hover {
-            background: #e67e22;
-            transform: translateY(-2px);
-            box-shadow: 0 5px 20px rgba(243, 156, 18, 0.6);
-        }
-
-        @media (max-width: 600px) {
-            h1 {
-                font-size: 24px;
-            }
-
-            .countdown-number {
-                font-size: 36px;
-            }
-
-            .buttons-group {
-                flex-direction: column;
-            }
+            border-left: 4px solid #a05a5a;
+            animation: slideInDown 0.4s ease-out;
         }
 
         .disabled {
@@ -352,17 +432,37 @@
         }
 
         .disabled:hover {
-            background: #bdc3c7 !important;
+            background: #d4c4b0 !important;
             transform: none !important;
             box-shadow: none !important;
+        }
+
+        @media (max-width: 600px) {
+            h1 {
+                font-size: 28px;
+            }
+
+            .countdown-number {
+                font-size: 42px;
+            }
+
+            .buttons-group {
+                flex-direction: column;
+            }
+
+            .btn-admin {
+                bottom: 20px;
+                right: 20px;
+                padding: 12px 24px;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>🍚 Đặt Cơm Online</h1>
-            <p class="subtitle">Cơm ngon - Giá rẻ - Nhanh chóng</p>
+            <h1>CƠM GIA ĐÌNH</h1>
+            <p class="subtitle">Cơm ngon, giá tốt, ấm cúm</p>
         </header>
 
         <div class="content">
@@ -374,12 +474,12 @@
             <div class="countdown">
                 <div class="countdown-label">Số xuất còn lại hôm nay</div>
                 <div class="countdown-number" id="remainingCount">10</div>
-                <div class="countdown-text">Còn <span id="orderedCount">0</span> xuất đã được đặt</div>
+                <div class="countdown-text">Đã có <span id="orderedCount">0</span> xuất được đặt</div>
             </div>
 
             <div class="buttons-group">
-                <button class="btn-primary" id="btnOrder">📝 Đặt Cơm</button>
-                <button class="btn-secondary" id="btnList">📋 Danh Sách Đơn</button>
+                <button class="btn-primary" id="btnOrder">ĐẶT CƠM</button>
+                <button class="btn-secondary" id="btnList">DANH SÁCH ĐƠN</button>
             </div>
         </div>
     </div>
@@ -404,8 +504,8 @@
                     <textarea id="description" placeholder="Ví dụ: Ít mặn, thêm rau..."></textarea>
                 </div>
                 <div class="form-buttons">
-                    <button type="submit" class="btn-submit">Đặt Hàng</button>
-                    <button type="button" class="btn-cancel" id="cancelOrder">Hủy</button>
+                    <button type="submit" class="btn-submit">ĐẶT HÀNG</button>
+                    <button type="button" class="btn-cancel" id="cancelOrder">HỦY</button>
                 </div>
             </form>
         </div>
@@ -415,14 +515,14 @@
     <div id="listModal" class="modal">
         <div class="modal-content">
             <span class="close" id="closeList">&times;</span>
-            <h2>📋 Danh Sách Đơn Hôm Nay</h2>
+            <h2>DANH SÁCH ĐƠN HÔM NAY</h2>
             <div id="ordersList" class="orders-list">
-                <div style="padding: 20px; text-align: center; color: #999;">Đang tải...</div>
+                <div style="padding: 20px; text-align: center; color: #8B7355;">Đang tải...</div>
             </div>
         </div>
     </div>
 
-    <a href="/admin" class="admin-link">⚙️ Quản Lý</a>
+    <a href="/admin" class="btn-admin">QUẢN LÝ</a>
 
     <script>
         const API_BASE = '';
