@@ -76,11 +76,21 @@ app.get('/api/admin/day/:date', (req, res) => {
 
 // Cập nhật menu hôm nay
 app.post('/api/admin/menu', (req, res) => {
-  const { menu } = req.body;
-  if (!menu) {
+  const { menu, menuString } = req.body;
+  if (!menu && !menuString) {
     return res.status(400).json({ error: 'Menu không được để trống' });
   }
-  db.updateTodayMenu(menu, (err) => {
+  
+  // Nếu có menuString, sử dụng nó; nếu không thì convert menu object to string
+  let menuToStore = menuString;
+  if (!menuToStore && typeof menu === 'object') {
+    // Convert menu object to string format
+    const m = menu;
+    menuToStore = `Món chính: ${m.monChinh || ''} | Món phụ: ${m.monPhu || ''} | Rau: ${m.rau || ''} | Canh: ${m.canh || ''}${m.alternatives ? ' | Thay thế: ' + m.alternatives : ''}`;
+  }
+  
+  // Store as JSON string for better data structure
+  db.updateTodayMenu(JSON.stringify(menu || {}), menuToStore, (err) => {
     if (err) {
       return res.status(500).json({ error: err.message });
     }

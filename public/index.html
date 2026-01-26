@@ -1004,17 +1004,26 @@
 
         // Update menu display on homepage
         function updateMenuDisplay(menuObj) {
-            if (menuObj.monChinh) {
-                document.querySelectorAll('.menu-item')[0].querySelector('.menu-value').textContent = menuObj.monChinh;
+            // Ensure we have valid menu object
+            if (!menuObj || typeof menuObj !== 'object') {
+                console.warn('Invalid menu object:', menuObj);
+                return;
             }
-            if (menuObj.monPhu) {
-                document.querySelectorAll('.menu-item')[1].querySelector('.menu-value').textContent = menuObj.monPhu;
+
+            const menuItems = document.querySelectorAll('.menu-item');
+            
+            // Update each menu item
+            if (menuObj.monChinh && menuItems[0]) {
+                menuItems[0].querySelector('.menu-value').textContent = menuObj.monChinh;
             }
-            if (menuObj.rau) {
-                document.querySelectorAll('.menu-item')[2].querySelector('.menu-value').textContent = menuObj.rau;
+            if (menuObj.monPhu && menuItems[1]) {
+                menuItems[1].querySelector('.menu-value').textContent = menuObj.monPhu;
             }
-            if (menuObj.canh) {
-                document.querySelectorAll('.menu-item')[3].querySelector('.menu-value').textContent = menuObj.canh;
+            if (menuObj.rau && menuItems[2]) {
+                menuItems[2].querySelector('.menu-value').textContent = menuObj.rau;
+            }
+            if (menuObj.canh && menuItems[3]) {
+                menuItems[3].querySelector('.menu-value').textContent = menuObj.canh;
             }
             
             // Update alternatives

@@ -214,11 +214,13 @@ class Database {
     );
   }
 
-  updateTodayMenu(menu, callback) {
+  updateTodayMenu(menuJson, menuString, callback) {
     const today = this.getDateString();
+    // Store the menu - if we have both, store the string version which is more readable
+    const menuToStore = menuString || menuJson;
     this.db.run(
       `UPDATE days SET menu = ? WHERE date = ?`,
-      [menu, today],
+      [menuToStore, today],
       callback
     );
   }
