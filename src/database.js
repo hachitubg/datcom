@@ -60,16 +60,20 @@ class Database {
 
   getTodayInfo(callback) {
     const today = this.getDateString();
+    console.log('📋 Lấy thông tin hôm nay:', today);
     this.db.get(
       `SELECT id, date, menu, quantity, price FROM days WHERE date = ?`,
       [today],
       (err, row) => {
         if (err) {
+          console.error('❌ Lỗi truy vấn:', err);
           callback(err);
         } else if (!row) {
+          console.log('⚠️  Chưa có record hôm nay, tạo mới');
           this.ensureTodayRecord();
           this.getTodayInfo(callback);
         } else {
+          console.log('📦 Raw menu từ DB:', row.menu);
           // Đếm số lượng đã đặt
           this.db.get(
             `SELECT SUM(quantity) as ordered FROM orders WHERE day_id = ?`,
@@ -85,7 +89,9 @@ class Database {
                 let menu = row.menu;
                 try {
                   menu = JSON.parse(row.menu);
+                  console.log('✅ Parsed menu object:', menu);
                 } catch (e) {
+                  console.warn('⚠️  Không parse được JSON, giữ nguyên string:', row.menu);
                   // Nếu không phải JSON, giữ nguyên string
                 }
                 
@@ -151,12 +157,15 @@ class Database {
   }
 
   getAllDays(callback) {
+    console.log('📚 Tải tất cả các ngày từ database');
     this.db.all(
       `SELECT id, date, menu, quantity, price, created_at FROM days ORDER BY date DESC`,
       (err, rows) => {
         if (err) {
+          console.error('❌ Lỗi getAllDays:', err);
           callback(err);
         } else {
+          console.log('✅ Tìm thấy', rows.length, 'ngày');
           // Đếm số lượng đã đặt cho mỗi ngày
           let completedRows = 0;
           const result = rows.map(row => {
@@ -170,6 +179,7 @@ class Database {
                 completedRows++;
                 
                 if (completedRows === rows.length) {
+                  console.log('📊 Dữ liệu lịch sử đã sẵn sàng');
                   callback(null, rows);
                 }
               }
@@ -186,28 +196,43 @@ class Database {
   }
 
   getDayDetails(date, callback) {
+    console.log('🔍 Tìm chi tiết ngày:', date);
     this.db.get(
       `SELECT id, date, menu, quantity, price FROM days WHERE date = ?`,
       [date],
       (err, dayRow) => {
         if (err) {
+          console.error('❌ Lỗi getDayDetails:', err);
           callback(err);
         } else if (!dayRow) {
+          console.warn('⚠️  Ngày không tồn tại:', date);
           callback(new Error('Ngày không tồn tại'));
         } else {
+          console.log('📦 Tìm thấy ngày:', date);
           this.db.all(
             `SELECT id, name, quantity, description, created_at FROM orders WHERE day_id = ? ORDER BY created_at ASC`,
             [dayRow.id],
             (err, orders) => {
               if (err) {
+                console.error('❌ Lỗi tìm đơn hàng:', err);
                 callback(err);
               } else {
                 const ordered = orders.reduce((sum, o) => sum + o.quantity, 0);
+                console.log('📋 Tìm thấy', orders.length, 'đơn hàng');
+                
+                // Parse menu if it's JSON
+                let menu = dayRow.menu;
+                try {
+                  menu = JSON.parse(dayRow.menu);
+                } catch (e) {
+                  // Keep as string if not JSON
+                }
+                
                 callback(null, {
                   day: {
                     id: dayRow.id,
                     date: dayRow.date,
-                    menu: dayRow.menu,
+                    menu: menu,
                     quantity: dayRow.quantity,
                     price: dayRow.price,
                     ordered: ordered,
@@ -225,10 +250,18 @@ class Database {
 
   updateTodayMenu(menuJson, callback) {
     const today = this.getDateString();
+    console.log('🗄️  Lưu vào database - Date:', today, 'Menu:', menuJson);
     this.db.run(
       `UPDATE days SET menu = ? WHERE date = ?`,
       [menuJson, today],
-      callback
+      (err) => {
+        if (err) {
+          console.error('❌ Lỗi database:', err);
+        } else {
+          console.log('✅ Database cập nhật thành công');
+        }
+        callback(err);
+      }
     );
   }
 

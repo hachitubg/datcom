@@ -789,6 +789,17 @@
         <div id="history" class="tab-content">
             <div class="section">
                 <h2>LỊCH SỬ CÁC NGÀY</h2>
+                
+                <div class="form-group">
+                    <label for="dateFilter">Chọn ngày để xem chi tiết:</label>
+                    <input type="date" id="dateFilter">
+                </div>
+                
+                <div class="button-group">
+                    <button class="btn-primary" onclick="loadHistoryByDate()">XEM CHI TIẾT</button>
+                    <button class="btn-secondary" onclick="loadHistory()">XEM TẤT CẢ</button>
+                </div>
+
                 <div id="historyList" class="loading">Đang tải...</div>
             </div>
         </div>
@@ -966,6 +977,159 @@
                     }
                 })
                 .catch(err => console.error('Lỗi:', err));
+        }
+
+        function loadHistory() {
+            console.log('📜 Tải lịch sử các ngày');
+            fetch(`${API_BASE}/api/admin/all-days`)
+                .then(res => res.json())
+                .then(days => {
+                    console.log('📅 Dữ liệu lịch sử:', days);
+                    const historyList = document.getElementById('historyList');
+                    
+                    if (!days || days.length === 0) {
+                        historyList.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">Chưa có dữ liệu lịch sử</div>';
+                        return;
+                    }
+                    
+                    historyList.innerHTML = days.map(day => {
+                        return `
+                            <div class="day-item">
+                                <div class="day-header">
+                                    <div class="day-date">${formatDate(day.date)}</div>
+                                    <div class="day-stats">
+                                        <div class="stat">
+                                            <span class="stat-label">Đặt:</span>
+                                            <span class="stat-value">${day.ordered || 0}/${day.quantity}</span>
+                                        </div>
+                                        <div class="stat">
+                                            <span class="stat-label">Giá:</span>
+                                            <span class="stat-value">${formatPrice(day.price)}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="day-menu">
+                                    <strong>Menu:</strong> ${getMenuDisplay(day.menu)}
+                                </div>
+                                <button class="btn-primary btn-small" onclick="showDayDetail('${day.date}')">Xem Chi Tiết</button>
+                            </div>
+                        `;
+                    }).join('');
+                })
+                .catch(err => {
+                    console.error('❌ Lỗi tải lịch sử:', err);
+                    document.getElementById('historyList').innerHTML = '<div style="padding: 20px; text-align: center; color: red;">Lỗi tải dữ liệu</div>';
+                });
+        }
+
+        function loadHistoryByDate() {
+            const dateInput = document.getElementById('dateFilter').value;
+            if (!dateInput) {
+                alert('Vui lòng chọn ngày');
+                return;
+            }
+            
+            console.log('🔍 Tìm chi tiết ngày:', dateInput);
+            showDayDetail(dateInput);
+        }
+
+        function showDayDetail(date) {
+            console.log('📋 Xem chi tiết ngày:', date);
+            fetch(`${API_BASE}/api/admin/day/${date}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error) {
+                        alert('Lỗi: ' + data.error);
+                        return;
+                    }
+                    
+                    console.log('📦 Chi tiết ngày:', data);
+                    
+                    const modal = document.getElementById('dayModal');
+                    const title = document.getElementById('dayModalTitle');
+                    const content = document.getElementById('dayModalContent');
+                    
+                    title.textContent = `CHI TIẾT NGÀY ${formatDate(date)}`;
+                    
+                    let html = `
+                        <div style="margin-bottom: 20px;">
+                            <h3 style="color: #A0826D; margin-bottom: 10px;">Thông tin ngày</h3>
+                            <p><strong>Ngày:</strong> ${formatDate(date)}</p>
+                            <p><strong>Menu:</strong> ${getMenuDisplay(data.day.menu)}</p>
+                            <p><strong>Số lượng có thể đặt:</strong> ${data.day.quantity} xuất</p>
+                            <p><strong>Đã đặt:</strong> ${data.day.ordered} xuất</p>
+                            <p><strong>Còn lại:</strong> ${data.day.remaining} xuất</p>
+                            <p><strong>Giá:</strong> ${formatPrice(data.day.price)}</p>
+                        </div>
+                    `;
+                    
+                    if (data.orders && data.orders.length > 0) {
+                        html += `
+                            <div>
+                                <h3 style="color: #A0826D; margin-bottom: 10px;">Danh sách đơn hàng</h3>
+                                <div>
+                        `;
+                        
+                        data.orders.forEach(order => {
+                            const time = new Date(order.created_at).toLocaleTimeString('vi-VN');
+                            const date = new Date(order.created_at).toLocaleDateString('vi-VN');
+                            html += `
+                                <div style="background: #f0ebe0; padding: 10px; margin-bottom: 10px; border-radius: 6px;">
+                                    <p style="margin: 0; font-weight: 600; color: #A0826D;">${order.name}</p>
+                                    <p style="margin: 4px 0; font-size: 13px; color: #8B7355;">
+                                        Số lượng: ${order.quantity} xuất ${order.description ? `| Ghi chú: ${order.description}` : ''}
+                                    </p>
+                                    <p style="margin: 0; font-size: 12px; color: #8B7355; opacity: 0.8;">${date} ${time}</p>
+                                </div>
+                            `;
+                        });
+                        
+                        html += `
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        html += '<p style="text-align: center; color: #999;">Không có đơn hàng trong ngày này</p>';
+                    }
+                    
+                    content.innerHTML = html;
+                    modal.style.display = 'block';
+                })
+                .catch(err => {
+                    console.error('❌ Lỗi:', err);
+                    alert('Lỗi tải chi tiết: ' + err.message);
+                });
+        }
+
+        function closeDayModal() {
+            document.getElementById('dayModal').style.display = 'none';
+        }
+
+        function formatDate(dateString) {
+            const date = new Date(dateString + 'T00:00:00');
+            return date.toLocaleDateString('vi-VN', { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+            });
+        }
+
+        function formatPrice(price) {
+            return new Intl.NumberFormat('vi-VN', { 
+                style: 'currency', 
+                currency: 'VND' 
+            }).format(price);
+        }
+
+        function getMenuDisplay(menu) {
+            if (!menu) return 'Chưa có menu';
+            
+            if (typeof menu === 'object') {
+                return `Món chính: ${menu.monChinh || ''} | Món phụ: ${menu.monPhu || ''} | Rau: ${menu.rau || ''} | Canh: ${menu.canh || ''}`;
+            }
+            
+            return menu;
         }
 
         function showMessage(elementId, message, type) {

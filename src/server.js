@@ -55,10 +55,13 @@ app.post('/api/orders', (req, res) => {
 
 // Lấy danh sách tất cả ngày (cho admin)
 app.get('/api/admin/all-days', (req, res) => {
+  console.log('📋 Request: Danh sách tất cả ngày');
   db.getAllDays((err, days) => {
     if (err) {
+      console.error('❌ Lỗi:', err);
       return res.status(500).json({ error: err.message });
     }
+    console.log('✅ Trả về', days.length, 'ngày');
     res.json(days);
   });
 });
@@ -66,10 +69,13 @@ app.get('/api/admin/all-days', (req, res) => {
 // Lấy chi tiết một ngày
 app.get('/api/admin/day/:date', (req, res) => {
   const { date } = req.params;
+  console.log('📅 Request: Chi tiết ngày', date);
   db.getDayDetails(date, (err, data) => {
     if (err) {
+      console.error('❌ Lỗi:', err);
       return res.status(500).json({ error: err.message });
     }
+    console.log('✅ Trả về chi tiết ngày', date);
     res.json(data);
   });
 });
@@ -77,17 +83,23 @@ app.get('/api/admin/day/:date', (req, res) => {
 // Cập nhật menu hôm nay
 app.post('/api/admin/menu', (req, res) => {
   const { menu, menuString } = req.body;
+  console.log('🔧 Admin cập nhật menu:', menu);
+  
   if (!menu) {
+    console.error('❌ Menu trống!');
     return res.status(400).json({ error: 'Menu không được để trống' });
   }
   
   // Lưu menu object dưới dạng JSON
   const menuJson = JSON.stringify(menu);
+  console.log('📝 Lưu menu JSON:', menuJson);
   
   db.updateTodayMenu(menuJson, (err) => {
     if (err) {
+      console.error('❌ Lỗi lưu menu:', err);
       return res.status(500).json({ error: err.message });
     }
+    console.log('✅ Menu đã lưu thành công');
     res.json({ success: true });
   });
 });
