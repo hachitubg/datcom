@@ -1,15 +1,24 @@
-# ��� Website Đặt Cơm Online
+# 🍚 Website Đặt Cơm Online
 
 Website quản lý đặt cơm đơn giản, dễ dàng triển khai.
 
-## ��� Tính Năng
+## 🛠️ Công Nghệ Stack
+
+| Layer | Công Nghệ |
+|-------|-----------|
+| **Frontend** | HTML, CSS, JavaScript (Static Files) |
+| **Backend** | Node.js + Express.js |
+| **Database** | SQLite (datcom.db) |
+| **Chạy Trên** | localhost:3000 (hoặc PORT env var) |
+
+## ��� Tính Năng
 
 - **Trang chủ**: Hiển thị menu hôm nay, giá cơm (40.000 VNĐ), số lượng xuất còn lại
 - **Đặt cơm**: Form với họ tên, số lượng, ghi chú
 - **Danh sách đơn**: Xem tất cả đơn hàng theo thứ tự thời gian
 - **Quản lý Admin**: Cập nhật menu, số lượng, xóa đơn, xem lịch sử
 
-## ��� Quản Lý Server Trên Host
+## ��� Quản Lý Server Trên Host
 
 ### Kiểm Tra Database
 
@@ -53,7 +62,7 @@ pm2 start datcom
 cp /var/www/datcom/datcom.db /var/www/datcom/datcom.db.backup
 ```
 
-## ��� Truy Cập
+## ��� Truy Cập
 
 - Trang chủ: http://103.200.20.160
 - Admin: http://103.200.20.160/admin
