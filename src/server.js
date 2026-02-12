@@ -11,6 +11,55 @@ const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors());
+
+app.post('/api/payments/webhook/payos',
+  express.raw({ type: '*/*' }),
+  (req, res) => {
+    try {
+      if (!req.body) {
+        return res.status(200).json({ ok: true });
+      }
+
+      const rawBody = req.body.toString('utf8');
+      let parsedBody;
+
+      try {
+        parsedBody = JSON.parse(rawBody);
+      } catch {
+        return res.status(200).json({ ok: true });
+      }
+
+      // Nếu không có data → đây là request test
+      if (!parsedBody.data || !parsedBody.data.orderCode) {
+        return res.status(200).json({ ok: true });
+      }
+
+      const isValidSignature = payos.verifyWebhook(parsedBody);
+      if (!isValidSignature) {
+        console.log("Invalid signature");
+        return res.status(200).json({ ok: true }); // ⚠️ KHÔNG trả 400
+      }
+
+      const data = parsedBody.data;
+      const orderCode = Number(data.orderCode);
+      const amount = Number(data.amount || 0);
+
+      db.markPaymentPaid(orderCode, { amount, raw: parsedBody }, (err) => {
+        if (err) {
+          console.error("DB error:", err);
+          return res.status(500).json({ error: err.message });
+        }
+
+        res.json({ success: true });
+      });
+
+    } catch (err) {
+      console.error("Webhook crash:", err);
+      res.status(200).json({ ok: true }); // ⚠️ KHÔNG trả 500
+    }
+  }
+);
+
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static('public'));
@@ -228,8 +277,8 @@ app.post('/api/payments/create', async (req, res) => {
         orderCode,
         amount: paymentInfo.remainingAmount,
         description: `DATCOM ${name}`.slice(0, 25),
-        returnUrl: `${baseUrl}/?payment=success`,
-        cancelUrl: `${baseUrl}/?payment=cancel`,
+        returnUrl: `${baseUrl}/?payment=success&orderCode=${orderCode}`,
+        cancelUrl: `${baseUrl}/?payment=cancel&orderCode=${orderCode}`,
         buyerName: name,
         expiredAt: Math.floor(Date.now() / 1000) + 15 * 60
       };
@@ -269,43 +318,53 @@ app.post('/api/payments/create', async (req, res) => {
   });
 });
 
-// Webhook PayOS cập nhật trạng thái thanh toán
-app.post('/api/payments/webhook/payos', (req, res) => {
+app.get('/api/payments/verify-return', async (req, res) => {
   if (!payos.isConfigured()) {
     return res.status(500).json({ error: 'PayOS chưa được cấu hình trên server' });
   }
 
-  const isValidSignature = payos.verifyWebhook(req.body);
-  if (!isValidSignature) {
-    return res.status(400).json({ error: 'Webhook signature không hợp lệ' });
+  const orderCode = Number(req.query.orderCode || req.query.order_code || 0);
+  if (!orderCode) {
+    return res.status(400).json({ error: 'Thiếu mã đơn hàng (orderCode)' });
   }
 
-  const data = req.body.data || {};
-  const orderCode = Number(data.orderCode);
-  const amount = Number(data.amount || 0);
-  const isSuccess = String(data.code || '') === '00' || String(data.desc || '').toLowerCase().includes('success');
+  try {
+    const paymentInfo = await payos.getPaymentLinkInformation(orderCode);
+    const paidAmount = Number(paymentInfo.amountPaid || 0);
+    const amount = Number(paymentInfo.amount || paidAmount || 0);
+    const status = String(paymentInfo.status || '').toUpperCase();
+    const paidStatuses = new Set(['PAID', 'SUCCESS', 'SUCCEEDED']);
 
-  if (!orderCode || !isSuccess) {
-    return res.json({ success: true, ignored: true });
-  }
-
-  db.markPaymentPaid(
-    orderCode,
-    {
-      amount,
-      reference: data.reference || data.paymentLinkId || '',
-      transactionDateTime: data.transactionDateTime || data.transactionDate || '',
-      code: data.code,
-      paymentLinkId: data.paymentLinkId,
-      raw: data
-    },
-    (err) => {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
-      res.json({ success: true });
+    if (!paidStatuses.has(status) && paidAmount <= 0) {
+      return res.json({ success: true, updated: false, status, amount, paidAmount });
     }
-  );
+
+    db.markPaymentPaid(
+      orderCode,
+      {
+        amount: paidAmount > 0 ? paidAmount : amount,
+        reference: paymentInfo.reference || paymentInfo.paymentLinkId || '',
+        transactionDateTime: paymentInfo.transactionDateTime || paymentInfo.transactionDate || '',
+        code: paymentInfo.code || req.query.code || '',
+        paymentLinkId: paymentInfo.paymentLinkId || '',
+        raw: paymentInfo
+      },
+      (err) => {
+        if (err) {
+          return res.status(500).json({ error: err.message });
+        }
+        res.json({
+          success: true,
+          updated: true,
+          status,
+          amount,
+          paidAmount: paidAmount > 0 ? paidAmount : amount
+        });
+      }
+    );
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
 });
 
 // Lịch sử thanh toán

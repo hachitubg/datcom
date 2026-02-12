@@ -993,7 +993,6 @@
     <div id="paymentQrModal" class="modal">
         <div class="modal-content">
             <span class="close" id="closePaymentQr">&times;</span>
-            <h2>QUÉT QR THANH TOÁN</h2>
             <div id="paymentQrContent"></div>
         </div>
     </div>
@@ -1007,7 +1006,7 @@
     </div>
 
     <script>
-        const API_BASE = '';
+        const API_BASE = window.location.origin;
 
         // Modal controls
         const orderModal = document.getElementById('orderModal');
@@ -1076,6 +1075,55 @@
                 .split(' ')
                 .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
                 .join(' ');
+        }
+
+
+        function cleanPaymentQueryParams() {
+            const url = new URL(window.location.href);
+            ['payment', 'code', 'id', 'cancel', 'status', 'orderCode'].forEach((key) => {
+                url.searchParams.delete(key);
+            });
+            window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
+        }
+
+        async function handlePaymentReturn() {
+            const params = new URLSearchParams(window.location.search);
+            const payment = (params.get('payment') || '').toLowerCase();
+            const orderCode = params.get('orderCode');
+
+            if (!payment) {
+                return;
+            }
+
+            if (payment === 'cancel') {
+                alert('Bạn đã hủy thanh toán. Nếu cần, vui lòng quét lại mã QR để thanh toán.');
+                cleanPaymentQueryParams();
+                return;
+            }
+
+            if (payment !== 'success' || !orderCode) {
+                cleanPaymentQueryParams();
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/api/payments/verify-return?orderCode=${encodeURIComponent(orderCode)}`);
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.error || 'Không thể xác minh thanh toán với PayOS');
+                }
+
+                if (data.updated) {
+                    alert('Thanh toán thành công! Hệ thống đã cập nhật trạng thái đơn hàng.');
+                } else {
+                    alert('Đã nhận trạng thái thanh toán, hệ thống đang chờ xác nhận cuối cùng từ PayOS.');
+                }
+            } catch (error) {
+                alert(`Thanh toán đã hoàn tất nhưng chưa cập nhật tự động: ${error.message}. Vui lòng liên hệ quản trị để kiểm tra.`);
+            } finally {
+                cleanPaymentQueryParams();
+                loadTodayInfo();
+            }
         }
 
         function loadCustomerNameSuggestions() {
@@ -1160,37 +1208,24 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name })
             })
-                .then(res => res.json())
-                .then(data => {
-                    if (data.error) {
-                        throw new Error(data.error);
-                    }
+            .then(res => res.json())
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
 
-                    if (data.paid) {
-                        alert(data.message || 'Đơn đã thanh toán đủ.');
-                        loadPaymentList();
-                        return;
-                    }
+                if (!data.payos || !data.payos.checkoutUrl) {
+                    throw new Error('Không lấy được link thanh toán');
+                }
 
-                    const content = document.getElementById('paymentQrContent');
-                    const qrMarkup = data.payos.qrCode
-                        ? `<img src="${data.payos.qrCode}" alt="PayOS QR">`
-                        : '<p>Không lấy được mã QR từ PayOS. Bạn có thể mở link thanh toán bên dưới.</p>';
-
-                    content.innerHTML = `
-                        <div class="qr-box">
-                            <p><strong>${name}</strong></p>
-                            <p>Số xuất đã đặt: <strong>${data.paymentInfo.quantity}</strong></p>
-                            <p>Số tiền cần thanh toán: <strong>${formatCurrency(data.payos.amount)}</strong></p>
-                            ${qrMarkup}
-                            <p><a href="${data.payos.checkoutUrl}" target="_blank" rel="noopener">Mở trang thanh toán PayOS</a></p>
-                            <p style="font-size:12px;opacity:0.8;">Sau khi thanh toán thành công, trạng thái sẽ tự cập nhật khi PayOS gọi webhook.</p>
-                        </div>
-                    `;
-                    paymentQrModal.style.display = 'block';
-                })
-                .catch(err => alert(`Lỗi tạo thanh toán: ${err.message}`));
+                // 👉 Redirect thẳng sang PayOS
+                window.location.href = data.payos.checkoutUrl;
+            })
+            .catch(err => {
+                alert(`Lỗi tạo thanh toán: ${err.message}`);
+            });
         }
+
 
         function loadPaymentHistory() {
             const keyword = document.getElementById('paymentSearch').value.trim();
@@ -1448,6 +1483,7 @@
         }
 
         // Load on page load
+        handlePaymentReturn();
         loadTodayInfo();
         loadCustomerNameSuggestions();
         setInterval(loadTodayInfo, 5000); // Refresh every 5 seconds
