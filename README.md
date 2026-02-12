@@ -73,6 +73,48 @@ pm2 stop datcom
 pm2 start datcom
 ```
 
+### Pull code mới trên host + restart đúng cách
+
+> Khuyến nghị: dùng `npm ci` thay vì `npm install` để tránh làm thay đổi `package-lock.json` trên host.
+
+```bash
+# 1) Vào project
+cd /var/www/datcom
+
+# 2) Kiểm tra có file local thay đổi không
+git status
+
+# 3) Nếu package-lock.json đang bị sửa local do npm install trước đó:
+git restore package-lock.json
+
+# 4) Pull code mới
+git pull origin <ten-branch>
+
+# 5) Cài đúng dependency theo lockfile
+npm ci --omit=dev
+
+# 6) Restart app
+pm2 restart datcom
+
+# 7) Kiểm tra log
+pm2 logs datcom --lines 100
+```
+
+Nếu `git pull` báo conflict riêng file `package-lock.json`, ưu tiên lấy lockfile mới từ repo:
+
+```bash
+git checkout --theirs package-lock.json
+git add package-lock.json
+git commit -m "Resolve package-lock conflict with repository version"
+```
+
+Sau đó chạy lại:
+
+```bash
+npm ci --omit=dev
+pm2 restart datcom
+```
+
 ### Backup Database
 
 ```bash
