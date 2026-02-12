@@ -14,33 +14,69 @@ class Database {
   }
 
   init() {
-    // Tạo bảng ngày
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS days (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        date TEXT UNIQUE NOT NULL,
-        menu TEXT DEFAULT 'Cơm chiên tôm',
-        quantity INTEGER DEFAULT 10,
-        price INTEGER DEFAULT 40000,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
+    this.db.serialize(() => {
+      // Tạo bảng ngày
+      this.db.run(`
+        CREATE TABLE IF NOT EXISTS days (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          date TEXT UNIQUE NOT NULL,
+          menu TEXT DEFAULT 'Cơm chiên tôm',
+          quantity INTEGER DEFAULT 10,
+          price INTEGER DEFAULT 40000,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
 
-    // Tạo bảng đơn hàng
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS orders (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        day_id INTEGER NOT NULL,
-        name TEXT NOT NULL,
-        quantity INTEGER NOT NULL,
-        description TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (day_id) REFERENCES days(id)
-      )
-    `);
+      // Tạo bảng đơn hàng
+      this.db.run(`
+        CREATE TABLE IF NOT EXISTS orders (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          day_id INTEGER NOT NULL,
+          name TEXT NOT NULL,
+          quantity INTEGER NOT NULL,
+          description TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (day_id) REFERENCES days(id)
+        )
+      `);
 
-    // Tạo record cho hôm nay nếu chưa có
-    this.ensureTodayRecord();
+      this.db.run(`
+        CREATE TABLE IF NOT EXISTS payment_requests (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          day_id INTEGER NOT NULL,
+          customer_name TEXT NOT NULL,
+          order_code INTEGER UNIQUE NOT NULL,
+          amount INTEGER NOT NULL,
+          payment_link_id TEXT,
+          checkout_url TEXT,
+          qr_code TEXT,
+          status TEXT DEFAULT 'PENDING',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (day_id) REFERENCES days(id)
+        )
+      `);
+
+      this.db.run(`
+        CREATE TABLE IF NOT EXISTS payment_transactions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          day_id INTEGER NOT NULL,
+          customer_name TEXT NOT NULL,
+          order_code INTEGER NOT NULL,
+          amount INTEGER NOT NULL,
+          status TEXT NOT NULL,
+          reference TEXT,
+          transaction_date TEXT,
+          raw_payload TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (day_id) REFERENCES days(id),
+          UNIQUE(order_code, status)
+        )
+      `);
+
+      // Tạo record cho hôm nay nếu chưa có
+      this.ensureTodayRecord();
+    });
   }
 
   ensureTodayRecord() {
@@ -280,6 +316,193 @@ class Database {
       [orderId],
       callback
     );
+  }
+
+  getTodayPaymentSummary(searchKeyword, callback) {
+    const today = this.getDateString();
+    const keyword = (searchKeyword || '').trim().toLowerCase();
+    const searchParams = keyword ? [`%${keyword}%`] : [];
+
+    const sql = `
+      SELECT
+        o.name,
+        SUM(o.quantity) AS quantity,
+        d.price AS unit_price,
+        SUM(o.quantity) * d.price AS total_amount,
+        COALESCE(paid.total_paid, 0) AS paid_amount,
+        MAX(o.created_at) AS last_order_time
+      FROM orders o
+      JOIN days d ON o.day_id = d.id
+      LEFT JOIN (
+        SELECT day_id, customer_name, SUM(amount) AS total_paid
+        FROM payment_transactions
+        WHERE status = 'PAID'
+        GROUP BY day_id, customer_name
+      ) paid ON paid.day_id = o.day_id AND LOWER(paid.customer_name) = LOWER(o.name)
+      WHERE d.date = ?
+      ${keyword ? 'AND LOWER(o.name) LIKE ?' : ''}
+      GROUP BY LOWER(o.name), d.price
+      ORDER BY o.name COLLATE NOCASE ASC
+    `;
+
+    this.db.all(sql, [today, ...searchParams], (err, rows = []) => {
+      if (err) {
+        callback(err);
+        return;
+      }
+
+      const summary = rows.map((row) => {
+        const totalAmount = row.total_amount || 0;
+        const paidAmount = row.paid_amount || 0;
+        return {
+          name: row.name,
+          quantity: row.quantity,
+          unitPrice: row.unit_price,
+          totalAmount,
+          paidAmount,
+          remainingAmount: Math.max(0, totalAmount - paidAmount),
+          status: paidAmount >= totalAmount ? 'PAID' : paidAmount > 0 ? 'PARTIAL' : 'UNPAID',
+          lastOrderTime: row.last_order_time
+        };
+      });
+
+      callback(null, summary);
+    });
+  }
+
+  getTodayCustomerPayment(name, callback) {
+    const today = this.getDateString();
+
+    this.db.get(
+      `SELECT d.id AS day_id, d.price AS unit_price, SUM(o.quantity) AS quantity
+       FROM orders o
+       JOIN days d ON o.day_id = d.id
+       WHERE d.date = ? AND LOWER(o.name) = LOWER(?)`,
+      [today, name],
+      (err, row) => {
+        if (err) {
+          callback(err);
+          return;
+        }
+
+        if (!row || !row.quantity) {
+          callback(new Error('Không tìm thấy đơn đặt cơm của tên này trong hôm nay'));
+          return;
+        }
+
+        this.db.get(
+          `SELECT COALESCE(SUM(amount), 0) AS paid_amount
+           FROM payment_transactions
+           WHERE day_id = ? AND LOWER(customer_name) = LOWER(?) AND status = 'PAID'`,
+          [row.day_id, name],
+          (paidErr, paidRow) => {
+            if (paidErr) {
+              callback(paidErr);
+              return;
+            }
+
+            const totalAmount = row.quantity * row.unit_price;
+            const paidAmount = (paidRow && paidRow.paid_amount) || 0;
+            callback(null, {
+              dayId: row.day_id,
+              name,
+              quantity: row.quantity,
+              unitPrice: row.unit_price,
+              totalAmount,
+              paidAmount,
+              remainingAmount: Math.max(0, totalAmount - paidAmount)
+            });
+          }
+        );
+      }
+    );
+  }
+
+  createPaymentRequest(data, callback) {
+    const { dayId, customerName, orderCode, amount, paymentLinkId, checkoutUrl, qrCode } = data;
+    this.db.run(
+      `INSERT INTO payment_requests
+        (day_id, customer_name, order_code, amount, payment_link_id, checkout_url, qr_code, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING')`,
+      [dayId, customerName, orderCode, amount, paymentLinkId || '', checkoutUrl || '', qrCode || ''],
+      callback
+    );
+  }
+
+  markPaymentPaid(orderCode, paymentData, callback) {
+    const normalizedOrderCode = Number(orderCode);
+    this.db.get(
+      `SELECT id, day_id, customer_name FROM payment_requests WHERE order_code = ?`,
+      [normalizedOrderCode],
+      (err, requestRow) => {
+        if (err) {
+          callback(err);
+          return;
+        }
+
+        if (!requestRow) {
+          callback(new Error('Không tìm thấy yêu cầu thanh toán tương ứng'));
+          return;
+        }
+
+        const amount = Number(paymentData.amount || 0);
+        const status = 'PAID';
+        const reference = paymentData.reference || paymentData.code || paymentData.paymentLinkId || '';
+        const transactionDate = paymentData.transactionDateTime || paymentData.transactionDate || '';
+
+        this.db.run(
+          `INSERT OR IGNORE INTO payment_transactions
+            (day_id, customer_name, order_code, amount, status, reference, transaction_date, raw_payload)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            requestRow.day_id,
+            requestRow.customer_name,
+            normalizedOrderCode,
+            amount,
+            status,
+            reference,
+            transactionDate,
+            JSON.stringify(paymentData)
+          ],
+          (insertErr) => {
+            if (insertErr) {
+              callback(insertErr);
+              return;
+            }
+
+            this.db.run(
+              `UPDATE payment_requests
+               SET status = 'PAID', updated_at = CURRENT_TIMESTAMP
+               WHERE order_code = ?`,
+              [normalizedOrderCode],
+              callback
+            );
+          }
+        );
+      }
+    );
+  }
+
+  getPaymentHistory(searchKeyword, callback) {
+    const keyword = (searchKeyword || '').trim().toLowerCase();
+    const query = `
+      SELECT
+        t.customer_name,
+        t.amount,
+        t.order_code,
+        t.reference,
+        t.transaction_date,
+        t.created_at,
+        d.date
+      FROM payment_transactions t
+      JOIN days d ON t.day_id = d.id
+      WHERE t.status = 'PAID'
+      ${keyword ? 'AND LOWER(t.customer_name) LIKE ?' : ''}
+      ORDER BY COALESCE(t.transaction_date, t.created_at) DESC
+      LIMIT 200
+    `;
+
+    this.db.all(query, keyword ? [`%${keyword}%`] : [], callback);
   }
 }
 
