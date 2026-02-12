@@ -94,6 +94,17 @@ class Database {
     return `${year}-${month}-${day}`;
   }
 
+  normalizeSearchText(value) {
+    return (value || '')
+      .toString()
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/đ/g, 'd')
+      .replace(/['\s]+/g, '');
+  }
+
   getTodayInfo(callback) {
     const today = this.getDateString();
     console.log('📋 Lấy thông tin hôm nay:', today);
@@ -319,51 +330,55 @@ class Database {
   }
 
   getTodayPaymentSummary(searchKeyword, callback) {
-    const today = this.getDateString();
-    const keyword = (searchKeyword || '').trim().toLowerCase();
-    const searchParams = keyword ? [`%${keyword}%`] : [];
+    const normalizedKeyword = this.normalizeSearchText(searchKeyword);
 
     const sql = `
       SELECT
-        o.name,
+        MAX(o.name) AS name,
         SUM(o.quantity) AS quantity,
-        d.price AS unit_price,
-        SUM(o.quantity) * d.price AS total_amount,
+        SUM(o.quantity * d.price) AS total_amount,
         COALESCE(paid.total_paid, 0) AS paid_amount,
-        MAX(o.created_at) AS last_order_time
+        MAX(o.created_at) AS last_order_time,
+        MAX(o.day_id) AS latest_day_id
       FROM orders o
       JOIN days d ON o.day_id = d.id
       LEFT JOIN (
-        SELECT day_id, customer_name, SUM(amount) AS total_paid
+        SELECT LOWER(TRIM(customer_name)) AS normalized_name, SUM(amount) AS total_paid
         FROM payment_transactions
         WHERE status = 'PAID'
-        GROUP BY day_id, customer_name
-      ) paid ON paid.day_id = o.day_id AND LOWER(paid.customer_name) = LOWER(o.name)
-      WHERE d.date = ?
-      ${keyword ? 'AND LOWER(o.name) LIKE ?' : ''}
-      GROUP BY LOWER(o.name), d.price
-      ORDER BY o.name COLLATE NOCASE ASC
+        GROUP BY LOWER(TRIM(customer_name))
+      ) paid ON paid.normalized_name = LOWER(TRIM(o.name))
+      WHERE 1 = 1
+      GROUP BY LOWER(TRIM(o.name))
+      HAVING (SUM(o.quantity * d.price) - COALESCE(paid.total_paid, 0)) > 0
+      ORDER BY name COLLATE NOCASE ASC
     `;
 
-    this.db.all(sql, [today, ...searchParams], (err, rows = []) => {
+    this.db.all(sql, [], (err, rows = []) => {
       if (err) {
         callback(err);
         return;
       }
 
       const summary = rows.map((row) => {
-        const totalAmount = row.total_amount || 0;
-        const paidAmount = row.paid_amount || 0;
+        const totalAmount = Number(row.total_amount || 0);
+        const paidAmount = Number(row.paid_amount || 0);
         return {
           name: row.name,
-          quantity: row.quantity,
-          unitPrice: row.unit_price,
+          quantity: Number(row.quantity || 0),
           totalAmount,
           paidAmount,
           remainingAmount: Math.max(0, totalAmount - paidAmount),
           status: paidAmount >= totalAmount ? 'PAID' : paidAmount > 0 ? 'PARTIAL' : 'UNPAID',
-          lastOrderTime: row.last_order_time
+          lastOrderTime: row.last_order_time,
+          latestDayId: row.latest_day_id
         };
+      }).filter((row) => {
+        if (!normalizedKeyword) {
+          return true;
+        }
+
+        return this.normalizeSearchText(row.name).includes(normalizedKeyword);
       });
 
       callback(null, summary);
@@ -371,14 +386,15 @@ class Database {
   }
 
   getTodayCustomerPayment(name, callback) {
-    const today = this.getDateString();
-
     this.db.get(
-      `SELECT d.id AS day_id, d.price AS unit_price, SUM(o.quantity) AS quantity
+      `SELECT
+        SUM(o.quantity) AS quantity,
+        SUM(o.quantity * d.price) AS total_amount,
+        MAX(o.day_id) AS latest_day_id
        FROM orders o
        JOIN days d ON o.day_id = d.id
-       WHERE d.date = ? AND LOWER(o.name) = LOWER(?)`,
-      [today, name],
+       WHERE LOWER(TRIM(o.name)) = LOWER(TRIM(?))`,
+      [name],
       (err, row) => {
         if (err) {
           callback(err);
@@ -386,28 +402,27 @@ class Database {
         }
 
         if (!row || !row.quantity) {
-          callback(new Error('Không tìm thấy đơn đặt cơm của tên này trong hôm nay'));
+          callback(new Error('Không tìm thấy đơn đặt cơm của tên này'));
           return;
         }
 
         this.db.get(
           `SELECT COALESCE(SUM(amount), 0) AS paid_amount
            FROM payment_transactions
-           WHERE day_id = ? AND LOWER(customer_name) = LOWER(?) AND status = 'PAID'`,
-          [row.day_id, name],
+           WHERE LOWER(TRIM(customer_name)) = LOWER(TRIM(?)) AND status = 'PAID'`,
+          [name],
           (paidErr, paidRow) => {
             if (paidErr) {
               callback(paidErr);
               return;
             }
 
-            const totalAmount = row.quantity * row.unit_price;
-            const paidAmount = (paidRow && paidRow.paid_amount) || 0;
+            const totalAmount = Number(row.total_amount || 0);
+            const paidAmount = Number((paidRow && paidRow.paid_amount) || 0);
             callback(null, {
-              dayId: row.day_id,
+              dayId: row.latest_day_id,
               name,
-              quantity: row.quantity,
-              unitPrice: row.unit_price,
+              quantity: Number(row.quantity || 0),
               totalAmount,
               paidAmount,
               remainingAmount: Math.max(0, totalAmount - paidAmount)
@@ -484,7 +499,13 @@ class Database {
   }
 
   getPaymentHistory(searchKeyword, callback) {
-    const keyword = (searchKeyword || '').trim().toLowerCase();
+    const normalizedKeyword = this.normalizeSearchText(searchKeyword);
+
+    if (!normalizedKeyword) {
+      callback(null, []);
+      return;
+    }
+
     const query = `
       SELECT
         t.customer_name,
@@ -497,12 +518,22 @@ class Database {
       FROM payment_transactions t
       JOIN days d ON t.day_id = d.id
       WHERE t.status = 'PAID'
-      ${keyword ? 'AND LOWER(t.customer_name) LIKE ?' : ''}
       ORDER BY COALESCE(t.transaction_date, t.created_at) DESC
-      LIMIT 200
+      LIMIT 500
     `;
 
-    this.db.all(query, keyword ? [`%${keyword}%`] : [], callback);
+    this.db.all(query, [], (err, rows = []) => {
+      if (err) {
+        callback(err);
+        return;
+      }
+
+      const filteredRows = rows
+        .filter((row) => this.normalizeSearchText(row.customer_name).includes(normalizedKeyword))
+        .slice(0, 200);
+
+      callback(null, filteredRows);
+    });
   }
 }
 
