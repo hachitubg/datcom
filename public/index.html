@@ -4,9 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cơm Cô Giang</title>
-
-    <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
-
     <style>
         * {
             margin: 0;
@@ -996,7 +993,6 @@
     <div id="paymentQrModal" class="modal">
         <div class="modal-content">
             <span class="close" id="closePaymentQr">&times;</span>
-            <h2>QUÉT QR THANH TOÁN</h2>
             <div id="paymentQrContent"></div>
         </div>
     </div>
@@ -1218,28 +1214,12 @@
                     throw new Error(data.error);
                 }
 
-                const content = document.getElementById('paymentQrContent');
-
-                content.innerHTML = `
-                    <div class="qr-box">
-                        <p><strong>${name}</strong></p>
-                        <p>Số tiền: <strong>${formatCurrency(data.payos.amount)}</strong></p>
-                        <canvas id="qrCanvas"></canvas>
-                        <p><a href="${data.payos.checkoutUrl}" target="_blank">
-                            Mở trang thanh toán
-                        </a></p>
-                    </div>
-                `;
-
-                if (data.payos.qrCode) {
-                    QRCode.toCanvas(
-                        document.getElementById("qrCanvas"),
-                        data.payos.qrCode,
-                        { width: 260 }
-                    );
+                if (!data.payos || !data.payos.checkoutUrl) {
+                    throw new Error('Không lấy được link thanh toán');
                 }
 
-                paymentQrModal.style.display = 'block';
+                // 👉 Redirect thẳng sang PayOS
+                window.location.href = data.payos.checkoutUrl;
             })
             .catch(err => {
                 alert(`Lỗi tạo thanh toán: ${err.message}`);
