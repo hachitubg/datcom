@@ -271,35 +271,34 @@ app.post('/api/payments/create', async (req, res) => {
 
 // Webhook PayOS cập nhật trạng thái thanh toán
 app.post('/api/payments/webhook/payos',
-  express.raw({ type: 'application/json' }),
+  express.raw({ type: '*/*' }),
   (req, res) => {
-    const rawBody = req.body.toString();
-    const parsedBody = JSON.parse(rawBody);
-
-    const isValidSignature = payos.verifyWebhook(parsedBody);
-
-    if (!isValidSignature) {
-      console.log('❌ Invalid signature');
-      return res.status(400).json({ error: 'Webhook signature không hợp lệ' });
-    }
-
-    const data = parsedBody.data || {};
-    const orderCode = Number(data.orderCode);
-    const amount = Number(data.amount || 0);
-
-    db.markPaymentPaid(
-      orderCode,
-      {
-        amount,
-        raw: parsedBody
-      },
-      (err) => {
-        if (err) {
-          return res.status(500).json({ error: err.message });
-        }
-        res.json({ success: true });
+    try {
+      if (!req.body) {
+        return res.status(400).json({ error: 'Empty body' });
       }
-    );
+
+      const rawBody = req.body.toString('utf8');
+      const parsedBody = JSON.parse(rawBody);
+
+      const isValidSignature = payos.verifyWebhook(parsedBody);
+      if (!isValidSignature) {
+        return res.status(400).json({ error: 'Invalid signature' });
+      }
+
+      const data = parsedBody.data || {};
+      const orderCode = Number(data.orderCode);
+      const amount = Number(data.amount || 0);
+
+      db.markPaymentPaid(orderCode, { amount, raw: parsedBody }, (err) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ success: true });
+      });
+
+    } catch (err) {
+      console.error("Webhook error:", err);
+      res.status(500).json({ error: err.message });
+    }
   }
 );
 
