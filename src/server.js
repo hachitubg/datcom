@@ -269,38 +269,47 @@ app.post('/api/payments/create', async (req, res) => {
   });
 });
 
-// Webhook PayOS cập nhật trạng thái thanh toán
+// // Webhook PayOS cập nhật trạng thái thanh toán
+// app.post('/api/payments/webhook/payos',
+//   express.raw({ type: '*/*' }),
+//   (req, res) => {
+//     try {
+//       if (!req.body) {
+//         return res.status(400).json({ error: 'Empty body' });
+//       }
+
+//       const rawBody = req.body.toString('utf8');
+//       const parsedBody = JSON.parse(rawBody);
+
+//       const isValidSignature = payos.verifyWebhook(parsedBody);
+//       if (!isValidSignature) {
+//         return res.status(400).json({ error: 'Invalid signature' });
+//       }
+
+//       const data = parsedBody.data || {};
+//       const orderCode = Number(data.orderCode);
+//       const amount = Number(data.amount || 0);
+
+//       db.markPaymentPaid(orderCode, { amount, raw: parsedBody }, (err) => {
+//         if (err) return res.status(500).json({ error: err.message });
+//         res.json({ success: true });
+//       });
+
+//     } catch (err) {
+//       console.error("Webhook error:", err);
+//       res.status(500).json({ error: err.message });
+//     }
+//   }
+// );
+
 app.post('/api/payments/webhook/payos',
   express.raw({ type: '*/*' }),
   (req, res) => {
-    try {
-      if (!req.body) {
-        return res.status(400).json({ error: 'Empty body' });
-      }
-
-      const rawBody = req.body.toString('utf8');
-      const parsedBody = JSON.parse(rawBody);
-
-      const isValidSignature = payos.verifyWebhook(parsedBody);
-      if (!isValidSignature) {
-        return res.status(400).json({ error: 'Invalid signature' });
-      }
-
-      const data = parsedBody.data || {};
-      const orderCode = Number(data.orderCode);
-      const amount = Number(data.amount || 0);
-
-      db.markPaymentPaid(orderCode, { amount, raw: parsedBody }, (err) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ success: true });
-      });
-
-    } catch (err) {
-      console.error("Webhook error:", err);
-      res.status(500).json({ error: err.message });
-    }
+    console.log("Webhook received");
+    res.status(200).json({ success: true });
   }
 );
+
 
 app.get('/api/payments/verify-return', async (req, res) => {
   if (!payos.isConfigured()) {

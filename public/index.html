@@ -1207,31 +1207,45 @@
         });
 
         window.openPayQr = function(name) {
-            const content = document.getElementById('paymentQrContent');
+            fetch(`${API_BASE}/api/payments/create`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
 
-            content.innerHTML = `
-                <div class="qr-box">
-                    <p><strong>${name}</strong></p>
-                    <p>Số tiền: <strong>${formatCurrency(data.payos.amount)}</strong></p>
-                    <canvas id="qrCanvas"></canvas>
-                    <p style="margin-top:10px">
-                        <a href="${data.payos.checkoutUrl}" target="_blank">
+                const content = document.getElementById('paymentQrContent');
+
+                content.innerHTML = `
+                    <div class="qr-box">
+                        <p><strong>${name}</strong></p>
+                        <p>Số tiền: <strong>${formatCurrency(data.payos.amount)}</strong></p>
+                        <canvas id="qrCanvas"></canvas>
+                        <p><a href="${data.payos.checkoutUrl}" target="_blank">
                             Mở trang thanh toán
-                        </a>
-                    </p>
-                </div>
-            `;
+                        </a></p>
+                    </div>
+                `;
 
-            if (data.payos.qrCode) {
-                QRCode.toCanvas(
-                    document.getElementById("qrCanvas"),
-                    data.payos.qrCode,
-                    {
-                        width: 260
-                    }
-                );
-            }
+                if (data.payos.qrCode) {
+                    QRCode.toCanvas(
+                        document.getElementById("qrCanvas"),
+                        data.payos.qrCode,
+                        { width: 260 }
+                    );
+                }
+
+                paymentQrModal.style.display = 'block';
+            })
+            .catch(err => {
+                alert(`Lỗi tạo thanh toán: ${err.message}`);
+            });
         }
+
 
         function loadPaymentHistory() {
             const keyword = document.getElementById('paymentSearch').value.trim();
