@@ -1066,9 +1066,15 @@
             list.innerHTML = '<div style="padding: 16px">Đang tải...</div>';
 
             fetch(url)
-                .then(res => res.json())
+                .then(async (res) => {
+                    const data = await res.json();
+                    if (!res.ok) {
+                        throw new Error(data.error || 'Không thể tải danh sách thanh toán');
+                    }
+                    return data;
+                })
                 .then(rows => {
-                    if (!rows || rows.length === 0) {
+                    if (!Array.isArray(rows) || rows.length === 0) {
                         list.innerHTML = '<div style="padding: 16px">Không có dữ liệu phù hợp.</div>';
                         return;
                     }
@@ -1082,7 +1088,7 @@
                             <td>${formatCurrency(row.paidAmount)}</td>
                             <td>${formatCurrency(row.remainingAmount)}</td>
                             <td><span class="payment-status ${getStatusClass(row.status)}">${getStatusText(row.status)}</span></td>
-                            <td><button class="pay-btn" ${row.remainingAmount <= 0 ? 'disabled' : ''} onclick="openPayQr('${row.name.replace(/'/g, "\'")}')">Thanh toán</button></td>
+                            <td><button class="pay-btn" data-customer-name="${encodeURIComponent(row.name)}" ${row.remainingAmount <= 0 ? 'disabled' : ''}>Thanh toán</button></td>
                         </tr>`;
                     });
                     html += '</tbody></table></div>';
@@ -1092,6 +1098,22 @@
                     list.innerHTML = `<div style="padding:16px;color:#9b3f3f">Lỗi tải danh sách thanh toán: ${err.message}</div>`;
                 });
         }
+
+        document.getElementById('paymentList').addEventListener('click', (event) => {
+            const btn = event.target.closest('.pay-btn');
+            if (!btn || btn.disabled) {
+                return;
+            }
+
+            const encodedName = btn.getAttribute('data-customer-name') || '';
+            const name = decodeURIComponent(encodedName);
+            if (!name) {
+                alert('Không xác định được tên người đặt cơm. Vui lòng tải lại danh sách.');
+                return;
+            }
+
+            openPayQr(name);
+        });
 
         window.openPayQr = function(name) {
             fetch(`${API_BASE}/api/payments/create`, {
