@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const https = require('https');
 
 const PAYOS_BASE_URL = process.env.PAYOS_BASE_URL || 'https://api-merchant.payos.vn';
 
@@ -10,6 +11,53 @@ function buildSignatureFromPayload(payload, checksumKey) {
     .join('&');
 
   return crypto.createHmac('sha256', checksumKey).update(dataString).digest('hex');
+}
+
+function requestJson(urlString, { method, headers, body }) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(urlString);
+    const request = https.request(
+      {
+        hostname: url.hostname,
+        port: url.port || 443,
+        path: `${url.pathname}${url.search}`,
+        method,
+        headers
+      },
+      (response) => {
+        let raw = '';
+        response.setEncoding('utf8');
+        response.on('data', (chunk) => {
+          raw += chunk;
+        });
+        response.on('end', () => {
+          let data = {};
+          try {
+            data = raw ? JSON.parse(raw) : {};
+          } catch (parseError) {
+            reject(new Error(`Phản hồi PayOS không hợp lệ: ${parseError.message}`));
+            return;
+          }
+
+          resolve({
+            ok: response.statusCode >= 200 && response.statusCode < 300,
+            statusCode: response.statusCode,
+            data
+          });
+        });
+      }
+    );
+
+    request.on('error', (error) => {
+      reject(error);
+    });
+
+    if (body) {
+      request.write(body);
+    }
+
+    request.end();
+  });
 }
 
 class PayOSService {
@@ -54,18 +102,17 @@ class PayOSService {
       this.checksumKey
     );
 
-    const response = await fetch(endpoint, {
+    const response = await requestJson(endpoint, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify(payload)
     });
 
-    const data = await response.json();
-    if (!response.ok || data.code !== '00') {
-      throw new Error(data.desc || data.message || 'Tạo link thanh toán PayOS thất bại');
+    if (!response.ok || response.data.code !== '00') {
+      throw new Error(response.data.desc || response.data.message || 'Tạo link thanh toán PayOS thất bại');
     }
 
-    return data.data;
+    return response.data.data;
   }
 
   verifyWebhook(webhookBody) {

@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
@@ -19,7 +20,18 @@ const db = new Database();
 const payos = new PayOSService();
 
 function normalizeName(name) {
-  return (name || '').trim();
+  const compact = (name || '').trim().replace(/\s+/g, ' ');
+  if (!compact) {
+    return '';
+  }
+
+  return compact
+    .split(' ')
+    .map((part) => {
+      if (!part) return '';
+      return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+    })
+    .join(' ');
 }
 
 function buildOrderCode() {
@@ -53,13 +65,14 @@ app.get('/api/orders/today', (req, res) => {
 
 // Tạo đơn hàng mới
 app.post('/api/orders', (req, res) => {
-  const { name, quantity, description } = req.body;
+  const normalizedCustomerName = normalizeName(req.body.name);
+  const { quantity, description } = req.body;
 
-  if (!name || !quantity) {
+  if (!normalizedCustomerName || !quantity) {
     return res.status(400).json({ error: 'Thiếu thông tin bắt buộc' });
   }
 
-  db.addOrder(name, quantity, description || '', (err, order) => {
+  db.addOrder(normalizedCustomerName, quantity, description || '', (err, order) => {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
@@ -144,6 +157,31 @@ app.delete('/api/admin/orders/:orderId', (req, res) => {
   });
 });
 
+app.get('/api/customers/names', (req, res) => {
+  db.getKnownCustomerNames((err, names) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(names);
+  });
+});
+
+app.post('/api/admin/customers/rename', (req, res) => {
+  const oldName = normalizeName(req.body.oldName);
+  const newName = normalizeName(req.body.newName);
+
+  if (!oldName || !newName) {
+    return res.status(400).json({ error: 'Vui lòng nhập đủ tên cũ và tên mới' });
+  }
+
+  db.renameCustomer(oldName, newName, (err, result) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+
+    res.json({ success: true, ...result });
+  });
+});
 
 
 // Danh sách công nợ thanh toán hôm nay

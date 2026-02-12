@@ -944,7 +944,8 @@
             <form id="orderForm">
                 <div class="form-group">
                     <label for="customerName">Họ và tên *</label>
-                    <input type="text" id="customerName" placeholder="Nhập tên của bạn" required>
+                    <input type="text" id="customerName" list="customerNameSuggestions" placeholder="Nhập tên của bạn" autocomplete="off" required>
+                    <datalist id="customerNameSuggestions"></datalist>
                 </div>
                 <div class="form-group">
                     <label for="quantity">Số lượng (xuất) *</label>
@@ -1016,6 +1017,8 @@
         const paymentQrModal = document.getElementById('paymentQrModal');
         const paymentHistoryModal = document.getElementById('paymentHistoryModal');
 
+        const customerNameInput = document.getElementById('customerName');
+
         document.getElementById('btnPayment').addEventListener('click', () => {
             paymentModal.style.display = 'block';
             loadPaymentList();
@@ -1043,6 +1046,10 @@
 
         document.getElementById('btnPaymentHistory').addEventListener('click', loadPaymentHistory);
 
+        customerNameInput.addEventListener('blur', () => {
+            customerNameInput.value = normalizeCustomerName(customerNameInput.value);
+        });
+
         function formatCurrency(value) {
             return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value || 0);
         }
@@ -1059,9 +1066,41 @@
             return 'Chưa thanh toán';
         }
 
+        function normalizeCustomerName(name) {
+            const compact = (name || '').trim().replace(/\s+/g, ' ');
+            if (!compact) {
+                return '';
+            }
+
+            return compact
+                .split(' ')
+                .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+                .join(' ');
+        }
+
+        function loadCustomerNameSuggestions() {
+            fetch(`${API_BASE}/api/customers/names`)
+                .then(res => res.json())
+                .then(names => {
+                    const datalist = document.getElementById('customerNameSuggestions');
+                    if (!Array.isArray(names)) {
+                        datalist.innerHTML = '';
+                        return;
+                    }
+
+                    datalist.innerHTML = names
+                        .map(name => `<option value="${name}"></option>`)
+                        .join('');
+                })
+                .catch(() => {
+                    // Không block luồng đặt cơm nếu API gợi ý lỗi.
+                });
+        }
+
         function loadPaymentList() {
             const keyword = document.getElementById('paymentSearch').value.trim();
             const url = keyword ? `${API_BASE}/api/payments/today?search=${encodeURIComponent(keyword)}` : `${API_BASE}/api/payments/today`;
+            // API trả về công nợ chưa thanh toán được cộng dồn toàn bộ thời gian
             const list = document.getElementById('paymentList');
             list.innerHTML = '<div style="padding: 16px">Đang tải...</div>';
 
@@ -1155,15 +1194,22 @@
 
         function loadPaymentHistory() {
             const keyword = document.getElementById('paymentSearch').value.trim();
-            const url = keyword ? `${API_BASE}/api/payments/history?search=${encodeURIComponent(keyword)}` : `${API_BASE}/api/payments/history`;
             const historyBox = document.getElementById('paymentHistoryList');
+
+            if (!keyword) {
+                historyBox.innerHTML = '<div style="padding:16px">Vui lòng nhập tên để xem lịch sử thanh toán.</div>';
+                paymentHistoryModal.style.display = 'block';
+                return;
+            }
+
+            const url = `${API_BASE}/api/payments/history?search=${encodeURIComponent(keyword)}`;
             historyBox.innerHTML = '<div style="padding: 16px">Đang tải...</div>';
 
             fetch(url)
                 .then(res => res.json())
                 .then(rows => {
                     if (!rows || rows.length === 0) {
-                        historyBox.innerHTML = '<div style="padding:16px">Chưa có giao dịch thanh toán.</div>';
+                        historyBox.innerHTML = '<div style="padding:16px">Không tìm thấy lịch sử thanh toán theo tên đã nhập.</div>';
                         paymentHistoryModal.style.display = 'block';
                         return;
                     }
@@ -1185,6 +1231,7 @@
         document.getElementById('btnOrder').addEventListener('click', () => {
             document.getElementById('orderMessage').innerHTML = '';
             document.getElementById('orderForm').reset();
+            loadCustomerNameSuggestions();
             orderModal.style.display = 'block';
         });
 
@@ -1365,7 +1412,7 @@
         document.getElementById('orderForm').addEventListener('submit', (e) => {
             e.preventDefault();
 
-            const name = document.getElementById('customerName').value.trim();
+            const name = normalizeCustomerName(document.getElementById('customerName').value);
             const quantity = parseInt(document.getElementById('quantity').value);
             const description = document.getElementById('description').value.trim();
 
@@ -1402,6 +1449,7 @@
 
         // Load on page load
         loadTodayInfo();
+        loadCustomerNameSuggestions();
         setInterval(loadTodayInfo, 5000); // Refresh every 5 seconds
     </script>
 </body>
