@@ -193,40 +193,36 @@ class Database {
   }
 
   getAllDays(callback) {
-    console.log('📚 Tải tất cả các ngày từ database');
+    console.log('📚 Tải các ngày có phát sinh đơn hàng');
     this.db.all(
-      `SELECT id, date, menu, quantity, price, created_at FROM days ORDER BY date DESC`,
-      (err, rows) => {
+      `SELECT
+         d.id,
+         d.date,
+         d.menu,
+         d.quantity,
+         d.price,
+         d.created_at,
+         COALESCE(SUM(o.quantity), 0) AS ordered
+       FROM days d
+       LEFT JOIN orders o ON o.day_id = d.id
+       GROUP BY d.id
+       HAVING COALESCE(SUM(o.quantity), 0) > 0
+       ORDER BY d.date DESC`,
+      (err, rows = []) => {
         if (err) {
           console.error('❌ Lỗi getAllDays:', err);
           callback(err);
-        } else {
-          console.log('✅ Tìm thấy', rows.length, 'ngày');
-          // Đếm số lượng đã đặt cho mỗi ngày
-          let completedRows = 0;
-          const result = rows.map(row => {
-            this.db.get(
-              `SELECT SUM(quantity) as ordered FROM orders WHERE day_id = ?`,
-              [row.id],
-              (err, orderRow) => {
-                const ordered = (orderRow && orderRow.ordered) || 0;
-                row.ordered = ordered;
-                row.remaining = Math.max(0, row.quantity - ordered);
-                completedRows++;
-                
-                if (completedRows === rows.length) {
-                  console.log('📊 Dữ liệu lịch sử đã sẵn sàng');
-                  callback(null, rows);
-                }
-              }
-            );
-            return row;
-          });
-          
-          if (rows.length === 0) {
-            callback(null, []);
-          }
+          return;
         }
+
+        const mapped = rows.map((row) => ({
+          ...row,
+          ordered: row.ordered || 0,
+          remaining: Math.max(0, row.quantity - (row.ordered || 0))
+        }));
+
+        console.log('✅ Tìm thấy', mapped.length, 'ngày có đơn hàng');
+        callback(null, mapped);
       }
     );
   }
@@ -316,6 +312,95 @@ class Database {
       [orderId],
       callback
     );
+  }
+
+  getKnownCustomerNames(callback) {
+    const query = `
+      SELECT name FROM orders
+      UNION
+      SELECT customer_name AS name FROM payment_requests
+      UNION
+      SELECT customer_name AS name FROM payment_transactions
+    `;
+
+    this.db.all(query, (err, rows = []) => {
+      if (err) {
+        callback(err);
+        return;
+      }
+
+      const uniqueMap = new Map();
+      rows.forEach((row) => {
+        const originalName = (row.name || '').trim().replace(/\s+/g, ' ');
+        if (!originalName) return;
+        const normalizedName = originalName.toLowerCase();
+        if (!uniqueMap.has(normalizedName)) {
+          uniqueMap.set(normalizedName, originalName);
+        }
+      });
+
+      const names = Array.from(uniqueMap.values()).sort((a, b) => a.localeCompare(b, 'vi'));
+      callback(null, names);
+    });
+  }
+
+  renameCustomer(oldName, newName, callback) {
+    const normalizedOld = (oldName || '').trim().replace(/\s+/g, ' ');
+    const normalizedNew = (newName || '').trim().replace(/\s+/g, ' ');
+
+    if (!normalizedOld || !normalizedNew) {
+      callback(new Error('Tên cũ hoặc tên mới không hợp lệ'));
+      return;
+    }
+
+    const keyExpression = "LOWER(REPLACE(REPLACE(%COLUMN%, '''', ''), ' ', ''))";
+    const oldKey = normalizedOld.toLowerCase().replace(/['\s]+/g, '');
+    const dbConn = this.db;
+
+    dbConn.serialize(() => {
+      dbConn.run(
+        `UPDATE orders SET name = ? WHERE ${keyExpression.replace('%COLUMN%', 'name')} = ?`,
+        [normalizedNew, oldKey],
+        function onOrdersUpdated(ordersErr) {
+          if (ordersErr) {
+            callback(ordersErr);
+            return;
+          }
+
+          const updatedOrders = this.changes || 0;
+
+          dbConn.run(
+            `UPDATE payment_requests SET customer_name = ? WHERE ${keyExpression.replace('%COLUMN%', 'customer_name')} = ?`,
+            [normalizedNew, oldKey],
+            function onPaymentRequestsUpdated(paymentRequestsErr) {
+              if (paymentRequestsErr) {
+                callback(paymentRequestsErr);
+                return;
+              }
+
+              const updatedPaymentRequests = this.changes || 0;
+
+              dbConn.run(
+                `UPDATE payment_transactions SET customer_name = ? WHERE ${keyExpression.replace('%COLUMN%', 'customer_name')} = ?`,
+                [normalizedNew, oldKey],
+                function onPaymentTransactionsUpdated(paymentTransactionsErr) {
+                  if (paymentTransactionsErr) {
+                    callback(paymentTransactionsErr);
+                    return;
+                  }
+
+                  callback(null, {
+                    updatedOrders,
+                    updatedPaymentRequests,
+                    updatedPaymentTransactions: this.changes || 0
+                  });
+                }
+              );
+            }
+          );
+        }
+      );
+    });
   }
 
   getTodayPaymentSummary(searchKeyword, callback) {
