@@ -321,7 +321,8 @@ class Database {
   getTodayPaymentSummary(searchKeyword, callback) {
     const today = this.getDateString();
     const keyword = (searchKeyword || '').trim().toLowerCase();
-    const searchParams = keyword ? [`%${keyword}%`] : [];
+    const normalizedKeyword = keyword.replace(/['\s]+/g, '');
+    const searchParams = normalizedKeyword ? [`%${normalizedKeyword}%`] : [];
 
     const sql = `
       SELECT
@@ -340,7 +341,7 @@ class Database {
         GROUP BY day_id, customer_name
       ) paid ON paid.day_id = o.day_id AND LOWER(paid.customer_name) = LOWER(o.name)
       WHERE d.date = ?
-      ${keyword ? 'AND LOWER(o.name) LIKE ?' : ''}
+      ${normalizedKeyword ? "AND LOWER(REPLACE(REPLACE(o.name, '''', ''), ' ', '')) LIKE ?" : ''}
       GROUP BY LOWER(o.name), d.price
       ORDER BY o.name COLLATE NOCASE ASC
     `;
@@ -485,6 +486,7 @@ class Database {
 
   getPaymentHistory(searchKeyword, callback) {
     const keyword = (searchKeyword || '').trim().toLowerCase();
+    const normalizedKeyword = keyword.replace(/['\s]+/g, '');
     const query = `
       SELECT
         t.customer_name,
@@ -497,12 +499,12 @@ class Database {
       FROM payment_transactions t
       JOIN days d ON t.day_id = d.id
       WHERE t.status = 'PAID'
-      ${keyword ? 'AND LOWER(t.customer_name) LIKE ?' : ''}
+      ${normalizedKeyword ? "AND LOWER(REPLACE(REPLACE(t.customer_name, '''', ''), ' ', '')) LIKE ?" : ''}
       ORDER BY COALESCE(t.transaction_date, t.created_at) DESC
       LIMIT 200
     `;
 
-    this.db.all(query, keyword ? [`%${keyword}%`] : [], callback);
+    this.db.all(query, normalizedKeyword ? [`%${normalizedKeyword}%`] : [], callback);
   }
 }
 
