@@ -84,19 +84,13 @@ cd /var/www/datcom
 # 2) Kiểm tra có file local thay đổi không
 git status
 
-# 3) Nếu package-lock.json đang bị sửa local do npm install trước đó:
-git restore package-lock.json
+# 3) Pull code mới
+git pull
 
-# 4) Pull code mới
-git pull origin <ten-branch>
-
-# 5) Cài đúng dependency theo lockfile
-npm ci --omit=dev
-
-# 6) Restart app
+# 4) Restart app
 pm2 restart datcom
 
-# 7) Kiểm tra log
+# 5) Kiểm tra log
 pm2 logs datcom --lines 100
 ```
 
