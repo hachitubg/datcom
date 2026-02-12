@@ -16,11 +16,11 @@ Website quản lý đặt cơm đơn giản, dễ dàng triển khai.
 Tính năng thanh toán yêu cầu cấu hình biến môi trường trước khi chạy server:
 
 ```bash
-export PAYOS_CLIENT_ID="5c602f04-dfdd-437d-9d18-375e60a827d2"
-export PAYOS_API_KEY="c0e30d29-df9f-44c8-86bc-94e8986ffea4"
-export PAYOS_CHECKSUM_KEY="d741c3a05e0d6dd23f5579d744c854d1755b5bd48d9cc53c094275444d45d9d4"
+export PAYOS_CLIENT_ID="your-client-id"
+export PAYOS_API_KEY="your-api-key"
+export PAYOS_CHECKSUM_KEY="your-checksum-key"
 # optional: URL public để return/cancel URL chính xác
-export PUBLIC_BASE_URL="http://103.200.20.160:3000/"
+export PUBLIC_BASE_URL="https://your-domain.com"
 ```
 
 ### Webhook PayOS
