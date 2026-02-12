@@ -1062,6 +1062,7 @@
         function loadPaymentList() {
             const keyword = document.getElementById('paymentSearch').value.trim();
             const url = keyword ? `${API_BASE}/api/payments/today?search=${encodeURIComponent(keyword)}` : `${API_BASE}/api/payments/today`;
+            // API trả về công nợ chưa thanh toán được cộng dồn toàn bộ thời gian
             const list = document.getElementById('paymentList');
             list.innerHTML = '<div style="padding: 16px">Đang tải...</div>';
 
@@ -1155,15 +1156,22 @@
 
         function loadPaymentHistory() {
             const keyword = document.getElementById('paymentSearch').value.trim();
-            const url = keyword ? `${API_BASE}/api/payments/history?search=${encodeURIComponent(keyword)}` : `${API_BASE}/api/payments/history`;
             const historyBox = document.getElementById('paymentHistoryList');
+
+            if (!keyword) {
+                historyBox.innerHTML = '<div style="padding:16px">Vui lòng nhập tên để xem lịch sử thanh toán.</div>';
+                paymentHistoryModal.style.display = 'block';
+                return;
+            }
+
+            const url = `${API_BASE}/api/payments/history?search=${encodeURIComponent(keyword)}`;
             historyBox.innerHTML = '<div style="padding: 16px">Đang tải...</div>';
 
             fetch(url)
                 .then(res => res.json())
                 .then(rows => {
                     if (!rows || rows.length === 0) {
-                        historyBox.innerHTML = '<div style="padding:16px">Chưa có giao dịch thanh toán.</div>';
+                        historyBox.innerHTML = '<div style="padding:16px">Không tìm thấy lịch sử thanh toán theo tên đã nhập.</div>';
                         paymentHistoryModal.style.display = 'block';
                         return;
                     }
