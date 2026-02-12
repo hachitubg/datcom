@@ -16,46 +16,46 @@ app.post('/api/payments/webhook/payos',
   express.raw({ type: '*/*' }),
   (req, res) => {
     try {
-      const rawBody = req.body.toString('utf8');
-      const parsedBody = JSON.parse(rawBody);
+      if (!req.body) {
+        return res.status(200).json({ ok: true });
+      }
 
-      console.log("Webhook data:", parsedBody);
+      const rawBody = req.body.toString('utf8');
+      let parsedBody;
+
+      try {
+        parsedBody = JSON.parse(rawBody);
+      } catch {
+        return res.status(200).json({ ok: true });
+      }
+
+      // Nếu không có data → đây là request test
+      if (!parsedBody.data || !parsedBody.data.orderCode) {
+        return res.status(200).json({ ok: true });
+      }
 
       const isValidSignature = payos.verifyWebhook(parsedBody);
       if (!isValidSignature) {
-        return res.status(400).json({ error: 'Invalid signature' });
+        console.log("Invalid signature");
+        return res.status(200).json({ ok: true }); // ⚠️ KHÔNG trả 400
       }
 
-      const data = parsedBody.data || {};
+      const data = parsedBody.data;
       const orderCode = Number(data.orderCode);
       const amount = Number(data.amount || 0);
 
-      if (!orderCode) {
-        return res.status(400).json({ error: 'Missing orderCode' });
-      }
-
-      db.markPaymentPaid(
-        orderCode,
-        {
-          amount,
-          reference: data.reference || '',
-          transactionDateTime: data.transactionDateTime || '',
-          raw: parsedBody
-        },
-        (err) => {
-          if (err) {
-            console.error("DB update error:", err);
-            return res.status(500).json({ error: err.message });
-          }
-
-          console.log("Payment updated for order:", orderCode);
-          res.json({ success: true });
+      db.markPaymentPaid(orderCode, { amount, raw: parsedBody }, (err) => {
+        if (err) {
+          console.error("DB error:", err);
+          return res.status(500).json({ error: err.message });
         }
-      );
+
+        res.json({ success: true });
+      });
 
     } catch (err) {
       console.error("Webhook crash:", err);
-      res.status(500).json({ error: err.message });
+      res.status(200).json({ ok: true }); // ⚠️ KHÔNG trả 500
     }
   }
 );
