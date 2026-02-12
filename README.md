@@ -11,6 +11,23 @@ Website quản lý đặt cơm đơn giản, dễ dàng triển khai.
 | **Database** | SQLite (datcom.db) |
 | **Chạy Trên** | localhost:3000 (hoặc PORT env var) |
 
+## 💳 Cấu hình thanh toán PayOS
+
+Tính năng thanh toán yêu cầu cấu hình biến môi trường trước khi chạy server:
+
+```bash
+export PAYOS_CLIENT_ID="your-client-id"
+export PAYOS_API_KEY="your-api-key"
+export PAYOS_CHECKSUM_KEY="your-checksum-key"
+# optional: URL public để return/cancel URL chính xác
+export PUBLIC_BASE_URL="https://your-domain.com"
+```
+
+### Webhook PayOS
+
+- Endpoint webhook của ứng dụng: `POST /api/payments/webhook/payos`
+- Cấu hình endpoint này trong dashboard PayOS để hệ thống tự động cập nhật trạng thái thanh toán đơn cơm sau khi khách chuyển khoản thành công.
+
 ## ��� Tính Năng
 
 - **Trang chủ**: Hiển thị menu hôm nay, giá cơm (40.000 VNĐ), số lượng xuất còn lại

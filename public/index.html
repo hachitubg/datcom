@@ -497,6 +497,73 @@
             box-shadow: none !important;
         }
 
+        
+
+        .modal-wide {
+            max-width: 860px;
+        }
+
+        .payment-toolbar {
+            display: grid;
+            grid-template-columns: 1fr auto auto;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .payment-table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 620px;
+        }
+
+        .payment-table th,
+        .payment-table td {
+            text-align: left;
+            padding: 10px;
+            border-bottom: 1px solid #d4c4b0;
+            font-size: 14px;
+            color: #8B7355;
+        }
+
+        .payment-status {
+            font-weight: 700;
+            font-size: 12px;
+        }
+
+        .status-paid { color: #2f8f4e; }
+        .status-partial { color: #c27f00; }
+        .status-unpaid { color: #9b3f3f; }
+
+        .pay-btn {
+            background: #A0826D;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 10px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .pay-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .qr-box {
+            text-align: center;
+            color: #8B7355;
+        }
+
+        .qr-box img {
+            width: 100%;
+            max-width: 300px;
+            border-radius: 10px;
+            border: 1px solid #e8dcc8;
+            margin: 10px auto;
+            display: block;
+        }
+
+
         @media (max-width: 768px) {
             body {
                 padding: 12px;
@@ -621,6 +688,10 @@
                 width: 95%;
                 margin: 20% auto;
                 padding: 20px;
+            }
+
+            .payment-toolbar {
+                grid-template-columns: 1fr;
             }
 
             .modal h2 {
@@ -859,6 +930,7 @@
             <div class="buttons-group">
                 <button class="btn-primary" id="btnOrder">ĐẶT CƠM</button>
                 <button class="btn-secondary" id="btnList">DANH SÁCH ĐƠN</button>
+                <button class="btn-secondary" id="btnPayment">THANH TOÁN</button>
             </div>
         </div>
     </div>
@@ -901,12 +973,192 @@
         </div>
     </div>
 
+
+
+    <!-- Modal Thanh toán -->
+    <div id="paymentModal" class="modal">
+        <div class="modal-content modal-wide">
+            <span class="close" id="closePayment">&times;</span>
+            <h2>THANH TOÁN ĐƠN CƠM</h2>
+            <div class="payment-toolbar">
+                <input type="text" id="paymentSearch" placeholder="Tìm theo tên...">
+                <button class="btn-submit" id="btnSearchPayment" type="button">TÌM</button>
+                <button class="btn-cancel" id="btnPaymentHistory" type="button">LỊCH SỬ</button>
+            </div>
+            <div id="paymentList" class="orders-list"></div>
+        </div>
+    </div>
+
+    <div id="paymentQrModal" class="modal">
+        <div class="modal-content">
+            <span class="close" id="closePaymentQr">&times;</span>
+            <h2>QUÉT QR THANH TOÁN</h2>
+            <div id="paymentQrContent"></div>
+        </div>
+    </div>
+
+    <div id="paymentHistoryModal" class="modal">
+        <div class="modal-content modal-wide">
+            <span class="close" id="closePaymentHistory">&times;</span>
+            <h2>LỊCH SỬ THANH TOÁN</h2>
+            <div id="paymentHistoryList" class="orders-list"></div>
+        </div>
+    </div>
+
     <script>
         const API_BASE = '';
 
         // Modal controls
         const orderModal = document.getElementById('orderModal');
         const listModal = document.getElementById('listModal');
+
+        const paymentModal = document.getElementById('paymentModal');
+        const paymentQrModal = document.getElementById('paymentQrModal');
+        const paymentHistoryModal = document.getElementById('paymentHistoryModal');
+
+        document.getElementById('btnPayment').addEventListener('click', () => {
+            paymentModal.style.display = 'block';
+            loadPaymentList();
+        });
+
+        document.getElementById('closePayment').addEventListener('click', () => {
+            paymentModal.style.display = 'none';
+        });
+
+        document.getElementById('closePaymentQr').addEventListener('click', () => {
+            paymentQrModal.style.display = 'none';
+        });
+
+        document.getElementById('closePaymentHistory').addEventListener('click', () => {
+            paymentHistoryModal.style.display = 'none';
+        });
+
+        document.getElementById('btnSearchPayment').addEventListener('click', loadPaymentList);
+        document.getElementById('paymentSearch').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                loadPaymentList();
+            }
+        });
+
+        document.getElementById('btnPaymentHistory').addEventListener('click', loadPaymentHistory);
+
+        function formatCurrency(value) {
+            return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value || 0);
+        }
+
+        function getStatusClass(status) {
+            if (status === 'PAID') return 'status-paid';
+            if (status === 'PARTIAL') return 'status-partial';
+            return 'status-unpaid';
+        }
+
+        function getStatusText(status) {
+            if (status === 'PAID') return 'Đã thanh toán';
+            if (status === 'PARTIAL') return 'Thanh toán một phần';
+            return 'Chưa thanh toán';
+        }
+
+        function loadPaymentList() {
+            const keyword = document.getElementById('paymentSearch').value.trim();
+            const url = keyword ? `${API_BASE}/api/payments/today?search=${encodeURIComponent(keyword)}` : `${API_BASE}/api/payments/today`;
+            const list = document.getElementById('paymentList');
+            list.innerHTML = '<div style="padding: 16px">Đang tải...</div>';
+
+            fetch(url)
+                .then(res => res.json())
+                .then(rows => {
+                    if (!rows || rows.length === 0) {
+                        list.innerHTML = '<div style="padding: 16px">Không có dữ liệu phù hợp.</div>';
+                        return;
+                    }
+
+                    let html = '<div style="overflow:auto"><table class="payment-table"><thead><tr><th>Tên</th><th>Xuất cơm</th><th>Tổng tiền</th><th>Đã thanh toán</th><th>Còn lại</th><th>Trạng thái</th><th></th></tr></thead><tbody>';
+                    rows.forEach((row) => {
+                        html += `<tr>
+                            <td>${row.name}</td>
+                            <td>${row.quantity}</td>
+                            <td>${formatCurrency(row.totalAmount)}</td>
+                            <td>${formatCurrency(row.paidAmount)}</td>
+                            <td>${formatCurrency(row.remainingAmount)}</td>
+                            <td><span class="payment-status ${getStatusClass(row.status)}">${getStatusText(row.status)}</span></td>
+                            <td><button class="pay-btn" ${row.remainingAmount <= 0 ? 'disabled' : ''} onclick="openPayQr('${row.name.replace(/'/g, "\'")}')">Thanh toán</button></td>
+                        </tr>`;
+                    });
+                    html += '</tbody></table></div>';
+                    list.innerHTML = html;
+                })
+                .catch(err => {
+                    list.innerHTML = `<div style="padding:16px;color:#9b3f3f">Lỗi tải danh sách thanh toán: ${err.message}</div>`;
+                });
+        }
+
+        window.openPayQr = function(name) {
+            fetch(`${API_BASE}/api/payments/create`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name })
+            })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error) {
+                        throw new Error(data.error);
+                    }
+
+                    if (data.paid) {
+                        alert(data.message || 'Đơn đã thanh toán đủ.');
+                        loadPaymentList();
+                        return;
+                    }
+
+                    const content = document.getElementById('paymentQrContent');
+                    const qrMarkup = data.payos.qrCode
+                        ? `<img src="${data.payos.qrCode}" alt="PayOS QR">`
+                        : '<p>Không lấy được mã QR từ PayOS. Bạn có thể mở link thanh toán bên dưới.</p>';
+
+                    content.innerHTML = `
+                        <div class="qr-box">
+                            <p><strong>${name}</strong></p>
+                            <p>Số xuất đã đặt: <strong>${data.paymentInfo.quantity}</strong></p>
+                            <p>Số tiền cần thanh toán: <strong>${formatCurrency(data.payos.amount)}</strong></p>
+                            ${qrMarkup}
+                            <p><a href="${data.payos.checkoutUrl}" target="_blank" rel="noopener">Mở trang thanh toán PayOS</a></p>
+                            <p style="font-size:12px;opacity:0.8;">Sau khi thanh toán thành công, trạng thái sẽ tự cập nhật khi PayOS gọi webhook.</p>
+                        </div>
+                    `;
+                    paymentQrModal.style.display = 'block';
+                })
+                .catch(err => alert(`Lỗi tạo thanh toán: ${err.message}`));
+        }
+
+        function loadPaymentHistory() {
+            const keyword = document.getElementById('paymentSearch').value.trim();
+            const url = keyword ? `${API_BASE}/api/payments/history?search=${encodeURIComponent(keyword)}` : `${API_BASE}/api/payments/history`;
+            const historyBox = document.getElementById('paymentHistoryList');
+            historyBox.innerHTML = '<div style="padding: 16px">Đang tải...</div>';
+
+            fetch(url)
+                .then(res => res.json())
+                .then(rows => {
+                    if (!rows || rows.length === 0) {
+                        historyBox.innerHTML = '<div style="padding:16px">Chưa có giao dịch thanh toán.</div>';
+                        paymentHistoryModal.style.display = 'block';
+                        return;
+                    }
+
+                    let html = '<div style="overflow:auto"><table class="payment-table"><thead><tr><th>Ngày đơn</th><th>Tên</th><th>Số tiền</th><th>Mã đơn PayOS</th><th>Thời gian giao dịch</th></tr></thead><tbody>';
+                    rows.forEach((row) => {
+                        html += `<tr><td>${row.date}</td><td>${row.customer_name}</td><td>${formatCurrency(row.amount)}</td><td>${row.order_code}</td><td>${row.transaction_date || row.created_at}</td></tr>`;
+                    });
+                    html += '</tbody></table></div>';
+                    historyBox.innerHTML = html;
+                    paymentHistoryModal.style.display = 'block';
+                })
+                .catch(err => {
+                    historyBox.innerHTML = `<div style="padding:16px;color:#9b3f3f">Lỗi tải lịch sử: ${err.message}</div>`;
+                    paymentHistoryModal.style.display = 'block';
+                });
+        }
 
         document.getElementById('btnOrder').addEventListener('click', () => {
             document.getElementById('orderMessage').innerHTML = '';
@@ -934,6 +1186,15 @@
             }
             if (e.target === listModal) {
                 listModal.style.display = 'none';
+            }
+            if (e.target === paymentModal) {
+                paymentModal.style.display = 'none';
+            }
+            if (e.target === paymentQrModal) {
+                paymentQrModal.style.display = 'none';
+            }
+            if (e.target === paymentHistoryModal) {
+                paymentHistoryModal.style.display = 'none';
             }
         });
 
