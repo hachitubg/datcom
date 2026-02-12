@@ -193,40 +193,36 @@ class Database {
   }
 
   getAllDays(callback) {
-    console.log('📚 Tải tất cả các ngày từ database');
+    console.log('📚 Tải các ngày có phát sinh đơn hàng');
     this.db.all(
-      `SELECT id, date, menu, quantity, price, created_at FROM days ORDER BY date DESC`,
-      (err, rows) => {
+      `SELECT
+         d.id,
+         d.date,
+         d.menu,
+         d.quantity,
+         d.price,
+         d.created_at,
+         COALESCE(SUM(o.quantity), 0) AS ordered
+       FROM days d
+       LEFT JOIN orders o ON o.day_id = d.id
+       GROUP BY d.id
+       HAVING COALESCE(SUM(o.quantity), 0) > 0
+       ORDER BY d.date DESC`,
+      (err, rows = []) => {
         if (err) {
           console.error('❌ Lỗi getAllDays:', err);
           callback(err);
-        } else {
-          console.log('✅ Tìm thấy', rows.length, 'ngày');
-          // Đếm số lượng đã đặt cho mỗi ngày
-          let completedRows = 0;
-          const result = rows.map(row => {
-            this.db.get(
-              `SELECT SUM(quantity) as ordered FROM orders WHERE day_id = ?`,
-              [row.id],
-              (err, orderRow) => {
-                const ordered = (orderRow && orderRow.ordered) || 0;
-                row.ordered = ordered;
-                row.remaining = Math.max(0, row.quantity - ordered);
-                completedRows++;
-                
-                if (completedRows === rows.length) {
-                  console.log('📊 Dữ liệu lịch sử đã sẵn sàng');
-                  callback(null, rows);
-                }
-              }
-            );
-            return row;
-          });
-          
-          if (rows.length === 0) {
-            callback(null, []);
-          }
+          return;
         }
+
+        const mapped = rows.map((row) => ({
+          ...row,
+          ordered: row.ordered || 0,
+          remaining: Math.max(0, row.quantity - (row.ordered || 0))
+        }));
+
+        console.log('✅ Tìm thấy', mapped.length, 'ngày có đơn hàng');
+        callback(null, mapped);
       }
     );
   }
@@ -318,35 +314,123 @@ class Database {
     );
   }
 
+  getKnownCustomerNames(callback) {
+    const query = `
+      SELECT name FROM orders
+      UNION
+      SELECT customer_name AS name FROM payment_requests
+      UNION
+      SELECT customer_name AS name FROM payment_transactions
+    `;
+
+    this.db.all(query, (err, rows = []) => {
+      if (err) {
+        callback(err);
+        return;
+      }
+
+      const uniqueMap = new Map();
+      rows.forEach((row) => {
+        const originalName = (row.name || '').trim().replace(/\s+/g, ' ');
+        if (!originalName) return;
+        const normalizedName = originalName.toLowerCase();
+        if (!uniqueMap.has(normalizedName)) {
+          uniqueMap.set(normalizedName, originalName);
+        }
+      });
+
+      const names = Array.from(uniqueMap.values()).sort((a, b) => a.localeCompare(b, 'vi'));
+      callback(null, names);
+    });
+  }
+
+  renameCustomer(oldName, newName, callback) {
+    const normalizedOld = (oldName || '').trim().replace(/\s+/g, ' ');
+    const normalizedNew = (newName || '').trim().replace(/\s+/g, ' ');
+
+    if (!normalizedOld || !normalizedNew) {
+      callback(new Error('Tên cũ hoặc tên mới không hợp lệ'));
+      return;
+    }
+
+    const keyExpression = "LOWER(REPLACE(REPLACE(%COLUMN%, '''', ''), ' ', ''))";
+    const oldKey = normalizedOld.toLowerCase().replace(/['\s]+/g, '');
+    const dbConn = this.db;
+
+    dbConn.serialize(() => {
+      dbConn.run(
+        `UPDATE orders SET name = ? WHERE ${keyExpression.replace('%COLUMN%', 'name')} = ?`,
+        [normalizedNew, oldKey],
+        function onOrdersUpdated(ordersErr) {
+          if (ordersErr) {
+            callback(ordersErr);
+            return;
+          }
+
+          const updatedOrders = this.changes || 0;
+
+          dbConn.run(
+            `UPDATE payment_requests SET customer_name = ? WHERE ${keyExpression.replace('%COLUMN%', 'customer_name')} = ?`,
+            [normalizedNew, oldKey],
+            function onPaymentRequestsUpdated(paymentRequestsErr) {
+              if (paymentRequestsErr) {
+                callback(paymentRequestsErr);
+                return;
+              }
+
+              const updatedPaymentRequests = this.changes || 0;
+
+              dbConn.run(
+                `UPDATE payment_transactions SET customer_name = ? WHERE ${keyExpression.replace('%COLUMN%', 'customer_name')} = ?`,
+                [normalizedNew, oldKey],
+                function onPaymentTransactionsUpdated(paymentTransactionsErr) {
+                  if (paymentTransactionsErr) {
+                    callback(paymentTransactionsErr);
+                    return;
+                  }
+
+                  callback(null, {
+                    updatedOrders,
+                    updatedPaymentRequests,
+                    updatedPaymentTransactions: this.changes || 0
+                  });
+                }
+              );
+            }
+          );
+        }
+      );
+    });
+  }
+
   getTodayPaymentSummary(searchKeyword, callback) {
-    const today = this.getDateString();
     const keyword = (searchKeyword || '').trim().toLowerCase();
     const normalizedKeyword = keyword.replace(/['\s]+/g, '');
     const searchParams = normalizedKeyword ? [`%${normalizedKeyword}%`] : [];
 
     const sql = `
       SELECT
-        o.name,
+        MIN(o.name) AS name,
         SUM(o.quantity) AS quantity,
-        d.price AS unit_price,
-        SUM(o.quantity) * d.price AS total_amount,
+        SUM(o.quantity * d.price) AS total_amount,
         COALESCE(paid.total_paid, 0) AS paid_amount,
         MAX(o.created_at) AS last_order_time
       FROM orders o
       JOIN days d ON o.day_id = d.id
       LEFT JOIN (
-        SELECT day_id, customer_name, SUM(amount) AS total_paid
+        SELECT LOWER(customer_name) AS normalized_name, SUM(amount) AS total_paid
         FROM payment_transactions
         WHERE status = 'PAID'
-        GROUP BY day_id, customer_name
-      ) paid ON paid.day_id = o.day_id AND LOWER(paid.customer_name) = LOWER(o.name)
-      WHERE d.date = ?
+        GROUP BY LOWER(customer_name)
+      ) paid ON paid.normalized_name = LOWER(o.name)
+      WHERE 1 = 1
       ${normalizedKeyword ? "AND LOWER(REPLACE(REPLACE(o.name, '''', ''), ' ', '')) LIKE ?" : ''}
-      GROUP BY LOWER(o.name), d.price
-      ORDER BY o.name COLLATE NOCASE ASC
+      GROUP BY LOWER(o.name)
+      HAVING SUM(o.quantity * d.price) > COALESCE(paid.total_paid, 0)
+      ORDER BY MIN(o.name) COLLATE NOCASE ASC
     `;
 
-    this.db.all(sql, [today, ...searchParams], (err, rows = []) => {
+    this.db.all(sql, searchParams, (err, rows = []) => {
       if (err) {
         callback(err);
         return;
@@ -358,7 +442,7 @@ class Database {
         return {
           name: row.name,
           quantity: row.quantity,
-          unitPrice: row.unit_price,
+          unitPrice: row.quantity > 0 ? Math.round(totalAmount / row.quantity) : 0,
           totalAmount,
           paidAmount,
           remainingAmount: Math.max(0, totalAmount - paidAmount),
@@ -372,14 +456,12 @@ class Database {
   }
 
   getTodayCustomerPayment(name, callback) {
-    const today = this.getDateString();
-
     this.db.get(
-      `SELECT d.id AS day_id, d.price AS unit_price, SUM(o.quantity) AS quantity
+      `SELECT MAX(d.id) AS latest_day_id, SUM(o.quantity) AS quantity, SUM(o.quantity * d.price) AS total_amount
        FROM orders o
        JOIN days d ON o.day_id = d.id
-       WHERE d.date = ? AND LOWER(o.name) = LOWER(?)`,
-      [today, name],
+       WHERE LOWER(o.name) = LOWER(?)`,
+      [name],
       (err, row) => {
         if (err) {
           callback(err);
@@ -387,28 +469,28 @@ class Database {
         }
 
         if (!row || !row.quantity) {
-          callback(new Error('Không tìm thấy đơn đặt cơm của tên này trong hôm nay'));
+          callback(new Error('Không tìm thấy đơn đặt cơm của tên này'));
           return;
         }
 
         this.db.get(
           `SELECT COALESCE(SUM(amount), 0) AS paid_amount
            FROM payment_transactions
-           WHERE day_id = ? AND LOWER(customer_name) = LOWER(?) AND status = 'PAID'`,
-          [row.day_id, name],
+           WHERE LOWER(customer_name) = LOWER(?) AND status = 'PAID'`,
+          [name],
           (paidErr, paidRow) => {
             if (paidErr) {
               callback(paidErr);
               return;
             }
 
-            const totalAmount = row.quantity * row.unit_price;
+            const totalAmount = row.total_amount || 0;
             const paidAmount = (paidRow && paidRow.paid_amount) || 0;
             callback(null, {
-              dayId: row.day_id,
+              dayId: row.latest_day_id,
               name,
               quantity: row.quantity,
-              unitPrice: row.unit_price,
+              unitPrice: row.quantity > 0 ? Math.round(totalAmount / row.quantity) : 0,
               totalAmount,
               paidAmount,
               remainingAmount: Math.max(0, totalAmount - paidAmount)
@@ -487,6 +569,12 @@ class Database {
   getPaymentHistory(searchKeyword, callback) {
     const keyword = (searchKeyword || '').trim().toLowerCase();
     const normalizedKeyword = keyword.replace(/['\s]+/g, '');
+
+    if (!normalizedKeyword) {
+      callback(null, []);
+      return;
+    }
+
     const query = `
       SELECT
         t.customer_name,
@@ -499,12 +587,12 @@ class Database {
       FROM payment_transactions t
       JOIN days d ON t.day_id = d.id
       WHERE t.status = 'PAID'
-      ${normalizedKeyword ? "AND LOWER(REPLACE(REPLACE(t.customer_name, '''', ''), ' ', '')) LIKE ?" : ''}
+      AND LOWER(REPLACE(REPLACE(t.customer_name, '''', ''), ' ', '')) LIKE ?
       ORDER BY COALESCE(t.transaction_date, t.created_at) DESC
       LIMIT 200
     `;
 
-    this.db.all(query, normalizedKeyword ? [`%${normalizedKeyword}%`] : [], callback);
+    this.db.all(query, [`%${normalizedKeyword}%`], callback);
   }
 }
 
