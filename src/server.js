@@ -308,6 +308,55 @@ app.post('/api/payments/webhook/payos', (req, res) => {
   );
 });
 
+app.get('/api/payments/verify-return', async (req, res) => {
+  if (!payos.isConfigured()) {
+    return res.status(500).json({ error: 'PayOS chưa được cấu hình trên server' });
+  }
+
+  const orderCode = Number(req.query.orderCode || req.query.order_code || 0);
+  if (!orderCode) {
+    return res.status(400).json({ error: 'Thiếu mã đơn hàng (orderCode)' });
+  }
+
+  try {
+    const paymentInfo = await payos.getPaymentLinkInformation(orderCode);
+    const paidAmount = Number(paymentInfo.amountPaid || 0);
+    const amount = Number(paymentInfo.amount || paidAmount || 0);
+    const status = String(paymentInfo.status || '').toUpperCase();
+    const paidStatuses = new Set(['PAID', 'SUCCESS', 'SUCCEEDED']);
+
+    if (!paidStatuses.has(status) && paidAmount <= 0) {
+      return res.json({ success: true, updated: false, status, amount, paidAmount });
+    }
+
+    db.markPaymentPaid(
+      orderCode,
+      {
+        amount: paidAmount > 0 ? paidAmount : amount,
+        reference: paymentInfo.reference || paymentInfo.paymentLinkId || '',
+        transactionDateTime: paymentInfo.transactionDateTime || paymentInfo.transactionDate || '',
+        code: paymentInfo.code || req.query.code || '',
+        paymentLinkId: paymentInfo.paymentLinkId || '',
+        raw: paymentInfo
+      },
+      (err) => {
+        if (err) {
+          return res.status(500).json({ error: err.message });
+        }
+        res.json({
+          success: true,
+          updated: true,
+          status,
+          amount,
+          paidAmount: paidAmount > 0 ? paidAmount : amount
+        });
+      }
+    );
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 // Lịch sử thanh toán
 app.get('/api/payments/history', (req, res) => {
   const search = (req.query.search || '').toString();

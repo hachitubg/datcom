@@ -1078,6 +1078,55 @@
                 .join(' ');
         }
 
+
+        function cleanPaymentQueryParams() {
+            const url = new URL(window.location.href);
+            ['payment', 'code', 'id', 'cancel', 'status', 'orderCode'].forEach((key) => {
+                url.searchParams.delete(key);
+            });
+            window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
+        }
+
+        async function handlePaymentReturn() {
+            const params = new URLSearchParams(window.location.search);
+            const payment = (params.get('payment') || '').toLowerCase();
+            const orderCode = params.get('orderCode');
+
+            if (!payment) {
+                return;
+            }
+
+            if (payment === 'cancel') {
+                alert('Bạn đã hủy thanh toán. Nếu cần, vui lòng quét lại mã QR để thanh toán.');
+                cleanPaymentQueryParams();
+                return;
+            }
+
+            if (payment !== 'success' || !orderCode) {
+                cleanPaymentQueryParams();
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/api/payments/verify-return?orderCode=${encodeURIComponent(orderCode)}`);
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.error || 'Không thể xác minh thanh toán với PayOS');
+                }
+
+                if (data.updated) {
+                    alert('Thanh toán thành công! Hệ thống đã cập nhật trạng thái đơn hàng.');
+                } else {
+                    alert('Đã nhận trạng thái thanh toán, hệ thống đang chờ xác nhận cuối cùng từ PayOS.');
+                }
+            } catch (error) {
+                alert(`Thanh toán đã hoàn tất nhưng chưa cập nhật tự động: ${error.message}. Vui lòng liên hệ quản trị để kiểm tra.`);
+            } finally {
+                cleanPaymentQueryParams();
+                loadTodayInfo();
+            }
+        }
+
         function loadCustomerNameSuggestions() {
             fetch(`${API_BASE}/api/customers/names`)
                 .then(res => res.json())
@@ -1174,7 +1223,7 @@
 
                     const content = document.getElementById('paymentQrContent');
                     const qrMarkup = data.payos.qrCode
-                        ? `<img src="${data.payos.qrCode}" alt="PayOS QR">`
+                        ? `<img src="${data.payos.qrCode}" alt="PayOS QR" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';"><p style="display:none">Không hiển thị được ảnh QR, vui lòng bấm vào link thanh toán bên dưới.</p>`
                         : '<p>Không lấy được mã QR từ PayOS. Bạn có thể mở link thanh toán bên dưới.</p>';
 
                     content.innerHTML = `
@@ -1448,6 +1497,7 @@
         }
 
         // Load on page load
+        handlePaymentReturn();
         loadTodayInfo();
         loadCustomerNameSuggestions();
         setInterval(loadTodayInfo, 5000); // Refresh every 5 seconds
