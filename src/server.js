@@ -3,6 +3,7 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const path = require('path');
 const Database = require('./database');
+const PayOSService = require('./payos');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -15,6 +16,19 @@ app.use(express.static('public'));
 
 // Khởi tạo database
 const db = new Database();
+const payos = new PayOSService();
+
+function normalizeName(name) {
+  return (name || '').trim();
+}
+
+function buildOrderCode() {
+  return Number(`${Date.now().toString().slice(-10)}${Math.floor(Math.random() * 90 + 10)}`);
+}
+
+function getPublicBaseUrl(req) {
+  return process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get('host')}`;
+}
 
 // API Routes
 // Lấy thông tin hôm nay
@@ -127,6 +141,144 @@ app.delete('/api/admin/orders/:orderId', (req, res) => {
       return res.status(500).json({ error: err.message });
     }
     res.json({ success: true });
+  });
+});
+
+
+
+// Danh sách công nợ thanh toán hôm nay
+app.get('/api/payments/today', (req, res) => {
+  const search = (req.query.search || '').toString();
+  db.getTodayPaymentSummary(search, (err, rows) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(rows);
+  });
+});
+
+// Tạo QR thanh toán cho khách hàng hôm nay
+app.post('/api/payments/create', (req, res) => {
+  const name = normalizeName(req.body.name);
+  if (!name) {
+    return res.status(400).json({ error: 'Vui lòng nhập tên người đặt cơm' });
+  }
+
+  if (!payos.isConfigured()) {
+    return res.status(500).json({
+      error: 'PayOS chưa được cấu hình. Vui lòng thiết lập PAYOS_CLIENT_ID, PAYOS_API_KEY, PAYOS_CHECKSUM_KEY ở biến môi trường.'
+    });
+  }
+
+  db.getTodayCustomerPayment(name, (err, paymentInfo) => {
+    if (err) {
+      return res.status(400).json({ error: err.message });
+    }
+
+    if (paymentInfo.remainingAmount <= 0) {
+      return res.json({
+        paid: true,
+        message: 'Đơn này đã thanh toán đủ.',
+        paymentInfo
+      });
+    }
+
+    const orderCode = buildOrderCode();
+    const baseUrl = getPublicBaseUrl(req);
+    const payload = {
+      orderCode,
+      amount: paymentInfo.remainingAmount,
+      description: `DATCOM ${name}`.slice(0, 25),
+      returnUrl: `${baseUrl}/?payment=success`,
+      cancelUrl: `${baseUrl}/?payment=cancel`,
+      buyerName: name,
+      expiredAt: Math.floor(Date.now() / 1000) + 15 * 60
+    };
+
+    payos.createPaymentLink(payload)
+      .then((payosLink) => {
+        db.createPaymentRequest(
+          {
+            dayId: paymentInfo.dayId,
+            customerName: name,
+            orderCode,
+            amount: paymentInfo.remainingAmount,
+            paymentLinkId: payosLink.paymentLinkId,
+            checkoutUrl: payosLink.checkoutUrl,
+            qrCode: payosLink.qrCode
+          },
+          (saveErr) => {
+            if (saveErr) {
+              return res.status(500).json({ error: saveErr.message });
+            }
+
+            res.json({
+              paid: false,
+              paymentInfo,
+              payos: {
+                orderCode,
+                amount: paymentInfo.remainingAmount,
+                checkoutUrl: payosLink.checkoutUrl,
+                qrCode: payosLink.qrCode,
+                paymentLinkId: payosLink.paymentLinkId
+              }
+            });
+          }
+        );
+      })
+      .catch((createErr) => {
+        res.status(500).json({ error: createErr.message });
+      });
+  });
+});
+
+// Webhook PayOS cập nhật trạng thái thanh toán
+app.post('/api/payments/webhook/payos', (req, res) => {
+  if (!payos.isConfigured()) {
+    return res.status(500).json({ error: 'PayOS chưa được cấu hình trên server' });
+  }
+
+  const isValidSignature = payos.verifyWebhook(req.body);
+  if (!isValidSignature) {
+    return res.status(400).json({ error: 'Webhook signature không hợp lệ' });
+  }
+
+  const data = req.body.data || {};
+  const orderCode = Number(data.orderCode);
+  const amount = Number(data.amount || 0);
+  const isSuccess = String(data.code || '') === '00' || String(data.desc || '').toLowerCase().includes('success');
+
+  if (!orderCode || !isSuccess) {
+    return res.json({ success: true, ignored: true });
+  }
+
+  db.markPaymentPaid(
+    orderCode,
+    {
+      amount,
+      reference: data.reference || data.paymentLinkId || '',
+      transactionDateTime: data.transactionDateTime || data.transactionDate || '',
+      code: data.code,
+      paymentLinkId: data.paymentLinkId,
+      raw: data
+    },
+    (err) => {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+      res.json({ success: true });
+    }
+  );
+});
+
+// Lịch sử thanh toán
+app.get('/api/payments/history', (req, res) => {
+  const search = (req.query.search || '').toString();
+  db.getPaymentHistory(search, (err, rows) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(rows);
   });
 });
 
