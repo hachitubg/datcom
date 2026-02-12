@@ -402,7 +402,7 @@ class Database {
             }
 
             const totalAmount = row.quantity * row.unit_price;
-            const paidAmount = paidRow?.paid_amount || 0;
+            const paidAmount = (paidRow && paidRow.paid_amount) || 0;
             callback(null, {
               dayId: row.day_id,
               name,
