@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cơm Cô Giang</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+
     <style>
         * {
             margin: 0;
@@ -1007,7 +1010,7 @@
     </div>
 
     <script>
-        const API_BASE = '';
+        const API_BASE = window.location.origin;
 
         // Modal controls
         const orderModal = document.getElementById('orderModal');
@@ -1204,41 +1207,30 @@
         });
 
         window.openPayQr = function(name) {
-            fetch(`${API_BASE}/api/payments/create`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name })
-            })
-                .then(res => res.json())
-                .then(data => {
-                    if (data.error) {
-                        throw new Error(data.error);
+            const content = document.getElementById('paymentQrContent');
+
+            content.innerHTML = `
+                <div class="qr-box">
+                    <p><strong>${name}</strong></p>
+                    <p>Số tiền: <strong>${formatCurrency(data.payos.amount)}</strong></p>
+                    <canvas id="qrCanvas"></canvas>
+                    <p style="margin-top:10px">
+                        <a href="${data.payos.checkoutUrl}" target="_blank">
+                            Mở trang thanh toán
+                        </a>
+                    </p>
+                </div>
+            `;
+
+            if (data.payos.qrCode) {
+                QRCode.toCanvas(
+                    document.getElementById("qrCanvas"),
+                    data.payos.qrCode,
+                    {
+                        width: 260
                     }
-
-                    if (data.paid) {
-                        alert(data.message || 'Đơn đã thanh toán đủ.');
-                        loadPaymentList();
-                        return;
-                    }
-
-                    const content = document.getElementById('paymentQrContent');
-                    const qrMarkup = data.payos.qrCode
-                        ? `<img src="${data.payos.qrCode}" alt="PayOS QR" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';"><p style="display:none">Không hiển thị được ảnh QR, vui lòng bấm vào link thanh toán bên dưới.</p>`
-                        : '<p>Không lấy được mã QR từ PayOS. Bạn có thể mở link thanh toán bên dưới.</p>';
-
-                    content.innerHTML = `
-                        <div class="qr-box">
-                            <p><strong>${name}</strong></p>
-                            <p>Số xuất đã đặt: <strong>${data.paymentInfo.quantity}</strong></p>
-                            <p>Số tiền cần thanh toán: <strong>${formatCurrency(data.payos.amount)}</strong></p>
-                            ${qrMarkup}
-                            <p><a href="${data.payos.checkoutUrl}" target="_blank" rel="noopener">Mở trang thanh toán PayOS</a></p>
-                            <p style="font-size:12px;opacity:0.8;">Sau khi thanh toán thành công, trạng thái sẽ tự cập nhật khi PayOS gọi webhook.</p>
-                        </div>
-                    `;
-                    paymentQrModal.style.display = 'block';
-                })
-                .catch(err => alert(`Lỗi tạo thanh toán: ${err.message}`));
+                );
+            }
         }
 
         function loadPaymentHistory() {

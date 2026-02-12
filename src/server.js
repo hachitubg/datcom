@@ -270,43 +270,38 @@ app.post('/api/payments/create', async (req, res) => {
 });
 
 // Webhook PayOS cập nhật trạng thái thanh toán
-app.post('/api/payments/webhook/payos', (req, res) => {
-  if (!payos.isConfigured()) {
-    return res.status(500).json({ error: 'PayOS chưa được cấu hình trên server' });
-  }
+app.post('/api/payments/webhook/payos',
+  express.raw({ type: 'application/json' }),
+  (req, res) => {
+    const rawBody = req.body.toString();
+    const parsedBody = JSON.parse(rawBody);
 
-  const isValidSignature = payos.verifyWebhook(req.body);
-  if (!isValidSignature) {
-    return res.status(400).json({ error: 'Webhook signature không hợp lệ' });
-  }
+    const isValidSignature = payos.verifyWebhook(parsedBody);
 
-  const data = req.body.data || {};
-  const orderCode = Number(data.orderCode);
-  const amount = Number(data.amount || 0);
-  const isSuccess = String(data.code || '') === '00' || String(data.desc || '').toLowerCase().includes('success');
-
-  if (!orderCode || !isSuccess) {
-    return res.json({ success: true, ignored: true });
-  }
-
-  db.markPaymentPaid(
-    orderCode,
-    {
-      amount,
-      reference: data.reference || data.paymentLinkId || '',
-      transactionDateTime: data.transactionDateTime || data.transactionDate || '',
-      code: data.code,
-      paymentLinkId: data.paymentLinkId,
-      raw: data
-    },
-    (err) => {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
-      res.json({ success: true });
+    if (!isValidSignature) {
+      console.log('❌ Invalid signature');
+      return res.status(400).json({ error: 'Webhook signature không hợp lệ' });
     }
-  );
-});
+
+    const data = parsedBody.data || {};
+    const orderCode = Number(data.orderCode);
+    const amount = Number(data.amount || 0);
+
+    db.markPaymentPaid(
+      orderCode,
+      {
+        amount,
+        raw: parsedBody
+      },
+      (err) => {
+        if (err) {
+          return res.status(500).json({ error: err.message });
+        }
+        res.json({ success: true });
+      }
+    );
+  }
+);
 
 app.get('/api/payments/verify-return', async (req, res) => {
   if (!payos.isConfigured()) {
