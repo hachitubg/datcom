@@ -228,8 +228,8 @@ app.post('/api/payments/create', async (req, res) => {
         orderCode,
         amount: paymentInfo.remainingAmount,
         description: `DATCOM ${name}`.slice(0, 25),
-        returnUrl: `${baseUrl}/?payment=success`,
-        cancelUrl: `${baseUrl}/?payment=cancel`,
+        returnUrl: `${baseUrl}/?payment=success&orderCode=${orderCode}`,
+        cancelUrl: `${baseUrl}/?payment=cancel&orderCode=${orderCode}`,
         buyerName: name,
         expiredAt: Math.floor(Date.now() / 1000) + 15 * 60
       };
@@ -269,47 +269,53 @@ app.post('/api/payments/create', async (req, res) => {
   });
 });
 
-// // Webhook PayOS cập nhật trạng thái thanh toán
-// app.post('/api/payments/webhook/payos',
-//   express.raw({ type: '*/*' }),
-//   (req, res) => {
-//     try {
-//       if (!req.body) {
-//         return res.status(400).json({ error: 'Empty body' });
-//       }
-
-//       const rawBody = req.body.toString('utf8');
-//       const parsedBody = JSON.parse(rawBody);
-
-//       const isValidSignature = payos.verifyWebhook(parsedBody);
-//       if (!isValidSignature) {
-//         return res.status(400).json({ error: 'Invalid signature' });
-//       }
-
-//       const data = parsedBody.data || {};
-//       const orderCode = Number(data.orderCode);
-//       const amount = Number(data.amount || 0);
-
-//       db.markPaymentPaid(orderCode, { amount, raw: parsedBody }, (err) => {
-//         if (err) return res.status(500).json({ error: err.message });
-//         res.json({ success: true });
-//       });
-
-//     } catch (err) {
-//       console.error("Webhook error:", err);
-//       res.status(500).json({ error: err.message });
-//     }
-//   }
-// );
-
 app.post('/api/payments/webhook/payos',
   express.raw({ type: '*/*' }),
   (req, res) => {
-    console.log("Webhook received");
-    res.status(200).json({ success: true });
+    try {
+      const rawBody = req.body.toString('utf8');
+      const parsedBody = JSON.parse(rawBody);
+
+      console.log("Webhook data:", parsedBody);
+
+      const isValidSignature = payos.verifyWebhook(parsedBody);
+      if (!isValidSignature) {
+        return res.status(400).json({ error: 'Invalid signature' });
+      }
+
+      const data = parsedBody.data || {};
+      const orderCode = Number(data.orderCode);
+      const amount = Number(data.amount || 0);
+
+      if (!orderCode) {
+        return res.status(400).json({ error: 'Missing orderCode' });
+      }
+
+      db.markPaymentPaid(
+        orderCode,
+        {
+          amount,
+          reference: data.reference || '',
+          transactionDateTime: data.transactionDateTime || '',
+          raw: parsedBody
+        },
+        (err) => {
+          if (err) {
+            console.error("DB update error:", err);
+            return res.status(500).json({ error: err.message });
+          }
+
+          console.log("Payment updated for order:", orderCode);
+          res.json({ success: true });
+        }
+      );
+
+    } catch (err) {
+      console.error("Webhook crash:", err);
+      res.status(500).json({ error: err.message });
+    }
   }
 );
-
 
 app.get('/api/payments/verify-return', async (req, res) => {
   if (!payos.isConfigured()) {
