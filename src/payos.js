@@ -115,6 +115,25 @@ class PayOSService {
     return response.data.data;
   }
 
+  async getPaymentLinkInformation(orderCode) {
+    const normalizedOrderCode = Number(orderCode);
+    if (!Number.isFinite(normalizedOrderCode) || normalizedOrderCode <= 0) {
+      throw new Error('Mã đơn PayOS không hợp lệ');
+    }
+
+    const endpoint = `${PAYOS_BASE_URL}/v2/payment-requests/${normalizedOrderCode}`;
+    const response = await requestJson(endpoint, {
+      method: 'GET',
+      headers: this.getHeaders()
+    });
+
+    if (!response.ok || response.data.code !== '00') {
+      throw new Error(response.data.desc || response.data.message || 'Không thể lấy trạng thái thanh toán từ PayOS');
+    }
+
+    return response.data.data;
+  }
+
   verifyWebhook(webhookBody) {
     if (!webhookBody || !webhookBody.data || !webhookBody.signature) {
       return false;
