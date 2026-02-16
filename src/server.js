@@ -91,6 +91,99 @@ function getPublicBaseUrl(req) {
   return process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get('host')}`;
 }
 
+async function syncOrderCodeFromPayOS(orderCode) {
+  const paymentInfo = await payos.getPaymentLinkInformation(orderCode);
+  const paidAmount = Number(paymentInfo.amountPaid || 0);
+  const amount = Number(paymentInfo.amount || paidAmount || 0);
+  const status = String(paymentInfo.status || '').toUpperCase();
+  const paidStatuses = new Set(['PAID', 'SUCCESS', 'SUCCEEDED']);
+
+  if (paidStatuses.has(status) || paidAmount > 0) {
+    return new Promise((resolve, reject) => {
+      db.markPaymentPaid(
+        orderCode,
+        {
+          amount: paidAmount > 0 ? paidAmount : amount,
+          reference: paymentInfo.reference || paymentInfo.paymentLinkId || '',
+          transactionDateTime: paymentInfo.transactionDateTime || paymentInfo.transactionDate || '',
+          code: paymentInfo.code || '',
+          paymentLinkId: paymentInfo.paymentLinkId || '',
+          raw: paymentInfo
+        },
+        (err) => {
+          if (err) {
+            reject(err);
+            return;
+          }
+
+          resolve({ updated: true, status, paidAmount: paidAmount > 0 ? paidAmount : amount });
+        }
+      );
+    });
+  }
+
+  if (status === 'CANCELLED' || status === 'EXPIRED') {
+    await new Promise((resolve, reject) => {
+      db.updatePaymentRequestStatus(orderCode, status, (err) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve();
+      });
+    });
+  }
+
+  return { updated: false, status, paidAmount };
+}
+
+let isSyncingPendingPayOS = false;
+
+async function syncPendingPaymentsFromPayOS() {
+  if (!payos.isConfigured()) {
+    return;
+  }
+
+  if (isSyncingPendingPayOS) {
+    return;
+  }
+
+  isSyncingPendingPayOS = true;
+  try {
+    const pendingRows = await new Promise((resolve, reject) => {
+      db.getPendingPaymentRequests(50, (err, rows = []) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+
+        resolve(rows);
+      });
+    });
+
+    let updatedCount = 0;
+    for (const row of pendingRows) {
+      try {
+        const result = await syncOrderCodeFromPayOS(Number(row.order_code));
+        if (result && result.updated) {
+          updatedCount += 1;
+          console.log(`[PayOS Sync] Updated PAID for orderCode=${row.order_code}`);
+        }
+      } catch (orderErr) {
+        console.error(`[PayOS Sync] Failed orderCode=${row.order_code}:`, orderErr.message);
+      }
+    }
+
+    if (updatedCount > 0) {
+      console.log(`[PayOS Sync] Updated ${updatedCount} pending payment(s).`);
+    }
+  } catch (err) {
+    console.error('[PayOS Sync] Batch sync failed:', err.message);
+  } finally {
+    isSyncingPendingPayOS = false;
+  }
+}
+
 // API Routes
 // Lấy thông tin hôm nay
 app.get('/api/today', (req, res) => {
@@ -329,39 +422,8 @@ app.get('/api/payments/verify-return', async (req, res) => {
   }
 
   try {
-    const paymentInfo = await payos.getPaymentLinkInformation(orderCode);
-    const paidAmount = Number(paymentInfo.amountPaid || 0);
-    const amount = Number(paymentInfo.amount || paidAmount || 0);
-    const status = String(paymentInfo.status || '').toUpperCase();
-    const paidStatuses = new Set(['PAID', 'SUCCESS', 'SUCCEEDED']);
-
-    if (!paidStatuses.has(status) && paidAmount <= 0) {
-      return res.json({ success: true, updated: false, status, amount, paidAmount });
-    }
-
-    db.markPaymentPaid(
-      orderCode,
-      {
-        amount: paidAmount > 0 ? paidAmount : amount,
-        reference: paymentInfo.reference || paymentInfo.paymentLinkId || '',
-        transactionDateTime: paymentInfo.transactionDateTime || paymentInfo.transactionDate || '',
-        code: paymentInfo.code || req.query.code || '',
-        paymentLinkId: paymentInfo.paymentLinkId || '',
-        raw: paymentInfo
-      },
-      (err) => {
-        if (err) {
-          return res.status(500).json({ error: err.message });
-        }
-        res.json({
-          success: true,
-          updated: true,
-          status,
-          amount,
-          paidAmount: paidAmount > 0 ? paidAmount : amount
-        });
-      }
-    );
+    const result = await syncOrderCodeFromPayOS(orderCode);
+    return res.json({ success: true, ...result });
   } catch (error) {
     return res.status(500).json({ error: error.message });
   }
@@ -406,6 +468,20 @@ app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/admin.html'));
 });
 
+const payosAutoSyncMs = Number(process.env.PAYOS_AUTO_SYNC_MS || 30000);
+if (payos.isConfigured()) {
+  setTimeout(() => {
+    syncPendingPaymentsFromPayOS();
+  }, 5000);
+
+  setInterval(() => {
+    syncPendingPaymentsFromPayOS();
+  }, payosAutoSyncMs);
+}
+
 app.listen(PORT, () => {
   console.log(`Server chạy tại http://localhost:${PORT}`);
+  if (payos.isConfigured()) {
+    console.log(`PayOS auto-sync pending payments mỗi ${payosAutoSyncMs}ms`);
+  }
 });

@@ -121,3 +121,21 @@ Tab **QUẢN LÝ THANH TOÁN** đã có thêm:
 - Khối **LỊCH SỬ THANH TOÁN (TOÀN BỘ)** để xem toàn bộ lịch sử yêu cầu thanh toán (cả trạng thái PENDING/PAID), giúp đối soát dễ hơn.
 - Cải thiện style các button trong admin (nút chọn ngày, nút đổi tên, nút thao tác thanh toán) để dễ dùng hơn.
 
+## 5) Khắc phục trường hợp khách không quay lại trang PayOS success
+
+Đã bổ sung cơ chế **auto-sync trạng thái thanh toán ở backend** để không phụ thuộc việc người dùng quay lại website:
+
+- Server tự quét các `payment_requests` đang `PENDING`.
+- Mỗi chu kỳ sẽ gọi API `getPaymentLinkInformation` của PayOS theo `orderCode`.
+- Nếu PayOS đã ghi nhận thanh toán, server tự cập nhật sang `PAID` và ghi transaction vào DB.
+- Nếu PayOS trả trạng thái `CANCELLED` hoặc `EXPIRED`, request cũng được cập nhật tương ứng.
+
+Biến môi trường tùy chọn:
+
+```bash
+# Chu kỳ auto-sync (ms), mặc định 30000 = 30 giây
+export PAYOS_AUTO_SYNC_MS=30000
+```
+
+> Như vậy kể cả khách chỉ chuyển khoản xong rồi thoát, hệ thống vẫn tự cập nhật status sau mỗi chu kỳ đồng bộ.
+

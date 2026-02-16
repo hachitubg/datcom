@@ -610,6 +610,38 @@ class Database {
     );
   }
 
+
+  getPendingPaymentRequests(limit, callback) {
+    const normalizedLimit = Math.max(1, Math.min(Number(limit) || 50, 200));
+    this.db.all(
+      `SELECT id, order_code, amount, customer_name, payment_link_id, created_at, updated_at
+       FROM payment_requests
+       WHERE status = 'PENDING'
+       ORDER BY created_at ASC
+       LIMIT ?`,
+      [normalizedLimit],
+      callback
+    );
+  }
+
+  updatePaymentRequestStatus(orderCode, status, callback) {
+    const normalizedOrderCode = Number(orderCode);
+    const normalizedStatus = String(status || '').trim().toUpperCase();
+
+    if (!normalizedOrderCode || !normalizedStatus) {
+      callback(new Error('Dữ liệu cập nhật trạng thái thanh toán không hợp lệ'));
+      return;
+    }
+
+    this.db.run(
+      `UPDATE payment_requests
+       SET status = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE order_code = ?`,
+      [normalizedStatus, normalizedOrderCode],
+      callback
+    );
+  }
+
   getPaymentHistory(searchKeyword, callback) {
     const keyword = (searchKeyword || '').trim().toLowerCase();
     const normalizedKeyword = keyword.replace(/['\s]+/g, '');
