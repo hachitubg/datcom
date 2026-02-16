@@ -6,6 +6,15 @@
 # Cài dependencies
 npm install
 
+# (Khuyến nghị) tạo file .env ở thư mục gốc project
+cat > .env <<'EOF'
+PORT=3000
+PUBLIC_BASE_URL=http://localhost:3000
+# PAYOS_CLIENT_ID=your-client-id
+# PAYOS_API_KEY=your-api-key
+# PAYOS_CHECKSUM_KEY=your-checksum-key
+EOF
+
 # Chạy server (mặc định http://localhost:3000)
 npm start
 ```
@@ -91,3 +100,17 @@ sqlite3 /var/www/datcom/datcom.db
 SELECT * FROM orders ORDER BY id DESC LIMIT 20;
 .quit
 ```
+
+
+### Lỗi thường gặp
+
+- **`Error: Cannot find module 'dotenv'`**
+  - Dự án đã chuyển sang loader nội bộ (`src/load-env.js`) để đọc file `.env`, nên không cần cài package `dotenv`.
+  - Nếu gặp lỗi này, hãy pull code mới nhất rồi chạy lại:
+
+```bash
+git pull
+npm install
+npm start
+```
+
