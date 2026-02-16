@@ -217,6 +217,30 @@
             box-shadow: 0 5px 15px rgba(184, 149, 106, 0.3);
         }
 
+        .btn-secondary {
+            background: #f8f3eb;
+            color: #8B7355;
+            border: 1px solid #d9c7b2;
+        }
+
+        .btn-secondary:hover {
+            background: #ece1d2;
+            color: #6f5a40;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(160, 130, 109, 0.2);
+        }
+
+        .btn-warning {
+            background: #e0a75a;
+            color: #fff;
+        }
+
+        .btn-warning:hover {
+            background: #cc9348;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(224, 167, 90, 0.35);
+        }
+
         .success-message {
             background: #d4e8d4;
             color: #2d5f2d;
@@ -435,7 +459,22 @@
             gap: 12px;
             background: #fff;
             border: 1px solid #e8dcc8;
-            border-radius: 8px;
+            border-radius: 10px;
+            padding: 14px;
+            margin-bottom: 10px;
+        }
+
+        .admin-payment-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .payment-history-row {
+            background: #fff;
+            border: 1px solid #eadfce;
+            border-radius: 10px;
             padding: 12px;
             margin-bottom: 10px;
         }
@@ -862,6 +901,16 @@
                 </div>
                 <div id="adminPaymentList" class="loading">Đang tải...</div>
             </div>
+
+            <div class="section">
+                <h2>LỊCH SỬ THANH TOÁN (TOÀN BỘ)</h2>
+                <div class="payment-toolbar" style="margin-bottom: 14px;">
+                    <input type="text" id="adminPaymentHistorySearch" placeholder="Tìm theo tên trong lịch sử...">
+                    <button class="btn-primary" type="button" onclick="loadPaymentHistory()">TÌM</button>
+                    <button class="btn-secondary" type="button" onclick="loadPaymentHistory('')">XEM TẤT CẢ</button>
+                </div>
+                <div id="adminPaymentHistoryList" class="loading">Đang tải...</div>
+            </div>
         </div>
     </div>
 
@@ -899,6 +948,7 @@
                 loadHistory();
             } else if (tab === 'payments') {
                 loadAdminPaymentSummary();
+                loadPaymentHistory();
             }
         }
 
@@ -1187,15 +1237,90 @@
                         <div class="admin-payment-row">
                             <div>
                                 <div class="order-name">${row.name}</div>
-                                <div class="admin-payment-meta">${row.quantity} xuất | Còn lại: ${formatPrice(row.remainingAmount)}</div>
+                                <div class="admin-payment-meta">${row.quantity} xuất | Tổng: ${formatPrice(row.totalAmount || 0)} | Đã trả: ${formatPrice(row.paidAmount || 0)} | Còn lại: ${formatPrice(row.remainingAmount || 0)}</div>
                             </div>
-                            <button class="btn-secondary btn-small" onclick="renameCustomer('${encodeURIComponent(row.name)}')">Đổi tên</button>
+                            <div class="admin-payment-actions">
+                                <button class="btn-warning btn-small" onclick="markPaidManual(${row.latestPendingOrderCode || 0}, '${encodeURIComponent(row.name)}')">Chuyển Paid</button>
+                                <button class="btn-secondary btn-small" onclick="renameCustomer('${encodeURIComponent(row.name)}')">Đổi tên</button>
+                            </div>
                         </div>
                     `).join('');
                 })
                 .catch(err => {
                     container.innerHTML = `<div style="padding: 16px; color: red; text-align: center;">Lỗi tải dữ liệu: ${err.message}</div>`;
                 });
+        }
+
+        function loadPaymentHistory(forceKeyword) {
+            const input = document.getElementById('adminPaymentHistorySearch');
+            const keyword = typeof forceKeyword === 'string' ? forceKeyword : (input ? input.value.trim() : '');
+            if (input && typeof forceKeyword === 'string') {
+                input.value = forceKeyword;
+            }
+
+            const url = keyword ? `${API_BASE}/api/payments/history?search=${encodeURIComponent(keyword)}` : `${API_BASE}/api/payments/history`;
+            const container = document.getElementById('adminPaymentHistoryList');
+            container.innerHTML = '<div class="loading">Đang tải...</div>';
+
+            fetch(url)
+                .then(res => res.json())
+                .then(rows => {
+                    if (!rows || rows.length === 0) {
+                        container.innerHTML = '<div style="padding: 16px; color: #999; text-align: center;">Không có lịch sử thanh toán.</div>';
+                        return;
+                    }
+
+                    container.innerHTML = rows.map((row) => {
+                        const status = row.request_status || 'PENDING';
+                        const paidAmount = Number(row.paid_amount || 0);
+                        const amount = Number(row.request_amount || 0);
+                        const paidAt = row.latest_paid_at || row.request_updated_at || row.request_created_at;
+                        return `
+                            <div class="payment-history-row">
+                                <div class="order-name">${row.customer_name}</div>
+                                <div class="admin-payment-meta">
+                                    Ngày: ${row.date} | OrderCode: ${row.order_code} | Trạng thái: <strong>${status}</strong>
+                                </div>
+                                <div class="admin-payment-meta">
+                                    Số tiền: ${formatPrice(amount)} | Đã thanh toán: ${formatPrice(paidAmount)} | Ref: ${row.latest_reference || row.payment_link_id || '-'}
+                                </div>
+                                <div class="admin-payment-meta">Thời gian: ${paidAt || '-'}</div>
+                            </div>
+                        `;
+                    }).join('');
+                })
+                .catch(err => {
+                    container.innerHTML = `<div style="padding: 16px; color: red; text-align: center;">Lỗi tải lịch sử: ${err.message}</div>`;
+                });
+        }
+
+        function markPaidManual(orderCode, encodedName) {
+            const name = decodeURIComponent(encodedName || '');
+            if (!orderCode) {
+                alert(`Không tìm thấy mã đơn cần chuyển trạng thái cho ${name}.`);
+                return;
+            }
+
+            if (!confirm(`Xác nhận chuyển trạng thái đã thanh toán cho ${name} (orderCode: ${orderCode})?`)) {
+                return;
+            }
+
+            fetch(`${API_BASE}/api/admin/payments/manual-paid`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ orderCode })
+            })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error) {
+                        throw new Error(data.error);
+                    }
+
+                    alert('Đã chuyển trạng thái thanh toán thành công.');
+                    loadAdminPaymentSummary();
+                    loadPaymentHistory();
+                })
+                .catch(err => alert('Lỗi chuyển trạng thái: ' + err.message));
         }
 
         function renameCustomer(encodedOldName) {
@@ -1227,6 +1352,7 @@ Orders: ${data.updatedOrders}
 Yêu cầu thanh toán: ${data.updatedPaymentRequests}
 Lịch sử thanh toán: ${data.updatedPaymentTransactions}`);
                     loadHistory();
+                    loadPaymentHistory();
                     loadAdminPaymentSummary();
                 })
                 .catch(err => alert('Lỗi cập nhật tên: ' + err.message));
@@ -1309,6 +1435,7 @@ Lịch sử thanh toán: ${data.updatedPaymentTransactions}`);
         loadTodayInfo();
         loadTodayOrders();
         loadHistory();
+        loadPaymentHistory();
     </script>
 </body>
 </html>

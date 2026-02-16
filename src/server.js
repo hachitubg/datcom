@@ -367,6 +367,24 @@ app.get('/api/payments/verify-return', async (req, res) => {
   }
 });
 
+
+// Admin: chuyển trạng thái thủ công khi PayOS webhook/API lỗi
+app.post('/api/admin/payments/manual-paid', (req, res) => {
+  const orderCode = Number(req.body.orderCode || 0);
+
+  if (!orderCode) {
+    return res.status(400).json({ error: 'Thiếu mã orderCode hợp lệ' });
+  }
+
+  db.markPaymentPaidManual(orderCode, (err) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+
+    res.json({ success: true, orderCode });
+  });
+});
+
 // Lịch sử thanh toán
 app.get('/api/payments/history', (req, res) => {
   const search = (req.query.search || '').toString();

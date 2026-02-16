@@ -414,7 +414,8 @@ class Database {
         SUM(o.quantity) AS quantity,
         SUM(o.quantity * d.price) AS total_amount,
         COALESCE(paid.total_paid, 0) AS paid_amount,
-        MAX(o.created_at) AS last_order_time
+        MAX(o.created_at) AS last_order_time,
+        pending.latest_pending_order_code
       FROM orders o
       JOIN days d ON o.day_id = d.id
       LEFT JOIN (
@@ -423,6 +424,12 @@ class Database {
         WHERE status = 'PAID'
         GROUP BY LOWER(customer_name)
       ) paid ON paid.normalized_name = LOWER(o.name)
+      LEFT JOIN (
+        SELECT LOWER(customer_name) AS normalized_name, MAX(order_code) AS latest_pending_order_code
+        FROM payment_requests
+        WHERE status = 'PENDING'
+        GROUP BY LOWER(customer_name)
+      ) pending ON pending.normalized_name = LOWER(o.name)
       WHERE 1 = 1
       ${normalizedKeyword ? "AND LOWER(REPLACE(REPLACE(o.name, '''', ''), ' ', '')) LIKE ?" : ''}
       GROUP BY LOWER(o.name)
@@ -447,7 +454,8 @@ class Database {
           paidAmount,
           remainingAmount: Math.max(0, totalAmount - paidAmount),
           status: paidAmount >= totalAmount ? 'PAID' : paidAmount > 0 ? 'PARTIAL' : 'UNPAID',
-          lastOrderTime: row.last_order_time
+          lastOrderTime: row.last_order_time,
+          latestPendingOrderCode: row.latest_pending_order_code || 0
         };
       });
 
@@ -566,33 +574,72 @@ class Database {
     );
   }
 
+  markPaymentPaidManual(orderCode, callback) {
+    const normalizedOrderCode = Number(orderCode);
+    if (!Number.isFinite(normalizedOrderCode) || normalizedOrderCode <= 0) {
+      callback(new Error('Mã đơn thanh toán không hợp lệ'));
+      return;
+    }
+
+    this.db.get(
+      `SELECT id, amount, status FROM payment_requests WHERE order_code = ?`,
+      [normalizedOrderCode],
+      (requestErr, requestRow) => {
+        if (requestErr) {
+          callback(requestErr);
+          return;
+        }
+
+        if (!requestRow) {
+          callback(new Error('Không tìm thấy yêu cầu thanh toán tương ứng'));
+          return;
+        }
+
+        const paymentData = {
+          amount: Number(requestRow.amount || 0),
+          reference: 'ADMIN-MANUAL',
+          transactionDateTime: new Date().toISOString(),
+          raw: {
+            source: 'admin_manual',
+            note: 'Manual status update from admin panel'
+          }
+        };
+
+        this.markPaymentPaid(normalizedOrderCode, paymentData, callback);
+      }
+    );
+  }
+
   getPaymentHistory(searchKeyword, callback) {
     const keyword = (searchKeyword || '').trim().toLowerCase();
     const normalizedKeyword = keyword.replace(/['\s]+/g, '');
 
-    if (!normalizedKeyword) {
-      callback(null, []);
-      return;
-    }
-
     const query = `
       SELECT
-        t.customer_name,
-        t.amount,
-        t.order_code,
-        t.reference,
-        t.transaction_date,
-        t.created_at,
-        d.date
-      FROM payment_transactions t
-      JOIN days d ON t.day_id = d.id
-      WHERE t.status = 'PAID'
-      AND LOWER(REPLACE(REPLACE(t.customer_name, '''', ''), ' ', '')) LIKE ?
-      ORDER BY COALESCE(t.transaction_date, t.created_at) DESC
-      LIMIT 200
+        pr.customer_name,
+        pr.order_code,
+        pr.amount AS request_amount,
+        pr.status AS request_status,
+        pr.payment_link_id,
+        pr.checkout_url,
+        pr.created_at AS request_created_at,
+        pr.updated_at AS request_updated_at,
+        d.date,
+        COALESCE(SUM(CASE WHEN t.status = 'PAID' THEN t.amount ELSE 0 END), 0) AS paid_amount,
+        MAX(t.reference) AS latest_reference,
+        MAX(COALESCE(t.transaction_date, t.created_at)) AS latest_paid_at
+      FROM payment_requests pr
+      JOIN days d ON pr.day_id = d.id
+      LEFT JOIN payment_transactions t ON t.order_code = pr.order_code
+      WHERE 1 = 1
+      ${normalizedKeyword ? "AND LOWER(REPLACE(REPLACE(pr.customer_name, '''', ''), ' ', '')) LIKE ?" : ''}
+      GROUP BY pr.id
+      ORDER BY pr.created_at DESC
+      LIMIT 500
     `;
 
-    this.db.all(query, [`%${normalizedKeyword}%`], callback);
+    const params = normalizedKeyword ? [`%${normalizedKeyword}%`] : [];
+    this.db.all(query, params, callback);
   }
 }
 
