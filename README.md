@@ -114,12 +114,13 @@ npm install
 npm start
 ```
 
-## 4) Cập nhật Admin: xử lý thanh toán thủ công và lịch sử thanh toán
+## 4) Cập nhật Admin: lịch sử thanh toán gộp + bộ lọc tiện dùng
 
-Tab **QUẢN LÝ THANH TOÁN** đã có thêm:
-- Nút **Chuyển Paid** để admin tự chuyển trạng thái thanh toán khi PayOS webhook/API bị lỗi.
-- Khối **LỊCH SỬ THANH TOÁN (TOÀN BỘ)** để xem toàn bộ lịch sử yêu cầu thanh toán (cả trạng thái PENDING/PAID), giúp đối soát dễ hơn.
-- Cải thiện style các button trong admin (nút chọn ngày, nút đổi tên, nút thao tác thanh toán) để dễ dùng hơn.
+Tab **QUẢN LÝ THANH TOÁN** đã được gộp thành **1 danh sách duy nhất** (không chia 2 phần), kèm bộ lọc:
+- Lọc theo phạm vi thời gian: **Toàn bộ / Hôm nay / Theo ngày / Theo tháng**.
+- Lọc theo trạng thái: **Tất cả / PENDING / PAID / CANCELLED / EXPIRED**.
+- Tìm theo tên khách hàng.
+- Vẫn giữ nút **Chuyển Paid** cho các đơn `PENDING` và nút **Đổi tên** ngay trên từng dòng.
 
 ## 5) Khắc phục trường hợp khách không quay lại trang PayOS success
 

@@ -642,9 +642,47 @@ class Database {
     );
   }
 
-  getPaymentHistory(searchKeyword, callback) {
-    const keyword = (searchKeyword || '').trim().toLowerCase();
+  getPaymentHistory(filters, callback) {
+    let normalizedFilters = filters;
+    if (typeof normalizedFilters === 'function') {
+      callback = normalizedFilters;
+      normalizedFilters = {};
+    }
+
+    if (typeof normalizedFilters === 'string') {
+      normalizedFilters = { search: normalizedFilters };
+    }
+
+    const searchKeyword = (normalizedFilters && normalizedFilters.search) || '';
+    const keyword = String(searchKeyword).trim().toLowerCase();
     const normalizedKeyword = keyword.replace(/['\s]+/g, '');
+    const period = String((normalizedFilters && normalizedFilters.period) || 'all').toLowerCase();
+    const status = String((normalizedFilters && normalizedFilters.status) || 'all').toUpperCase();
+    const selectedDate = String((normalizedFilters && normalizedFilters.date) || '').trim();
+    const selectedMonth = String((normalizedFilters && normalizedFilters.month) || '').trim();
+
+    const whereClauses = ['1 = 1'];
+    const params = [];
+
+    if (normalizedKeyword) {
+      whereClauses.push("LOWER(REPLACE(REPLACE(pr.customer_name, '''', ''), ' ', '')) LIKE ?");
+      params.push(`%${normalizedKeyword}%`);
+    }
+
+    if (period === 'today') {
+      whereClauses.push("d.date = DATE('now', 'localtime')");
+    } else if (period === 'date' && selectedDate) {
+      whereClauses.push('d.date = ?');
+      params.push(selectedDate);
+    } else if (period === 'month' && selectedMonth) {
+      whereClauses.push('SUBSTR(d.date, 1, 7) = ?');
+      params.push(selectedMonth);
+    }
+
+    if (status && status !== 'ALL') {
+      whereClauses.push('UPPER(pr.status) = ?');
+      params.push(status);
+    }
 
     const query = `
       SELECT
@@ -663,16 +701,15 @@ class Database {
       FROM payment_requests pr
       JOIN days d ON pr.day_id = d.id
       LEFT JOIN payment_transactions t ON t.order_code = pr.order_code
-      WHERE 1 = 1
-      ${normalizedKeyword ? "AND LOWER(REPLACE(REPLACE(pr.customer_name, '''', ''), ' ', '')) LIKE ?" : ''}
+      WHERE ${whereClauses.join(' AND ')}
       GROUP BY pr.id
       ORDER BY pr.created_at DESC
       LIMIT 500
     `;
 
-    const params = normalizedKeyword ? [`%${normalizedKeyword}%`] : [];
     this.db.all(query, params, callback);
   }
 }
+
 
 module.exports = Database;

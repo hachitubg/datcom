@@ -449,8 +449,15 @@ app.post('/api/admin/payments/manual-paid', (req, res) => {
 
 // Lịch sử thanh toán
 app.get('/api/payments/history', (req, res) => {
-  const search = (req.query.search || '').toString();
-  db.getPaymentHistory(search, (err, rows) => {
+  const filters = {
+    search: (req.query.search || '').toString(),
+    period: (req.query.period || 'all').toString(),
+    date: (req.query.date || '').toString(),
+    month: (req.query.month || '').toString(),
+    status: (req.query.status || 'all').toString()
+  };
+
+  db.getPaymentHistory(filters, (err, rows) => {
     if (err) {
       return res.status(500).json({ error: err.message });
     }

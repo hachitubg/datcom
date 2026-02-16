@@ -893,23 +893,28 @@
 
         <div id="payments" class="tab-content">
             <div class="section">
-                <h2>QUẢN LÝ THANH TOÁN & TÊN KHÁCH</h2>
-                <div class="payment-toolbar" style="margin-bottom: 14px;">
+                <h2>LỊCH SỬ & TRẠNG THÁI THANH TOÁN</h2>
+                <div class="payment-toolbar" style="margin-bottom: 10px;">
                     <input type="text" id="adminPaymentSearch" placeholder="Tìm theo tên...">
-                    <button class="btn-primary" type="button" onclick="loadAdminPaymentSummary()">TÌM</button>
-                    <button class="btn-secondary" type="button" onclick="loadAdminPaymentSummary('')">LÀM MỚI</button>
+                    <select id="paymentPeriodFilter" onchange="togglePaymentDateInputs()">
+                        <option value="all">Toàn bộ</option>
+                        <option value="today">Hôm nay</option>
+                        <option value="date">Theo ngày</option>
+                        <option value="month">Theo tháng</option>
+                    </select>
+                    <input type="date" id="paymentDateFilter" style="display:none; max-width: 220px;">
+                    <input type="month" id="paymentMonthFilter" style="display:none; max-width: 220px;">
+                    <select id="paymentStatusFilter">
+                        <option value="all">Tất cả trạng thái</option>
+                        <option value="PENDING">Đang chờ</option>
+                        <option value="PAID">Đã thanh toán</option>
+                        <option value="CANCELLED">Đã huỷ</option>
+                        <option value="EXPIRED">Hết hạn</option>
+                    </select>
+                    <button class="btn-primary" type="button" onclick="loadAdminPayments()">LỌC</button>
+                    <button class="btn-secondary" type="button" onclick="resetPaymentFilters()">ĐẶT LẠI</button>
                 </div>
                 <div id="adminPaymentList" class="loading">Đang tải...</div>
-            </div>
-
-            <div class="section">
-                <h2>LỊCH SỬ THANH TOÁN (TOÀN BỘ)</h2>
-                <div class="payment-toolbar" style="margin-bottom: 14px;">
-                    <input type="text" id="adminPaymentHistorySearch" placeholder="Tìm theo tên trong lịch sử...">
-                    <button class="btn-primary" type="button" onclick="loadPaymentHistory()">TÌM</button>
-                    <button class="btn-secondary" type="button" onclick="loadPaymentHistory('')">XEM TẤT CẢ</button>
-                </div>
-                <div id="adminPaymentHistoryList" class="loading">Đang tải...</div>
             </div>
         </div>
     </div>
@@ -947,8 +952,7 @@
             } else if (tab === 'history') {
                 loadHistory();
             } else if (tab === 'payments') {
-                loadAdminPaymentSummary();
-                loadPaymentHistory();
+                loadAdminPayments();
             }
         }
 
@@ -1214,83 +1218,85 @@
                 });
         }
 
-        function loadAdminPaymentSummary(forceKeyword) {
-            const input = document.getElementById('adminPaymentSearch');
-            const keyword = typeof forceKeyword === 'string' ? forceKeyword : input.value.trim();
-            if (typeof forceKeyword === 'string') {
-                input.value = forceKeyword;
-            }
+        function togglePaymentDateInputs() {
+            const period = document.getElementById('paymentPeriodFilter').value;
+            const dateInput = document.getElementById('paymentDateFilter');
+            const monthInput = document.getElementById('paymentMonthFilter');
 
-            const url = keyword ? `${API_BASE}/api/payments/today?search=${encodeURIComponent(keyword)}` : `${API_BASE}/api/payments/today`;
-            const container = document.getElementById('adminPaymentList');
-            container.innerHTML = '<div class="loading">Đang tải...</div>';
-
-            fetch(url)
-                .then(res => res.json())
-                .then(rows => {
-                    if (!rows || rows.length === 0) {
-                        container.innerHTML = '<div style="padding: 16px; color: #999; text-align: center;">Không có khách nào còn công nợ.</div>';
-                        return;
-                    }
-
-                    container.innerHTML = rows.map((row) => `
-                        <div class="admin-payment-row">
-                            <div>
-                                <div class="order-name">${row.name}</div>
-                                <div class="admin-payment-meta">${row.quantity} xuất | Tổng: ${formatPrice(row.totalAmount || 0)} | Đã trả: ${formatPrice(row.paidAmount || 0)} | Còn lại: ${formatPrice(row.remainingAmount || 0)}</div>
-                            </div>
-                            <div class="admin-payment-actions">
-                                <button class="btn-warning btn-small" onclick="markPaidManual(${row.latestPendingOrderCode || 0}, '${encodeURIComponent(row.name)}')">Chuyển Paid</button>
-                                <button class="btn-secondary btn-small" onclick="renameCustomer('${encodeURIComponent(row.name)}')">Đổi tên</button>
-                            </div>
-                        </div>
-                    `).join('');
-                })
-                .catch(err => {
-                    container.innerHTML = `<div style="padding: 16px; color: red; text-align: center;">Lỗi tải dữ liệu: ${err.message}</div>`;
-                });
+            dateInput.style.display = period === 'date' ? 'block' : 'none';
+            monthInput.style.display = period === 'month' ? 'block' : 'none';
         }
 
-        function loadPaymentHistory(forceKeyword) {
-            const input = document.getElementById('adminPaymentHistorySearch');
-            const keyword = typeof forceKeyword === 'string' ? forceKeyword : (input ? input.value.trim() : '');
-            if (input && typeof forceKeyword === 'string') {
-                input.value = forceKeyword;
+        function resetPaymentFilters() {
+            document.getElementById('adminPaymentSearch').value = '';
+            document.getElementById('paymentPeriodFilter').value = 'all';
+            document.getElementById('paymentDateFilter').value = '';
+            document.getElementById('paymentMonthFilter').value = '';
+            document.getElementById('paymentStatusFilter').value = 'all';
+            togglePaymentDateInputs();
+            loadAdminPayments();
+        }
+
+        function loadAdminPayments() {
+            const keyword = document.getElementById('adminPaymentSearch').value.trim();
+            const period = document.getElementById('paymentPeriodFilter').value;
+            const date = document.getElementById('paymentDateFilter').value;
+            const month = document.getElementById('paymentMonthFilter').value;
+            const status = document.getElementById('paymentStatusFilter').value;
+            const container = document.getElementById('adminPaymentList');
+
+            if (period === 'date' && !date) {
+                alert('Vui lòng chọn ngày cần lọc');
+                return;
             }
 
-            const url = keyword ? `${API_BASE}/api/payments/history?search=${encodeURIComponent(keyword)}` : `${API_BASE}/api/payments/history`;
-            const container = document.getElementById('adminPaymentHistoryList');
+            if (period === 'month' && !month) {
+                alert('Vui lòng chọn tháng cần lọc');
+                return;
+            }
+
+            const params = new URLSearchParams();
+            if (keyword) params.set('search', keyword);
+            if (period) params.set('period', period);
+            if (date) params.set('date', date);
+            if (month) params.set('month', month);
+            if (status) params.set('status', status);
+
             container.innerHTML = '<div class="loading">Đang tải...</div>';
+            const url = `${API_BASE}/api/payments/history?${params.toString()}`;
 
             fetch(url)
                 .then(res => res.json())
                 .then(rows => {
                     if (!rows || rows.length === 0) {
-                        container.innerHTML = '<div style="padding: 16px; color: #999; text-align: center;">Không có lịch sử thanh toán.</div>';
+                        container.innerHTML = '<div style="padding: 16px; color: #999; text-align: center;">Không có giao dịch theo bộ lọc hiện tại.</div>';
                         return;
                     }
 
                     container.innerHTML = rows.map((row) => {
-                        const status = row.request_status || 'PENDING';
+                        const statusText = String(row.request_status || 'PENDING').toUpperCase();
                         const paidAmount = Number(row.paid_amount || 0);
                         const amount = Number(row.request_amount || 0);
                         const paidAt = row.latest_paid_at || row.request_updated_at || row.request_created_at;
+                        const canManualPaid = statusText === 'PENDING';
                         return `
-                            <div class="payment-history-row">
-                                <div class="order-name">${row.customer_name}</div>
-                                <div class="admin-payment-meta">
-                                    Ngày: ${row.date} | OrderCode: ${row.order_code} | Trạng thái: <strong>${status}</strong>
+                            <div class="admin-payment-row">
+                                <div>
+                                    <div class="order-name">${row.customer_name}</div>
+                                    <div class="admin-payment-meta">Ngày: ${row.date} | OrderCode: ${row.order_code} | Trạng thái: <strong>${statusText}</strong></div>
+                                    <div class="admin-payment-meta">Số tiền: ${formatPrice(amount)} | Đã thanh toán: ${formatPrice(paidAmount)} | Ref: ${row.latest_reference || row.payment_link_id || '-'}</div>
+                                    <div class="admin-payment-meta">Cập nhật: ${paidAt || '-'}</div>
                                 </div>
-                                <div class="admin-payment-meta">
-                                    Số tiền: ${formatPrice(amount)} | Đã thanh toán: ${formatPrice(paidAmount)} | Ref: ${row.latest_reference || row.payment_link_id || '-'}
+                                <div class="admin-payment-actions">
+                                    ${canManualPaid ? `<button class="btn-warning btn-small" onclick="markPaidManual(${row.order_code}, '${encodeURIComponent(row.customer_name || '')}')">Chuyển Paid</button>` : ''}
+                                    <button class="btn-secondary btn-small" onclick="renameCustomer('${encodeURIComponent(row.customer_name || '')}')">Đổi tên</button>
                                 </div>
-                                <div class="admin-payment-meta">Thời gian: ${paidAt || '-'}</div>
                             </div>
                         `;
                     }).join('');
                 })
                 .catch(err => {
-                    container.innerHTML = `<div style="padding: 16px; color: red; text-align: center;">Lỗi tải lịch sử: ${err.message}</div>`;
+                    container.innerHTML = `<div style="padding: 16px; color: red; text-align: center;">Lỗi tải dữ liệu: ${err.message}</div>`;
                 });
         }
 
@@ -1317,8 +1323,7 @@
                     }
 
                     alert('Đã chuyển trạng thái thanh toán thành công.');
-                    loadAdminPaymentSummary();
-                    loadPaymentHistory();
+                    loadAdminPayments();
                 })
                 .catch(err => alert('Lỗi chuyển trạng thái: ' + err.message));
         }
@@ -1352,8 +1357,7 @@ Orders: ${data.updatedOrders}
 Yêu cầu thanh toán: ${data.updatedPaymentRequests}
 Lịch sử thanh toán: ${data.updatedPaymentTransactions}`);
                     loadHistory();
-                    loadPaymentHistory();
-                    loadAdminPaymentSummary();
+                    loadAdminPayments();
                 })
                 .catch(err => alert('Lỗi cập nhật tên: ' + err.message));
         }
@@ -1435,7 +1439,8 @@ Lịch sử thanh toán: ${data.updatedPaymentTransactions}`);
         loadTodayInfo();
         loadTodayOrders();
         loadHistory();
-        loadPaymentHistory();
+        togglePaymentDateInputs();
+        loadAdminPayments();
     </script>
 </body>
 </html>
