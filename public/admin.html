@@ -173,6 +173,19 @@
             margin-top: 20px;
         }
 
+        .history-filter-panel,
+        .payment-filter-panel {
+            background: #f7f1e7;
+            border: 1px solid #eadfce;
+            border-radius: 10px;
+            padding: 14px;
+            margin-bottom: 16px;
+        }
+
+        .history-filter-panel .button-group {
+            margin-top: 0;
+        }
+
         button {
             padding: 12px 24px;
             border: none;
@@ -486,14 +499,30 @@
         }
 
         .payment-toolbar {
-            display: flex;
+            display: grid;
+            grid-template-columns: 1.4fr repeat(2, minmax(160px, 1fr)) minmax(170px, 1fr) auto auto;
             gap: 10px;
-            flex-wrap: wrap;
+            align-items: center;
         }
 
-        .payment-toolbar input {
-            flex: 1;
-            min-width: 220px;
+        .payment-toolbar input,
+        .payment-toolbar select,
+        .payment-toolbar button {
+            min-height: 44px;
+        }
+
+        .payment-toolbar input[type="text"] {
+            min-width: 240px;
+        }
+
+        .payment-toolbar input[type="date"],
+        .payment-toolbar input[type="month"] {
+            min-width: 170px;
+        }
+
+        .history-date-input {
+            max-width: 280px;
+            background: #fff;
         }
 
         @media (max-width: 768px) {
@@ -538,6 +567,23 @@
 
             .tab-content {
                 padding: 20px;
+            }
+
+            .history-filter-panel,
+            .payment-filter-panel {
+                padding: 12px;
+            }
+
+            .payment-toolbar {
+                grid-template-columns: 1fr;
+            }
+
+            .payment-toolbar input,
+            .payment-toolbar select,
+            .payment-toolbar button,
+            .history-date-input {
+                width: 100%;
+                max-width: 100%;
             }
 
             .section {
@@ -877,14 +923,16 @@
             <div class="section">
                 <h2>LỊCH SỬ CÁC NGÀY</h2>
 
-                <div class="form-group">
-                    <label for="dateFilter">Chọn ngày để xem chi tiết:</label>
-                    <input type="date" id="dateFilter">
-                </div>
+                <div class="history-filter-panel">
+                    <div class="form-group">
+                        <label for="dateFilter">Chọn ngày để xem chi tiết:</label>
+                        <input class="history-date-input" type="date" id="dateFilter">
+                    </div>
 
-                <div class="button-group">
-                    <button class="btn-primary" onclick="loadHistoryByDate()">XEM CHI TIẾT</button>
-                    <button class="btn-secondary" onclick="loadHistory()">XEM TẤT CẢ</button>
+                    <div class="button-group">
+                        <button class="btn-primary" onclick="loadHistoryByDate()">XEM CHI TIẾT</button>
+                        <button class="btn-secondary" onclick="loadHistory()">XEM TẤT CẢ</button>
+                    </div>
                 </div>
 
                 <div id="historyList" class="loading">Đang tải...</div>
@@ -894,25 +942,27 @@
         <div id="payments" class="tab-content">
             <div class="section">
                 <h2>LỊCH SỬ & TRẠNG THÁI THANH TOÁN</h2>
-                <div class="payment-toolbar" style="margin-bottom: 10px;">
-                    <input type="text" id="adminPaymentSearch" placeholder="Tìm theo tên...">
-                    <select id="paymentPeriodFilter" onchange="togglePaymentDateInputs()">
+                <div class="payment-filter-panel">
+                    <div class="payment-toolbar">
+                        <input type="text" id="adminPaymentSearch" placeholder="Tìm theo tên...">
+                        <select id="paymentPeriodFilter" onchange="togglePaymentDateInputs()">
                         <option value="all">Toàn bộ</option>
                         <option value="today">Hôm nay</option>
                         <option value="date">Theo ngày</option>
                         <option value="month">Theo tháng</option>
-                    </select>
-                    <input type="date" id="paymentDateFilter" style="display:none; max-width: 220px;">
-                    <input type="month" id="paymentMonthFilter" style="display:none; max-width: 220px;">
-                    <select id="paymentStatusFilter">
+                        </select>
+                        <input type="date" id="paymentDateFilter" style="display:none;">
+                        <input type="month" id="paymentMonthFilter" style="display:none;">
+                        <select id="paymentStatusFilter">
                         <option value="all">Tất cả trạng thái</option>
                         <option value="PENDING">Đang chờ</option>
                         <option value="PAID">Đã thanh toán</option>
                         <option value="CANCELLED">Đã huỷ</option>
                         <option value="EXPIRED">Hết hạn</option>
-                    </select>
-                    <button class="btn-primary" type="button" onclick="loadAdminPayments()">LỌC</button>
-                    <button class="btn-secondary" type="button" onclick="resetPaymentFilters()">ĐẶT LẠI</button>
+                        </select>
+                        <button class="btn-primary" type="button" onclick="loadAdminPayments()">LỌC</button>
+                        <button class="btn-secondary" type="button" onclick="resetPaymentFilters()">ĐẶT LẠI</button>
+                    </div>
                 </div>
                 <div id="adminPaymentList" class="loading">Đang tải...</div>
             </div>
