@@ -96,7 +96,7 @@ async function syncOrderCodeFromPayOS(orderCode) {
   const paidAmount = Number(paymentInfo.amountPaid || 0);
   const amount = Number(paymentInfo.amount || paidAmount || 0);
   const status = String(paymentInfo.status || '').toUpperCase();
-  const paidStatuses = new Set(['PAID', 'SUCCESS', 'SUCCEEDED']);
+  const paidStatuses = PAID_PAYMENT_STATUSES;
 
   if (paidStatuses.has(status) || paidAmount > 0) {
     return new Promise((resolve, reject) => {
@@ -136,6 +136,8 @@ async function syncOrderCodeFromPayOS(orderCode) {
 
   return { updated: false, status, paidAmount };
 }
+
+const PAID_PAYMENT_STATUSES = new Set(['PAID', 'SUCCESS', 'SUCCEEDED']);
 
 let isSyncingPendingPayOS = false;
 
