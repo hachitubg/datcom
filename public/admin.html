@@ -910,13 +910,13 @@
         </header>
 
         <div class="tab-buttons">
-            <button class="tab-btn active" onclick="switchTab('today', event)">QUẢN LÝ MENU</button>
-            <button class="tab-btn" onclick="switchTab('history', event)">LỊCH SỬ ĐẶT CƠM</button>
+            <button class="tab-btn active" onclick="switchTab('history', event)">DANH SÁCH ĐẶT CƠM</button>
+            <button class="tab-btn" onclick="switchTab('today', event)">QUẢN LÝ MENU</button>
             <button class="tab-btn" onclick="switchTab('payments', event)">QUẢN LÝ THANH TOÁN</button>
         </div>
 
         <!-- Tab Quản lý hôm nay -->
-        <div id="today" class="tab-content active">
+        <div id="today" class="tab-content">
             <div class="section">
                 <h2>QUẢN LÝ MENU HÔM NAY</h2>
                 <div id="todayMessage"></div>
@@ -972,27 +972,20 @@
                 </div>
             </div>
 
-            <div class="section">
-                <h2>DANH SÁCH ĐƠN HÔM NAY</h2>
-                <div id="todayOrdersList" class="loading">Đang tải...</div>
-            </div>
         </div>
 
         <!-- Tab Lịch sử -->
-        <div id="history" class="tab-content">
+        <div id="history" class="tab-content active">
             <div class="section">
-                <h2>LỊCH SỬ ĐẶT CƠM</h2>
+                <h2>DANH SÁCH ĐẶT CƠM</h2>
 
                 <div class="history-filter-panel">
                     <div class="form-group">
-                        <label for="dateFilter">Chọn ngày để xem chi tiết:</label>
-                        <input class="history-date-input" type="date" id="dateFilter">
+                        <label for="dateFilter">Chọn ngày</label>
+                        <input class="history-date-input" type="date" id="dateFilter" onchange="onPickOrderDate()">
                     </div>
-
-                    <div class="button-group history-filter-actions">
-                        <button class="btn-primary" onclick="loadHistoryByDate()">XEM CHI TIẾT</button>
-                        <button class="btn-secondary" onclick="loadHistory()">XEM TẤT CẢ</button>
-                    </div>
+                    <div id="orderSummaryInfo" class="admin-payment-meta" style="margin-top:0; margin-bottom:10px;"></div>
+                    <div id="orderDayChips" class="button-group history-filter-actions" style="margin-top:6px;"></div>
                 </div>
 
                 <div id="historyList" class="loading">Đang tải...</div>
@@ -1001,12 +994,12 @@
 
         <div id="payments" class="tab-content">
             <div class="section">
-                <h2>LỊCH SỬ & TRẠNG THÁI THANH TOÁN</h2>
-                <div class="quick-debt-list">
-                    <h3 style="color:#8B7355; margin-bottom:10px;">Danh sách công nợ đặt cơm (thao tác nhanh)</h3>
+                <h2>QUẢN LÝ THANH TOÁN</h2>
+                <div class="quick-debt-list" id="paymentDebtSection">
+                    <div class="button-group" style="margin:0 0 10px 0;"><button id="paymentDebtViewBtn" class="btn-primary" onclick="switchPaymentView('debt')">CÔNG NỢ CẦN THU</button><button id="paymentHistoryViewBtn" class="btn-secondary" onclick="switchPaymentView('history')">LỊCH SỬ THANH TOÁN</button></div><h3 style="color:#8B7355; margin-bottom:10px;" id="paymentListTitle">Danh sách công nợ đặt cơm</h3>
                     <div id="adminDebtSummaryList" class="loading">Đang tải...</div>
                 </div>
-                <div class="payment-filter-panel">
+                <div class="payment-filter-panel" id="paymentHistorySection" style="display:none;">
                     <div class="payment-toolbar">
                         <input type="text" id="adminPaymentSearch" placeholder="Tìm theo tên...">
                         <select id="paymentPeriodFilter" onchange="togglePaymentDateInputs()">
@@ -1028,7 +1021,7 @@
                         <button class="btn-secondary" type="button" onclick="resetPaymentFilters()">ĐẶT LẠI</button>
                     </div>
                 </div>
-                <div id="adminPaymentList" class="loading">Đang tải...</div>
+                <div id="adminPaymentList" class="loading" style="display:none;">Đang tải...</div>
             </div>
         </div>
     </div>
@@ -1045,6 +1038,7 @@
     <script>
         const API_BASE = '';
         let currentHistoryDetailDate = '';
+        let currentPaymentView = 'debt';
 
         function switchTab(tab, event) {
             // Hide all tabs
@@ -1059,16 +1053,17 @@
             document.getElementById(tab).classList.add('active');
             if (event && event.target) {
                 event.target.classList.add('active');
+            } else {
+                const activeBtn = Array.from(document.querySelectorAll('.tab-btn')).find(btn => (btn.getAttribute('onclick') || '').includes(`'${tab}'`));
+                if (activeBtn) activeBtn.classList.add('active');
             }
 
             if (tab === 'today') {
                 loadTodayInfo();
-                loadTodayOrders();
             } else if (tab === 'history') {
                 loadHistory();
             } else if (tab === 'payments') {
-                loadDebtSummary();
-                loadAdminPayments();
+                switchPaymentView(currentPaymentView);
             }
         }
 
@@ -1213,129 +1208,143 @@
                 .catch(err => console.error('Lỗi:', err));
         }
 
+        let selectedOrderDate = '';
+
         function loadHistory() {
-            console.log('📜 Tải lịch sử các ngày');
             fetch(`${API_BASE}/api/admin/all-days`)
                 .then(res => res.json())
                 .then(days => {
-                    console.log('📅 Dữ liệu lịch sử:', days);
-                    const historyList = document.getElementById('historyList');
                     const activeDays = (days || []).filter(day => Number(day.ordered || 0) > 0);
+                    const today = new Date().toISOString().slice(0, 10);
+                    const defaultDate = activeDays.find(d => d.date === today)?.date || activeDays[0]?.date || today;
 
-                    if (!activeDays.length) {
-                        historyList.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">Không có ngày nào phát sinh đơn hàng</div>';
-                        return;
+                    if (!selectedOrderDate) {
+                        selectedOrderDate = defaultDate;
                     }
 
-                    historyList.innerHTML = activeDays.map(day => {
-                        return `
-                            <div class="day-item">
-                                <div class="day-header">
-                                    <div class="day-date">${formatDate(day.date)}</div>
-                                    <div class="day-stats">
-                                        <div class="stat">
-                                            <span class="stat-label">Đặt:</span>
-                                            <span class="stat-value">${day.ordered || 0}/${day.quantity}</span>
-                                        </div>
-                                        <div class="stat">
-                                            <span class="stat-label">Giá:</span>
-                                            <span class="stat-value">${formatPrice(day.price)}</span>
-                                        </div>
-                                    </div>
-                                </div>
-                                <button class="btn-primary btn-small" onclick="showDayDetail('${day.date}')">Xem Danh Sách Đặt Cơm</button>
-                            </div>
-                        `;
-                    }).join('');
+                    document.getElementById('dateFilter').value = selectedOrderDate;
+                    renderOrderDayChips(activeDays, selectedOrderDate);
+                    updateOrderSummary(activeDays, selectedOrderDate);
+                    loadOrderListByDate(selectedOrderDate);
                 })
                 .catch(err => {
-                    console.error('❌ Lỗi tải lịch sử:', err);
-                    document.getElementById('historyList').innerHTML = '<div style="padding: 20px; text-align: center; color: red;">Lỗi tải dữ liệu</div>';
+                    document.getElementById('historyList').innerHTML = `<div style="padding: 20px; text-align: center; color: red;">Lỗi tải dữ liệu: ${err.message}</div>`;
                 });
+        }
+
+        function renderOrderDayChips(days, selectedDate) {
+            const container = document.getElementById('orderDayChips');
+            if (!days.length) {
+                container.innerHTML = '<span class="admin-payment-meta">Chưa có ngày đặt cơm.</span>';
+                return;
+            }
+
+            container.innerHTML = days.map((day) => {
+                const activeClass = day.date === selectedDate ? 'btn-primary' : 'btn-secondary';
+                return `<button class="${activeClass} btn-small" onclick="selectOrderDate('${day.date}')">${day.date.slice(5)} (${day.ordered || 0} xuất)</button>`;
+            }).join('');
+        }
+
+        function updateOrderSummary(days, selectedDate) {
+            const today = new Date().toISOString().slice(0, 10);
+            const selected = (days || []).find(d => d.date === selectedDate);
+            const todayInfo = (days || []).find(d => d.date === today);
+            const summary = document.getElementById('orderSummaryInfo');
+            summary.innerHTML = `Hôm nay: <strong>${today}</strong> | Tổng xuất hôm nay: <strong>${todayInfo?.ordered || 0}</strong> | Đang xem: <strong>${selectedDate}</strong> (${selected?.ordered || 0} xuất)`;
+        }
+
+        function selectOrderDate(date) {
+            selectedOrderDate = date;
+            document.getElementById('dateFilter').value = date;
+            loadHistory();
+        }
+
+        function onPickOrderDate() {
+            const picked = document.getElementById('dateFilter').value;
+            if (!picked) return;
+            selectedOrderDate = picked;
+            loadHistory();
         }
 
         function loadHistoryByDate() {
-            const dateInput = document.getElementById('dateFilter').value;
-            if (!dateInput) {
-                alert('Vui lòng chọn ngày');
-                return;
-            }
-            
-            console.log('🔍 Tìm chi tiết ngày:', dateInput);
-            showDayDetail(dateInput);
+            onPickOrderDate();
         }
 
-        function showDayDetail(date) {
+        function loadOrderListByDate(date) {
             currentHistoryDetailDate = date;
-            console.log('📋 Xem chi tiết ngày:', date);
+            const list = document.getElementById('historyList');
+            list.innerHTML = '<div class="loading">Đang tải...</div>';
+
             fetch(`${API_BASE}/api/admin/day/${date}`)
                 .then(res => res.json())
                 .then(data => {
-                    if (data.error) {
-                        alert('Lỗi: ' + data.error);
+                    if (data.error) throw new Error(data.error);
+                    const orders = data.orders || [];
+                    if (!orders.length) {
+                        list.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">Không có đơn hàng trong ngày này.</div>';
                         return;
                     }
 
-                    const modal = document.getElementById('dayModal');
-                    const title = document.getElementById('dayModalTitle');
-                    const content = document.getElementById('dayModalContent');
-
-                    title.textContent = `DANH SÁCH ĐẶT CƠM </br> ${formatDate(date)}`;
-
-                    if (!data.orders || data.orders.length === 0) {
-                        content.innerHTML = '<p style="text-align: center; color: #999;">Không có đơn hàng trong ngày này</p>';
-                        modal.style.display = 'block';
-                        return;
-                    }
-
-                    const groupedOrders = new Map();
-                    data.orders.forEach((order) => {
-                        const key = (order.name || '').trim().toLowerCase();
-                        const existing = groupedOrders.get(key) || {
-                            name: order.name,
-                            quantity: 0,
-                            notes: []
-                        };
-                        existing.quantity += Number(order.quantity || 0);
-                        if (order.description) {
-                            existing.notes.push(order.description);
-                        }
-                        groupedOrders.set(key, existing);
-                    });
-
-                    let html = `<p style="margin-bottom: 12px; color: #8B7355;">Tổng số người đặt: <strong>${groupedOrders.size}</strong> | Tổng xuất: <strong>${data.day.ordered}</strong></p>`;
-                    html += '<div class="day-modal-orders">';
-
-                    groupedOrders.forEach((orderInfo) => {
-                        const noteText = orderInfo.notes.length
-                            ? `<div class="admin-payment-meta">Ghi chú: ${orderInfo.notes.join(' | ')}</div>`
-                            : '';
-
-                        html += `
-                            <div class="day-modal-order-item">
-                                <div style="display:flex; justify-content: space-between; gap: 10px; align-items: center;">
-                                    <div class="inline-edit-name" id="inline-name-wrap-${encodeURIComponent(orderInfo.name)}">
-                                        <strong style="color:#A0826D" id="inline-name-text-${encodeURIComponent(orderInfo.name)}">${orderInfo.name}</strong>
-                                        <button class="edit-icon-btn" title="Sửa tên" onclick="enableInlineRename('${encodeURIComponent(orderInfo.name)}')">✏️</button>
-                                    </div>
-                                    <span style="color:#8B7355">${orderInfo.quantity} xuất</span>
-                                </div>
-                                ${noteText}
+                    list.innerHTML = orders.map((order) => `
+                        <div class="order-row">
+                            <div class="order-info">
+                                <div class="order-name">${order.name}</div>
+                                <div class="order-details">Số lượng: ${order.quantity} xuất ${order.description ? '| Ghi chú: ' + order.description : ''}</div>
                             </div>
-                        `;
-                    });
-
-                    html += '</div>';
-                    content.innerHTML = html;
-                    modal.style.display = 'block';
+                            <div class="admin-payment-actions">
+                                <button class="btn-secondary btn-small" onclick="editOrder(${order.id}, '${encodeURIComponent(order.name)}', ${order.quantity}, '${encodeURIComponent(order.description || '')}')">Sửa</button>
+                                <button class="btn-danger btn-small" onclick="deleteOrder(${order.id}, '${date}')">Xóa</button>
+                            </div>
+                        </div>
+                    `).join('');
                 })
                 .catch(err => {
-                    console.error('❌ Lỗi:', err);
-                    alert('Lỗi tải chi tiết: ' + err.message);
+                    list.innerHTML = `<div style="padding:20px; color:red; text-align:center;">Lỗi: ${err.message}</div>`;
                 });
         }
 
+        function editOrder(orderId, encodedName, quantity, encodedDescription) {
+            const oldName = decodeURIComponent(encodedName || '');
+            const oldDescription = decodeURIComponent(encodedDescription || '');
+            const newName = normalizeCustomerName(prompt('Sửa tên khách:', oldName) || '');
+            if (!newName) {
+                alert('Tên không hợp lệ.');
+                return;
+            }
+
+            const newQuantity = Number(prompt('Sửa số lượng xuất:', quantity) || 0);
+            if (!Number.isFinite(newQuantity) || newQuantity <= 0) {
+                alert('Số lượng không hợp lệ.');
+                return;
+            }
+
+            const newDescriptionRaw = prompt('Sửa ghi chú (có thể để trống):', oldDescription);
+            if (newDescriptionRaw === null) {
+                return;
+            }
+
+            fetch(`${API_BASE}/api/admin/orders/${orderId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: newName, quantity: newQuantity, description: newDescriptionRaw })
+            })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error) throw new Error(data.error);
+                    loadHistory();
+                })
+                .catch(err => alert('Lỗi sửa đơn: ' + err.message));
+        }
+
+        function showDayDetail(date) {
+            // Backward compatibility: chuyển về màn quản lý danh sách đặt cơm theo ngày
+            selectedOrderDate = date;
+            switchTab('history');
+            loadHistory();
+        }
+
         function togglePaymentDateInputs() {
+
             const period = document.getElementById('paymentPeriodFilter').value;
             const dateInput = document.getElementById('paymentDateFilter');
             const monthInput = document.getElementById('paymentMonthFilter');
@@ -1352,6 +1361,34 @@
             document.getElementById('paymentStatusFilter').value = 'all';
             togglePaymentDateInputs();
             loadAdminPayments();
+        }
+
+        function switchPaymentView(view) {
+            currentPaymentView = view === 'history' ? 'history' : 'debt';
+            const debtSection = document.getElementById('paymentDebtSection');
+            const historySection = document.getElementById('paymentHistorySection');
+            const historyList = document.getElementById('adminPaymentList');
+            const title = document.getElementById('paymentListTitle');
+            const debtBtn = document.getElementById('paymentDebtViewBtn');
+            const historyBtn = document.getElementById('paymentHistoryViewBtn');
+
+            if (currentPaymentView === 'debt') {
+                debtSection.style.display = 'block';
+                historySection.style.display = 'none';
+                historyList.style.display = 'none';
+                title.textContent = 'Danh sách công nợ đặt cơm';
+                debtBtn.className = 'btn-primary';
+                historyBtn.className = 'btn-secondary';
+                loadDebtSummary();
+            } else {
+                debtSection.style.display = 'none';
+                historySection.style.display = 'block';
+                historyList.style.display = 'block';
+                title.textContent = 'Lịch sử thanh toán';
+                debtBtn.className = 'btn-secondary';
+                historyBtn.className = 'btn-primary';
+                loadAdminPayments();
+            }
         }
 
         function loadDebtSummary() {
@@ -1394,6 +1431,7 @@
             const month = document.getElementById('paymentMonthFilter').value;
             const status = document.getElementById('paymentStatusFilter').value;
             const container = document.getElementById('adminPaymentList');
+            container.style.display = 'block';
 
             if (period === 'date' && !date) {
                 alert('Vui lòng chọn ngày cần lọc');
@@ -1652,7 +1690,7 @@ Lịch sử thanh toán: ${data.updatedPaymentTransactions}`);
             element.innerHTML = `<div class="${className}">${message}</div>`;
         }
 
-        function deleteOrder(orderId) {
+        function deleteOrder(orderId, date) {
             if (!confirm('Bạn có chắc chắn muốn xóa đơn hàng này?')) {
                 return;
             }
@@ -1663,7 +1701,10 @@ Lịch sử thanh toán: ${data.updatedPaymentTransactions}`);
                     if (data.error) {
                         alert('Lỗi: ' + data.error);
                     } else {
-                        loadTodayOrders();
+                        if (date) {
+                            selectedOrderDate = date;
+                        }
+                        loadHistory();
                     }
                 })
                 .catch(err => alert('Lỗi: ' + err.message));
@@ -1678,11 +1719,9 @@ Lịch sử thanh toán: ${data.updatedPaymentTransactions}`);
 
         // Load today info on page load
         loadTodayInfo();
-        loadTodayOrders();
         loadHistory();
         togglePaymentDateInputs();
-        loadDebtSummary();
-        loadAdminPayments();
+        switchPaymentView('debt');
     </script>
 </body>
 </html>

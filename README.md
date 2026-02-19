@@ -114,13 +114,24 @@ npm install
 npm start
 ```
 
-## 4) Cập nhật Admin: lịch sử thanh toán gộp + bộ lọc tiện dùng
+## 4) Cập nhật Admin: đơn giản hơn cho PC + mobile
 
-Tab **QUẢN LÝ THANH TOÁN** đã được gộp thành **1 danh sách duy nhất** (không chia 2 phần), kèm bộ lọc:
-- Lọc theo phạm vi thời gian: **Toàn bộ / Hôm nay / Theo ngày / Theo tháng**.
-- Lọc theo trạng thái: **Tất cả / PENDING / PAID / CANCELLED / EXPIRED**.
-- Tìm theo tên khách hàng.
-- Vẫn giữ nút **Chuyển Paid** cho các đơn `PENDING` và nút **Đổi tên** ngay trên từng dòng.
+Admin được tách rõ 3 khu vực để dễ dùng:
+
+- **Danh sách đặt cơm** (màn hình đầu tiên):
+  - Mặc định hiển thị đơn của ngày hôm nay.
+  - Có ô chọn ngày + danh sách ngày nổi bật (ngày có phát sinh đơn).
+  - Hiển thị thông tin nhanh: ngày hiện tại và tổng xuất đã đặt.
+  - Có thao tác **Sửa** và **Xóa** trực tiếp từng đơn.
+
+- **Quản lý menu**:
+  - Giữ nguyên phần cập nhật menu/số lượng như cũ.
+  - Bỏ danh sách đơn hôm nay trong tab này để tránh trùng với tab Danh sách đặt cơm.
+
+- **Quản lý thanh toán**:
+  - Mặc định hiển thị **Công nợ cần thu** (tổng xuất + số tiền cần thanh toán của người chưa trả đủ).
+  - Có nút chuyển sang **Lịch sử thanh toán** ngay phía trên.
+  - Hỗ trợ cập nhật thủ công: **Đã thu tiền mặt** / **Chuyển Paid** khi API không hoạt động.
 
 ## 5) Khắc phục trường hợp khách không quay lại trang PayOS success
 

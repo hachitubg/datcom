@@ -299,6 +299,26 @@ app.delete('/api/admin/orders/:orderId', (req, res) => {
   });
 });
 
+// Sửa đơn hàng
+app.put('/api/admin/orders/:orderId', (req, res) => {
+  const { orderId } = req.params;
+  const name = normalizeName(req.body.name);
+  const quantity = Number(req.body.quantity || 0);
+  const description = (req.body.description || '').toString();
+
+  if (!name || !Number.isFinite(quantity) || quantity <= 0) {
+    return res.status(400).json({ error: 'Dữ liệu cập nhật không hợp lệ' });
+  }
+
+  db.updateOrder(orderId, { name, quantity, description }, (err) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+
+    res.json({ success: true });
+  });
+});
+
 app.get('/api/customers/names', (req, res) => {
   db.getKnownCustomerNames((err, names) => {
     if (err) {

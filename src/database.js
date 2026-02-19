@@ -314,6 +314,25 @@ class Database {
     );
   }
 
+  updateOrder(orderId, data, callback) {
+    const normalizedName = (data.name || '').trim().replace(/\s+/g, ' ');
+    const normalizedQuantity = Number(data.quantity || 0);
+    const normalizedDescription = (data.description || '').trim();
+
+    if (!normalizedName || !Number.isFinite(normalizedQuantity) || normalizedQuantity <= 0) {
+      callback(new Error('Dữ liệu cập nhật đơn hàng không hợp lệ'));
+      return;
+    }
+
+    this.db.run(
+      `UPDATE orders
+       SET name = ?, quantity = ?, description = ?
+       WHERE id = ?`,
+      [normalizedName, normalizedQuantity, normalizedDescription, Number(orderId)],
+      callback
+    );
+  }
+
   getKnownCustomerNames(callback) {
     const query = `
       SELECT name FROM orders
