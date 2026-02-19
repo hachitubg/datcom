@@ -314,6 +314,25 @@ class Database {
     );
   }
 
+  updateOrder(orderId, data, callback) {
+    const normalizedName = (data.name || '').trim().replace(/\s+/g, ' ');
+    const normalizedQuantity = Number(data.quantity || 0);
+    const normalizedDescription = (data.description || '').trim();
+
+    if (!normalizedName || !Number.isFinite(normalizedQuantity) || normalizedQuantity <= 0) {
+      callback(new Error('Dữ liệu cập nhật đơn hàng không hợp lệ'));
+      return;
+    }
+
+    this.db.run(
+      `UPDATE orders
+       SET name = ?, quantity = ?, description = ?
+       WHERE id = ?`,
+      [normalizedName, normalizedQuantity, normalizedDescription, Number(orderId)],
+      callback
+    );
+  }
+
   getKnownCustomerNames(callback) {
     const query = `
       SELECT name FROM orders
@@ -414,7 +433,8 @@ class Database {
         SUM(o.quantity) AS quantity,
         SUM(o.quantity * d.price) AS total_amount,
         COALESCE(paid.total_paid, 0) AS paid_amount,
-        MAX(o.created_at) AS last_order_time
+        MAX(o.created_at) AS last_order_time,
+        pending.latest_pending_order_code
       FROM orders o
       JOIN days d ON o.day_id = d.id
       LEFT JOIN (
@@ -423,6 +443,12 @@ class Database {
         WHERE status = 'PAID'
         GROUP BY LOWER(customer_name)
       ) paid ON paid.normalized_name = LOWER(o.name)
+      LEFT JOIN (
+        SELECT LOWER(customer_name) AS normalized_name, MAX(order_code) AS latest_pending_order_code
+        FROM payment_requests
+        WHERE status = 'PENDING'
+        GROUP BY LOWER(customer_name)
+      ) pending ON pending.normalized_name = LOWER(o.name)
       WHERE 1 = 1
       ${normalizedKeyword ? "AND LOWER(REPLACE(REPLACE(o.name, '''', ''), ' ', '')) LIKE ?" : ''}
       GROUP BY LOWER(o.name)
@@ -447,7 +473,8 @@ class Database {
           paidAmount,
           remainingAmount: Math.max(0, totalAmount - paidAmount),
           status: paidAmount >= totalAmount ? 'PAID' : paidAmount > 0 ? 'PARTIAL' : 'UNPAID',
-          lastOrderTime: row.last_order_time
+          lastOrderTime: row.last_order_time,
+          latestPendingOrderCode: row.latest_pending_order_code || 0
         };
       });
 
@@ -566,34 +593,199 @@ class Database {
     );
   }
 
-  getPaymentHistory(searchKeyword, callback) {
-    const keyword = (searchKeyword || '').trim().toLowerCase();
-    const normalizedKeyword = keyword.replace(/['\s]+/g, '');
 
-    if (!normalizedKeyword) {
-      callback(null, []);
+  markCustomerCashPaid(customerName, amount, callback) {
+    const normalizedName = (customerName || '').trim().replace(/\s+/g, ' ');
+    const normalizedAmount = Number(amount || 0);
+
+    if (!normalizedName) {
+      callback(new Error('Tên khách hàng không hợp lệ'));
       return;
+    }
+
+    if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
+      callback(new Error('Số tiền thanh toán không hợp lệ'));
+      return;
+    }
+
+    this.db.get(
+      `SELECT MAX(d.id) AS latest_day_id, MIN(o.name) AS db_name
+       FROM orders o
+       JOIN days d ON o.day_id = d.id
+       WHERE LOWER(o.name) = LOWER(?)`,
+      [normalizedName],
+      (dayErr, dayRow) => {
+        if (dayErr) {
+          callback(dayErr);
+          return;
+        }
+
+        if (!dayRow || !dayRow.latest_day_id) {
+          callback(new Error('Không tìm thấy đơn đặt cơm của khách này'));
+          return;
+        }
+
+        const orderCode = Number(`${Date.now().toString().slice(-10)}${Math.floor(Math.random() * 90 + 10)}`);
+        const finalName = (dayRow.db_name || normalizedName).trim();
+        const payload = {
+          source: 'admin_cash_manual',
+          note: 'Manual cash payment from admin panel'
+        };
+
+        this.db.run(
+          `INSERT INTO payment_transactions
+            (day_id, customer_name, order_code, amount, status, reference, transaction_date, raw_payload)
+           VALUES (?, ?, ?, ?, 'PAID', 'CASH-MANUAL', ?, ?)`,
+          [
+            Number(dayRow.latest_day_id),
+            finalName,
+            orderCode,
+            normalizedAmount,
+            new Date().toISOString(),
+            JSON.stringify(payload)
+          ],
+          callback
+        );
+      }
+    );
+  }
+
+  markPaymentPaidManual(orderCode, callback) {
+    const normalizedOrderCode = Number(orderCode);
+    if (!Number.isFinite(normalizedOrderCode) || normalizedOrderCode <= 0) {
+      callback(new Error('Mã đơn thanh toán không hợp lệ'));
+      return;
+    }
+
+    this.db.get(
+      `SELECT id, amount, status FROM payment_requests WHERE order_code = ?`,
+      [normalizedOrderCode],
+      (requestErr, requestRow) => {
+        if (requestErr) {
+          callback(requestErr);
+          return;
+        }
+
+        if (!requestRow) {
+          callback(new Error('Không tìm thấy yêu cầu thanh toán tương ứng'));
+          return;
+        }
+
+        const paymentData = {
+          amount: Number(requestRow.amount || 0),
+          reference: 'ADMIN-MANUAL',
+          transactionDateTime: new Date().toISOString(),
+          raw: {
+            source: 'admin_manual',
+            note: 'Manual status update from admin panel'
+          }
+        };
+
+        this.markPaymentPaid(normalizedOrderCode, paymentData, callback);
+      }
+    );
+  }
+
+
+  getPendingPaymentRequests(limit, callback) {
+    const normalizedLimit = Math.max(1, Math.min(Number(limit) || 50, 200));
+    this.db.all(
+      `SELECT id, order_code, amount, customer_name, payment_link_id, created_at, updated_at
+       FROM payment_requests
+       WHERE status = 'PENDING'
+       ORDER BY created_at ASC
+       LIMIT ?`,
+      [normalizedLimit],
+      callback
+    );
+  }
+
+  updatePaymentRequestStatus(orderCode, status, callback) {
+    const normalizedOrderCode = Number(orderCode);
+    const normalizedStatus = String(status || '').trim().toUpperCase();
+
+    if (!normalizedOrderCode || !normalizedStatus) {
+      callback(new Error('Dữ liệu cập nhật trạng thái thanh toán không hợp lệ'));
+      return;
+    }
+
+    this.db.run(
+      `UPDATE payment_requests
+       SET status = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE order_code = ?`,
+      [normalizedStatus, normalizedOrderCode],
+      callback
+    );
+  }
+
+  getPaymentHistory(filters, callback) {
+    let normalizedFilters = filters;
+    if (typeof normalizedFilters === 'function') {
+      callback = normalizedFilters;
+      normalizedFilters = {};
+    }
+
+    if (typeof normalizedFilters === 'string') {
+      normalizedFilters = { search: normalizedFilters };
+    }
+
+    const searchKeyword = (normalizedFilters && normalizedFilters.search) || '';
+    const keyword = String(searchKeyword).trim().toLowerCase();
+    const normalizedKeyword = keyword.replace(/['\s]+/g, '');
+    const period = String((normalizedFilters && normalizedFilters.period) || 'all').toLowerCase();
+    const status = String((normalizedFilters && normalizedFilters.status) || 'all').toUpperCase();
+    const selectedDate = String((normalizedFilters && normalizedFilters.date) || '').trim();
+    const selectedMonth = String((normalizedFilters && normalizedFilters.month) || '').trim();
+
+    const whereClauses = ['1 = 1'];
+    const params = [];
+
+    if (normalizedKeyword) {
+      whereClauses.push("LOWER(REPLACE(REPLACE(pr.customer_name, '''', ''), ' ', '')) LIKE ?");
+      params.push(`%${normalizedKeyword}%`);
+    }
+
+    if (period === 'today') {
+      whereClauses.push("d.date = DATE('now', 'localtime')");
+    } else if (period === 'date' && selectedDate) {
+      whereClauses.push('d.date = ?');
+      params.push(selectedDate);
+    } else if (period === 'month' && selectedMonth) {
+      whereClauses.push('SUBSTR(d.date, 1, 7) = ?');
+      params.push(selectedMonth);
+    }
+
+    if (status && status !== 'ALL') {
+      whereClauses.push('UPPER(pr.status) = ?');
+      params.push(status);
     }
 
     const query = `
       SELECT
-        t.customer_name,
-        t.amount,
-        t.order_code,
-        t.reference,
-        t.transaction_date,
-        t.created_at,
-        d.date
-      FROM payment_transactions t
-      JOIN days d ON t.day_id = d.id
-      WHERE t.status = 'PAID'
-      AND LOWER(REPLACE(REPLACE(t.customer_name, '''', ''), ' ', '')) LIKE ?
-      ORDER BY COALESCE(t.transaction_date, t.created_at) DESC
-      LIMIT 200
+        pr.customer_name,
+        pr.order_code,
+        pr.amount AS request_amount,
+        pr.status AS request_status,
+        pr.payment_link_id,
+        pr.checkout_url,
+        pr.created_at AS request_created_at,
+        pr.updated_at AS request_updated_at,
+        d.date,
+        COALESCE(SUM(CASE WHEN t.status = 'PAID' THEN t.amount ELSE 0 END), 0) AS paid_amount,
+        MAX(t.reference) AS latest_reference,
+        MAX(COALESCE(t.transaction_date, t.created_at)) AS latest_paid_at
+      FROM payment_requests pr
+      JOIN days d ON pr.day_id = d.id
+      LEFT JOIN payment_transactions t ON t.order_code = pr.order_code
+      WHERE ${whereClauses.join(' AND ')}
+      GROUP BY pr.id
+      ORDER BY pr.created_at DESC
+      LIMIT 500
     `;
 
-    this.db.all(query, [`%${normalizedKeyword}%`], callback);
+    this.db.all(query, params, callback);
   }
 }
+
 
 module.exports = Database;
