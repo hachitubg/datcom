@@ -175,15 +175,23 @@
 
         .history-filter-panel,
         .payment-filter-panel {
-            background: #f7f1e7;
-            border: 1px solid #eadfce;
-            border-radius: 10px;
-            padding: 14px;
-            margin-bottom: 16px;
+            background: linear-gradient(135deg, #f7f1e7 0%, #f3eadc 100%);
+            border: 1px solid #e3d3bf;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 18px;
+            box-shadow: 0 6px 20px rgba(160, 130, 109, 0.12);
         }
 
         .history-filter-panel .button-group {
             margin-top: 0;
+            align-items: center;
+        }
+
+        .history-filter-panel label,
+        .payment-filter-panel label {
+            color: #7c6347;
+            font-weight: 700;
         }
 
         button {
@@ -500,15 +508,16 @@
 
         .payment-toolbar {
             display: grid;
-            grid-template-columns: 1.4fr repeat(2, minmax(160px, 1fr)) minmax(170px, 1fr) auto auto;
-            gap: 10px;
+            grid-template-columns: 1.6fr repeat(2, minmax(165px, 1fr)) minmax(180px, 1fr) auto auto;
+            gap: 12px;
             align-items: center;
         }
 
         .payment-toolbar input,
         .payment-toolbar select,
         .payment-toolbar button {
-            min-height: 44px;
+            min-height: 46px;
+            border-radius: 10px;
         }
 
         .payment-toolbar input[type="text"] {
@@ -523,6 +532,16 @@
         .history-date-input {
             max-width: 280px;
             background: #fff;
+            border-color: #dcc9b3;
+            box-shadow: 0 2px 10px rgba(160, 130, 109, 0.08);
+        }
+
+        .history-filter-actions .btn-primary,
+        .history-filter-actions .btn-secondary,
+        .payment-toolbar .btn-primary,
+        .payment-toolbar .btn-secondary {
+            min-width: 140px;
+            letter-spacing: 0.3px;
         }
 
         @media (max-width: 768px) {
@@ -581,7 +600,8 @@
             .payment-toolbar input,
             .payment-toolbar select,
             .payment-toolbar button,
-            .history-date-input {
+            .history-date-input,
+            .history-filter-actions button {
                 width: 100%;
                 max-width: 100%;
             }
@@ -850,15 +870,15 @@
         </header>
 
         <div class="tab-buttons">
-            <button class="tab-btn active" onclick="switchTab('today', event)">QUẢN LÝ HÔM NAY</button>
-            <button class="tab-btn" onclick="switchTab('history', event)">LỊCH SỬ CÁC NGÀY</button>
+            <button class="tab-btn active" onclick="switchTab('today', event)">QUẢN LÝ MENU</button>
+            <button class="tab-btn" onclick="switchTab('history', event)">LỊCH SỬ ĐẶT CƠM</button>
             <button class="tab-btn" onclick="switchTab('payments', event)">QUẢN LÝ THANH TOÁN</button>
         </div>
 
         <!-- Tab Quản lý hôm nay -->
         <div id="today" class="tab-content active">
             <div class="section">
-                <h2>THÔNG TIN HÔM NAY</h2>
+                <h2>QUẢN LÝ MENU HÔM NAY</h2>
                 <div id="todayMessage"></div>
 
                 <div style="background: #f0ebe0; padding: 25px; border-radius: 10px; margin-bottom: 20px;">
@@ -921,7 +941,7 @@
         <!-- Tab Lịch sử -->
         <div id="history" class="tab-content">
             <div class="section">
-                <h2>LỊCH SỬ CÁC NGÀY</h2>
+                <h2>LỊCH SỬ ĐẶT CƠM</h2>
 
                 <div class="history-filter-panel">
                     <div class="form-group">
@@ -929,7 +949,7 @@
                         <input class="history-date-input" type="date" id="dateFilter">
                     </div>
 
-                    <div class="button-group">
+                    <div class="button-group history-filter-actions">
                         <button class="btn-primary" onclick="loadHistoryByDate()">XEM CHI TIẾT</button>
                         <button class="btn-secondary" onclick="loadHistory()">XEM TẤT CẢ</button>
                     </div>
@@ -946,19 +966,19 @@
                     <div class="payment-toolbar">
                         <input type="text" id="adminPaymentSearch" placeholder="Tìm theo tên...">
                         <select id="paymentPeriodFilter" onchange="togglePaymentDateInputs()">
-                        <option value="all">Toàn bộ</option>
-                        <option value="today">Hôm nay</option>
-                        <option value="date">Theo ngày</option>
-                        <option value="month">Theo tháng</option>
+                            <option value="all">Toàn bộ</option>
+                            <option value="today">Hôm nay</option>
+                            <option value="date">Theo ngày</option>
+                            <option value="month">Theo tháng</option>
                         </select>
                         <input type="date" id="paymentDateFilter" style="display:none;">
                         <input type="month" id="paymentMonthFilter" style="display:none;">
                         <select id="paymentStatusFilter">
-                        <option value="all">Tất cả trạng thái</option>
-                        <option value="PENDING">Đang chờ</option>
-                        <option value="PAID">Đã thanh toán</option>
-                        <option value="CANCELLED">Đã huỷ</option>
-                        <option value="EXPIRED">Hết hạn</option>
+                            <option value="all">Tất cả trạng thái</option>
+                            <option value="PENDING">Đang chờ</option>
+                            <option value="PAID">Đã thanh toán</option>
+                            <option value="CANCELLED">Đã huỷ</option>
+                            <option value="EXPIRED">Hết hạn</option>
                         </select>
                         <button class="btn-primary" type="button" onclick="loadAdminPayments()">LỌC</button>
                         <button class="btn-secondary" type="button" onclick="resetPaymentFilters()">ĐẶT LẠI</button>
