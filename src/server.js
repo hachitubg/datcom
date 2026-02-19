@@ -447,6 +447,51 @@ app.post('/api/admin/payments/manual-paid', (req, res) => {
   });
 });
 
+
+// Admin: ghi nhận thu tiền mặt/chuyển khoản ngoài hệ thống cho khách
+app.post('/api/admin/payments/manual-cash', (req, res) => {
+  const name = normalizeName(req.body.name);
+  const requestedAmount = Number(req.body.amount || 0);
+
+  if (!name) {
+    return res.status(400).json({ error: 'Thiếu tên khách hàng' });
+  }
+
+  db.getTodayCustomerPayment(name, (paymentErr, paymentInfo) => {
+    if (paymentErr) {
+      return res.status(400).json({ error: paymentErr.message });
+    }
+
+    if (paymentInfo.remainingAmount <= 0) {
+      return res.status(400).json({ error: 'Khách này không còn công nợ để cập nhật' });
+    }
+
+    const manualAmount = requestedAmount > 0 ? requestedAmount : paymentInfo.remainingAmount;
+    if (!Number.isFinite(manualAmount) || manualAmount <= 0) {
+      return res.status(400).json({ error: 'Số tiền cập nhật không hợp lệ' });
+    }
+
+    if (manualAmount > paymentInfo.remainingAmount) {
+      return res.status(400).json({
+        error: `Số tiền vượt quá công nợ còn lại (${paymentInfo.remainingAmount})`
+      });
+    }
+
+    db.markCustomerCashPaid(name, manualAmount, (markErr) => {
+      if (markErr) {
+        return res.status(500).json({ error: markErr.message });
+      }
+
+      res.json({
+        success: true,
+        name,
+        amount: manualAmount,
+        remainingAmount: Math.max(0, paymentInfo.remainingAmount - manualAmount)
+      });
+    });
+  });
+});
+
 // Lịch sử thanh toán
 app.get('/api/payments/history', (req, res) => {
   const filters = {

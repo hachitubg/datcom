@@ -473,6 +473,46 @@
             border-radius: 8px;
         }
 
+        .inline-edit-name {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .edit-icon-btn {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            border: 1px solid #d9c7b2;
+            background: #fff;
+            color: #8B7355;
+            font-size: 14px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+
+        .edit-icon-btn:hover {
+            background: #f3eadc;
+            color: #6f5a40;
+            transform: translateY(-1px);
+        }
+
+        .inline-name-input {
+            min-width: 180px;
+            padding: 6px 10px;
+            border: 1px solid #d9c7b2;
+            border-radius: 8px;
+            color: #8B7355;
+            font-weight: 600;
+        }
+
+        .quick-debt-list {
+            margin-bottom: 16px;
+        }
+
         .admin-payment-row {
             display: flex;
             justify-content: space-between;
@@ -962,6 +1002,10 @@
         <div id="payments" class="tab-content">
             <div class="section">
                 <h2>LỊCH SỬ & TRẠNG THÁI THANH TOÁN</h2>
+                <div class="quick-debt-list">
+                    <h3 style="color:#8B7355; margin-bottom:10px;">Danh sách công nợ đặt cơm (thao tác nhanh)</h3>
+                    <div id="adminDebtSummaryList" class="loading">Đang tải...</div>
+                </div>
                 <div class="payment-filter-panel">
                     <div class="payment-toolbar">
                         <input type="text" id="adminPaymentSearch" placeholder="Tìm theo tên...">
@@ -1000,6 +1044,7 @@
 
     <script>
         const API_BASE = '';
+        let currentHistoryDetailDate = '';
 
         function switchTab(tab, event) {
             // Hide all tabs
@@ -1022,6 +1067,7 @@
             } else if (tab === 'history') {
                 loadHistory();
             } else if (tab === 'payments') {
+                loadDebtSummary();
                 loadAdminPayments();
             }
         }
@@ -1220,6 +1266,7 @@
         }
 
         function showDayDetail(date) {
+            currentHistoryDetailDate = date;
             console.log('📋 Xem chi tiết ngày:', date);
             fetch(`${API_BASE}/api/admin/day/${date}`)
                 .then(res => res.json())
@@ -1267,13 +1314,13 @@
                         html += `
                             <div class="day-modal-order-item">
                                 <div style="display:flex; justify-content: space-between; gap: 10px; align-items: center;">
-                                    <strong style="color:#A0826D">${orderInfo.name}</strong>
+                                    <div class="inline-edit-name" id="inline-name-wrap-${encodeURIComponent(orderInfo.name)}">
+                                        <strong style="color:#A0826D" id="inline-name-text-${encodeURIComponent(orderInfo.name)}">${orderInfo.name}</strong>
+                                        <button class="edit-icon-btn" title="Sửa tên" onclick="enableInlineRename('${encodeURIComponent(orderInfo.name)}')">✏️</button>
+                                    </div>
                                     <span style="color:#8B7355">${orderInfo.quantity} xuất</span>
                                 </div>
                                 ${noteText}
-                                <div style="margin-top: 8px;">
-                                    <button class="btn-secondary btn-small" onclick="renameCustomer('${encodeURIComponent(orderInfo.name)}')">Sửa tên khách</button>
-                                </div>
                             </div>
                         `;
                     });
@@ -1305,6 +1352,39 @@
             document.getElementById('paymentStatusFilter').value = 'all';
             togglePaymentDateInputs();
             loadAdminPayments();
+        }
+
+        function loadDebtSummary() {
+            const container = document.getElementById('adminDebtSummaryList');
+            container.innerHTML = '<div class="loading">Đang tải...</div>';
+
+            fetch(`${API_BASE}/api/payments/today`)
+                .then(res => res.json())
+                .then(rows => {
+                    if (!rows || rows.length === 0) {
+                        container.innerHTML = '<div style="padding: 14px; color:#999; text-align:center;">Không có công nợ cần xử lý.</div>';
+                        return;
+                    }
+
+                    container.innerHTML = rows.map((row) => {
+                        const remaining = Number(row.remainingAmount || 0);
+                        return `
+                            <div class="admin-payment-row">
+                                <div>
+                                    <div class="order-name">${row.name}</div>
+                                    <div class="admin-payment-meta">Số xuất: ${row.quantity} | Tổng tiền: ${formatPrice(row.totalAmount || 0)} | Còn lại: ${formatPrice(remaining)}</div>
+                                </div>
+                                <div class="admin-payment-actions">
+                                    <button class="btn-warning btn-small" onclick="markCashPaid('${encodeURIComponent(row.name)}', ${remaining})">Đã thu tiền mặt</button>
+                                    <button class="btn-secondary btn-small" onclick="renameCustomer('${encodeURIComponent(row.name)}')">Đổi tên</button>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                })
+                .catch(err => {
+                    container.innerHTML = `<div style="padding: 14px; color:red; text-align:center;">Lỗi tải công nợ: ${err.message}</div>`;
+                });
         }
 
         function loadAdminPayments() {
@@ -1393,9 +1473,99 @@
                     }
 
                     alert('Đã chuyển trạng thái thanh toán thành công.');
+                    loadDebtSummary();
                     loadAdminPayments();
                 })
                 .catch(err => alert('Lỗi chuyển trạng thái: ' + err.message));
+        }
+
+        function markCashPaid(encodedName, suggestedAmount) {
+            const name = decodeURIComponent(encodedName || '');
+            const defaultAmount = Number(suggestedAmount || 0);
+            const inputAmount = prompt(`Nhập số tiền đã thu của ${name} (để trống = thu đủ công nợ):`, defaultAmount > 0 ? String(defaultAmount) : '');
+
+            if (inputAmount === null) {
+                return;
+            }
+
+            const amount = String(inputAmount).trim() ? Number(inputAmount) : 0;
+            if (String(inputAmount).trim() && (!Number.isFinite(amount) || amount <= 0)) {
+                alert('Số tiền không hợp lệ.');
+                return;
+            }
+
+            fetch(`${API_BASE}/api/admin/payments/manual-cash`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, amount })
+            })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error) {
+                        throw new Error(data.error);
+                    }
+
+                    alert(`Đã cập nhật thanh toán tiền mặt cho ${name}: ${formatPrice(data.amount)}.`);
+                    loadDebtSummary();
+                    loadAdminPayments();
+                })
+                .catch(err => alert('Lỗi cập nhật tiền mặt: ' + err.message));
+        }
+
+        function enableInlineRename(encodedOldName) {
+            const oldName = decodeURIComponent(encodedOldName || '');
+            const wrap = document.getElementById(`inline-name-wrap-${encodedOldName}`);
+            const textEl = document.getElementById(`inline-name-text-${encodedOldName}`);
+            if (!wrap || !textEl) return;
+
+            wrap.innerHTML = `
+                <input class="inline-name-input" id="inline-name-input-${encodedOldName}" value="${oldName.replace(/"/g, '&quot;')}">
+                <button class="edit-icon-btn" title="Lưu" onclick="saveInlineRename('${encodedOldName}')">✅</button>
+                <button class="edit-icon-btn" title="Huỷ" onclick="cancelInlineRename('${encodedOldName}', '${encodeURIComponent(oldName)}')">✖</button>
+            `;
+        }
+
+        function cancelInlineRename(encodedOldName, encodedValue) {
+            const oldName = decodeURIComponent(encodedValue || '');
+            const wrap = document.getElementById(`inline-name-wrap-${encodedOldName}`);
+            if (!wrap) return;
+
+            wrap.innerHTML = `
+                <strong style="color:#A0826D" id="inline-name-text-${encodedOldName}">${oldName}</strong>
+                <button class="edit-icon-btn" title="Sửa tên" onclick="enableInlineRename('${encodedOldName}')">✏️</button>
+            `;
+        }
+
+        function saveInlineRename(encodedOldName) {
+            const input = document.getElementById(`inline-name-input-${encodedOldName}`);
+            const oldName = decodeURIComponent(encodedOldName || '');
+            if (!input) return;
+
+            const newName = normalizeCustomerName(input.value);
+            if (!newName) {
+                alert('Tên mới không hợp lệ.');
+                return;
+            }
+
+            fetch(`${API_BASE}/api/admin/customers/rename`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ oldName, newName })
+            })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error) {
+                        throw new Error(data.error);
+                    }
+
+                    loadHistory();
+                    loadDebtSummary();
+                    loadAdminPayments();
+                    if (currentHistoryDetailDate) {
+                        showDayDetail(currentHistoryDetailDate);
+                    }
+                })
+                .catch(err => alert('Lỗi cập nhật tên: ' + err.message));
         }
 
         function renameCustomer(encodedOldName) {
@@ -1427,6 +1597,7 @@ Orders: ${data.updatedOrders}
 Yêu cầu thanh toán: ${data.updatedPaymentRequests}
 Lịch sử thanh toán: ${data.updatedPaymentTransactions}`);
                     loadHistory();
+                    loadDebtSummary();
                     loadAdminPayments();
                 })
                 .catch(err => alert('Lỗi cập nhật tên: ' + err.message));
@@ -1510,6 +1681,7 @@ Lịch sử thanh toán: ${data.updatedPaymentTransactions}`);
         loadTodayOrders();
         loadHistory();
         togglePaymentDateInputs();
+        loadDebtSummary();
         loadAdminPayments();
     </script>
 </body>

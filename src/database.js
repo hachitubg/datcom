@@ -574,6 +574,63 @@ class Database {
     );
   }
 
+
+  markCustomerCashPaid(customerName, amount, callback) {
+    const normalizedName = (customerName || '').trim().replace(/\s+/g, ' ');
+    const normalizedAmount = Number(amount || 0);
+
+    if (!normalizedName) {
+      callback(new Error('Tên khách hàng không hợp lệ'));
+      return;
+    }
+
+    if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
+      callback(new Error('Số tiền thanh toán không hợp lệ'));
+      return;
+    }
+
+    this.db.get(
+      `SELECT MAX(d.id) AS latest_day_id, MIN(o.name) AS db_name
+       FROM orders o
+       JOIN days d ON o.day_id = d.id
+       WHERE LOWER(o.name) = LOWER(?)`,
+      [normalizedName],
+      (dayErr, dayRow) => {
+        if (dayErr) {
+          callback(dayErr);
+          return;
+        }
+
+        if (!dayRow || !dayRow.latest_day_id) {
+          callback(new Error('Không tìm thấy đơn đặt cơm của khách này'));
+          return;
+        }
+
+        const orderCode = Number(`${Date.now().toString().slice(-10)}${Math.floor(Math.random() * 90 + 10)}`);
+        const finalName = (dayRow.db_name || normalizedName).trim();
+        const payload = {
+          source: 'admin_cash_manual',
+          note: 'Manual cash payment from admin panel'
+        };
+
+        this.db.run(
+          `INSERT INTO payment_transactions
+            (day_id, customer_name, order_code, amount, status, reference, transaction_date, raw_payload)
+           VALUES (?, ?, ?, ?, 'PAID', 'CASH-MANUAL', ?, ?)`,
+          [
+            Number(dayRow.latest_day_id),
+            finalName,
+            orderCode,
+            normalizedAmount,
+            new Date().toISOString(),
+            JSON.stringify(payload)
+          ],
+          callback
+        );
+      }
+    );
+  }
+
   markPaymentPaidManual(orderCode, callback) {
     const normalizedOrderCode = Number(orderCode);
     if (!Number.isFinite(normalizedOrderCode) || normalizedOrderCode <= 0) {
