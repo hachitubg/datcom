@@ -417,7 +417,7 @@
         }
 
         .loading {
-            text-align: center;
+            /* text-align: center; */
             color: #A0826D;
             padding: 20px;
         }
@@ -538,6 +538,8 @@
             background: #fff;
             border-color: #dcc9b3;
             box-shadow: 0 2px 10px rgba(160, 130, 109, 0.08);
+            border-radius: 10px;
+            padding: 10px;
         }
 
         .history-filter-actions .btn-primary,
@@ -731,10 +733,10 @@
                 padding: 8px;
             }
 
-            .order-row {
+            /* .order-row {
                 flex-direction: column;
                 gap: 10px;
-            }
+            } */
 
             .btn-small {
                 width: 100%;
@@ -871,11 +873,11 @@
                 padding: 6px;
             }
 
-            .order-row {
+            /* .order-row {
                 padding: 10px;
                 flex-direction: column;
                 gap: 8px;
-            }
+            } */
 
             .order-info {
                 width: 100%;
@@ -992,7 +994,6 @@
                         <input class="history-date-input" type="date" id="dateFilter" onchange="onPickOrderDate()">
                     </div>
                     <div id="orderSummaryInfo" class="admin-payment-meta" style="margin-top:0; margin-bottom:10px;"></div>
-                    <div id="orderDayChips" class="button-group history-filter-actions" style="margin-top:6px;"></div>
                 </div>
 
                 <div id="historyList" class="loading">Đang tải...</div>
@@ -1232,26 +1233,12 @@
                     }
 
                     document.getElementById('dateFilter').value = selectedOrderDate;
-                    renderOrderDayChips(activeDays, selectedOrderDate);
                     updateOrderSummary(activeDays, selectedOrderDate);
                     loadOrderListByDate(selectedOrderDate);
                 })
                 .catch(err => {
                     document.getElementById('historyList').innerHTML = `<div style="padding: 20px; text-align: center; color: red;">Lỗi tải dữ liệu: ${err.message}</div>`;
                 });
-        }
-
-        function renderOrderDayChips(days, selectedDate) {
-            const container = document.getElementById('orderDayChips');
-            if (!days.length) {
-                container.innerHTML = '<span class="admin-payment-meta">Chưa có ngày đặt cơm.</span>';
-                return;
-            }
-
-            container.innerHTML = days.map((day) => {
-                const activeClass = day.date === selectedDate ? 'day-chip active' : 'day-chip';
-                return `<button class="${activeClass}" onclick="selectOrderDate('${day.date}')">${day.date.slice(5)} (${day.ordered || 0} xuất)</button>`;
-            }).join('');
         }
 
         function updateOrderSummary(days, selectedDate) {
@@ -1298,7 +1285,7 @@
                         <div class="order-row">
                             <div class="order-info">
                                 <div class="order-name">${order.name}</div>
-                                <div class="order-details">Số lượng: ${order.quantity} xuất ${order.description ? '| Ghi chú: ' + order.description : ''}</div>
+                                <div class="order-details">Số lượng: ${order.quantity} xuất ${order.description ? '</br> Ghi chú: ' + order.description : ''}</div>
                             </div>
                             <div class="admin-payment-actions">
                                 <button class="edit-icon-btn" title="Chỉnh sửa đơn" onclick="openOrderEditModal(${order.id}, '${encodeURIComponent(order.name)}', ${order.quantity}, '${encodeURIComponent(order.description || '')}', '${date}')">✏️</button>
@@ -1429,10 +1416,10 @@
                             <div class="admin-payment-row">
                                 <div>
                                     <div class="order-name">${row.name}</div>
-                                    <div class="admin-payment-meta">Số xuất: ${row.quantity} | Tổng tiền: ${formatPrice(row.totalAmount || 0)} | Còn lại: ${formatPrice(remaining)}</div>
+                                    <div class="admin-payment-meta">Số xuất: ${row.quantity} </br> Tổng tiền: ${formatPrice(row.totalAmount || 0)}</div>
                                 </div>
                                 <div class="admin-payment-actions">
-                                    <button class="btn-warning btn-small" onclick="markCashPaid('${encodeURIComponent(row.name)}', ${remaining})">Đã thu tiền mặt</button>
+                                    <button class="btn-warning btn-small" onclick="markCashPaid('${encodeURIComponent(row.name)}', ${remaining})">Đã thanh toán</button>
                                 </div>
                             </div>
                         `;
