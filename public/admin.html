@@ -473,42 +473,6 @@
             border-radius: 8px;
         }
 
-        .inline-edit-name {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .edit-icon-btn {
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            border: 1px solid #d9c7b2;
-            background: #fff;
-            color: #8B7355;
-            font-size: 14px;
-            cursor: pointer;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.2s ease;
-        }
-
-        .edit-icon-btn:hover {
-            background: #f3eadc;
-            color: #6f5a40;
-            transform: translateY(-1px);
-        }
-
-        .inline-name-input {
-            min-width: 180px;
-            padding: 6px 10px;
-            border: 1px solid #d9c7b2;
-            border-radius: 8px;
-            color: #8B7355;
-            font-weight: 600;
-        }
-
         .quick-debt-list {
             margin-bottom: 16px;
         }
@@ -582,6 +546,49 @@
         .payment-toolbar .btn-secondary {
             min-width: 140px;
             letter-spacing: 0.3px;
+        }
+
+
+        .day-chip {
+            border: 1px solid #d9c7b2;
+            background: #fff;
+            color: #8B7355;
+            border-radius: 999px;
+            padding: 8px 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .day-chip.active {
+            background: #A0826D;
+            color: #fff;
+            border-color: #A0826D;
+        }
+
+        .order-edit-grid {
+            display: grid;
+            gap: 10px;
+        }
+
+        .edit-icon-btn {
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            border: 1px solid #b79674;
+            background: #A0826D;
+            color: #fff;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 15px;
+            transition: all 0.2s ease;
+        }
+
+        .edit-icon-btn:hover {
+            background: #8B7355;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 10px rgba(160, 130, 109, 0.35);
         }
 
         @media (max-width: 768px) {
@@ -995,8 +1002,12 @@
         <div id="payments" class="tab-content">
             <div class="section">
                 <h2>QUẢN LÝ THANH TOÁN</h2>
+                <div class="button-group" style="margin:0 0 10px 0;">
+                    <button id="paymentDebtViewBtn" class="btn-primary" onclick="switchPaymentView('debt')">CÔNG NỢ CẦN THU</button>
+                    <button id="paymentHistoryViewBtn" class="btn-secondary" onclick="switchPaymentView('history')">LỊCH SỬ THANH TOÁN</button>
+                </div>
+                <h3 style="color:#8B7355; margin-bottom:10px;" id="paymentListTitle">Danh sách công nợ đặt cơm</h3>
                 <div class="quick-debt-list" id="paymentDebtSection">
-                    <div class="button-group" style="margin:0 0 10px 0;"><button id="paymentDebtViewBtn" class="btn-primary" onclick="switchPaymentView('debt')">CÔNG NỢ CẦN THU</button><button id="paymentHistoryViewBtn" class="btn-secondary" onclick="switchPaymentView('history')">LỊCH SỬ THANH TOÁN</button></div><h3 style="color:#8B7355; margin-bottom:10px;" id="paymentListTitle">Danh sách công nợ đặt cơm</h3>
                     <div id="adminDebtSummaryList" class="loading">Đang tải...</div>
                 </div>
                 <div class="payment-filter-panel" id="paymentHistorySection" style="display:none;">
@@ -1034,11 +1045,38 @@
             <div id="dayModalContent"></div>
         </div>
     </div>
+    <!-- Modal chỉnh sửa đơn đặt cơm -->
+    <div id="orderEditModal" class="modal">
+        <div class="modal-content" style="max-width:520px;">
+            <span class="close" onclick="closeOrderEditModal()">&times;</span>
+            <h2>CHỈNH SỬA ĐƠN ĐẶT CƠM</h2>
+            <div class="order-edit-grid">
+                <div class="form-group">
+                    <label for="editOrderName">Tên khách</label>
+                    <input id="editOrderName" type="text">
+                </div>
+                <div class="form-group">
+                    <label for="editOrderQuantity">Số lượng xuất</label>
+                    <input id="editOrderQuantity" type="number" min="1">
+                </div>
+                <div class="form-group">
+                    <label for="editOrderDescription">Mô tả / Ghi chú</label>
+                    <textarea id="editOrderDescription" rows="3"></textarea>
+                </div>
+                <div class="button-group" style="margin-top:0;">
+                    <button class="btn-primary" onclick="saveOrderEdit()">Lưu</button>
+                    <button class="btn-danger" onclick="deleteOrderFromModal()">Xóa</button>
+                    <button class="btn-secondary" onclick="closeOrderEditModal()">Hủy</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <script>
         const API_BASE = '';
         let currentHistoryDetailDate = '';
         let currentPaymentView = 'debt';
+        let editingOrderId = 0;
 
         function switchTab(tab, event) {
             // Hide all tabs
@@ -1179,35 +1217,6 @@
             .catch(err => showMessage('todayMessage', 'Lỗi: ' + err.message, 'error'));
         }
 
-        function loadTodayOrders() {
-            fetch(`${API_BASE}/api/orders/today`)
-                .then(res => res.json())
-                .then(orders => {
-                    const ordersList = document.getElementById('todayOrdersList');
-                    if (orders.length === 0) {
-                        ordersList.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">Chưa có đơn hàng</div>';
-                    } else {
-                        ordersList.innerHTML = orders.map(order => {
-                            const time = new Date(order.created_at).toLocaleTimeString('vi-VN');
-                            return `
-                                <div class="order-row">
-                                    <div class="order-info">
-                                        <div class="order-name">${order.name}</div>
-                                        <div class="order-details">
-                                            Số lượng: ${order.quantity} xuất
-                                            ${order.description ? ` | Ghi chú: ${order.description}` : ''}
-                                            | ${time}
-                                        </div>
-                                    </div>
-                                    <button class="btn-danger btn-small" onclick="deleteOrder(${order.id})">Xóa</button>
-                                </div>
-                            `;
-                        }).join('');
-                    }
-                })
-                .catch(err => console.error('Lỗi:', err));
-        }
-
         let selectedOrderDate = '';
 
         function loadHistory() {
@@ -1240,8 +1249,8 @@
             }
 
             container.innerHTML = days.map((day) => {
-                const activeClass = day.date === selectedDate ? 'btn-primary' : 'btn-secondary';
-                return `<button class="${activeClass} btn-small" onclick="selectOrderDate('${day.date}')">${day.date.slice(5)} (${day.ordered || 0} xuất)</button>`;
+                const activeClass = day.date === selectedDate ? 'day-chip active' : 'day-chip';
+                return `<button class="${activeClass}" onclick="selectOrderDate('${day.date}')">${day.date.slice(5)} (${day.ordered || 0} xuất)</button>`;
             }).join('');
         }
 
@@ -1250,7 +1259,7 @@
             const selected = (days || []).find(d => d.date === selectedDate);
             const todayInfo = (days || []).find(d => d.date === today);
             const summary = document.getElementById('orderSummaryInfo');
-            summary.innerHTML = `Hôm nay: <strong>${today}</strong> | Tổng xuất hôm nay: <strong>${todayInfo?.ordered || 0}</strong> | Đang xem: <strong>${selectedDate}</strong> (${selected?.ordered || 0} xuất)`;
+            summary.innerHTML = `Tổng số xuất đặt trong hôm nay: <strong>${todayInfo?.ordered || 0}</strong>`;
         }
 
         function selectOrderDate(date) {
@@ -1292,8 +1301,7 @@
                                 <div class="order-details">Số lượng: ${order.quantity} xuất ${order.description ? '| Ghi chú: ' + order.description : ''}</div>
                             </div>
                             <div class="admin-payment-actions">
-                                <button class="btn-secondary btn-small" onclick="editOrder(${order.id}, '${encodeURIComponent(order.name)}', ${order.quantity}, '${encodeURIComponent(order.description || '')}')">Sửa</button>
-                                <button class="btn-danger btn-small" onclick="deleteOrder(${order.id}, '${date}')">Xóa</button>
+                                <button class="edit-icon-btn" title="Chỉnh sửa đơn" onclick="openOrderEditModal(${order.id}, '${encodeURIComponent(order.name)}', ${order.quantity}, '${encodeURIComponent(order.description || '')}', '${date}')">✏️</button>
                             </div>
                         </div>
                     `).join('');
@@ -1303,37 +1311,49 @@
                 });
         }
 
-        function editOrder(orderId, encodedName, quantity, encodedDescription) {
-            const oldName = decodeURIComponent(encodedName || '');
-            const oldDescription = decodeURIComponent(encodedDescription || '');
-            const newName = normalizeCustomerName(prompt('Sửa tên khách:', oldName) || '');
-            if (!newName) {
-                alert('Tên không hợp lệ.');
+        function openOrderEditModal(orderId, encodedName, quantity, encodedDescription, date) {
+            editingOrderId = Number(orderId || 0);
+            currentHistoryDetailDate = date || currentHistoryDetailDate;
+            document.getElementById('editOrderName').value = decodeURIComponent(encodedName || '');
+            document.getElementById('editOrderQuantity').value = Number(quantity || 1);
+            document.getElementById('editOrderDescription').value = decodeURIComponent(encodedDescription || '');
+            document.getElementById('orderEditModal').style.display = 'block';
+        }
+
+        function closeOrderEditModal() {
+            document.getElementById('orderEditModal').style.display = 'none';
+            editingOrderId = 0;
+        }
+
+        function saveOrderEdit() {
+            if (!editingOrderId) return;
+            const name = normalizeCustomerName(document.getElementById('editOrderName').value);
+            const quantity = Number(document.getElementById('editOrderQuantity').value || 0);
+            const description = document.getElementById('editOrderDescription').value || '';
+
+            if (!name || !Number.isFinite(quantity) || quantity <= 0) {
+                alert('Vui lòng nhập tên và số lượng hợp lệ.');
                 return;
             }
 
-            const newQuantity = Number(prompt('Sửa số lượng xuất:', quantity) || 0);
-            if (!Number.isFinite(newQuantity) || newQuantity <= 0) {
-                alert('Số lượng không hợp lệ.');
-                return;
-            }
-
-            const newDescriptionRaw = prompt('Sửa ghi chú (có thể để trống):', oldDescription);
-            if (newDescriptionRaw === null) {
-                return;
-            }
-
-            fetch(`${API_BASE}/api/admin/orders/${orderId}`, {
+            fetch(`${API_BASE}/api/admin/orders/${editingOrderId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: newName, quantity: newQuantity, description: newDescriptionRaw })
+                body: JSON.stringify({ name, quantity, description })
             })
                 .then(res => res.json())
                 .then(data => {
                     if (data.error) throw new Error(data.error);
+                    closeOrderEditModal();
                     loadHistory();
                 })
                 .catch(err => alert('Lỗi sửa đơn: ' + err.message));
+        }
+
+        function deleteOrderFromModal() {
+            if (!editingOrderId) return;
+            deleteOrder(editingOrderId, currentHistoryDetailDate, true);
+            closeOrderEditModal();
         }
 
         function showDayDetail(date) {
@@ -1413,7 +1433,6 @@
                                 </div>
                                 <div class="admin-payment-actions">
                                     <button class="btn-warning btn-small" onclick="markCashPaid('${encodeURIComponent(row.name)}', ${remaining})">Đã thu tiền mặt</button>
-                                    <button class="btn-secondary btn-small" onclick="renameCustomer('${encodeURIComponent(row.name)}')">Đổi tên</button>
                                 </div>
                             </div>
                         `;
@@ -1477,7 +1496,6 @@
                                 </div>
                                 <div class="admin-payment-actions">
                                     ${canManualPaid ? `<button class="btn-warning btn-small" onclick="markPaidManual(${row.order_code}, '${encodeURIComponent(row.customer_name || '')}')">Chuyển Paid</button>` : ''}
-                                    <button class="btn-secondary btn-small" onclick="renameCustomer('${encodeURIComponent(row.customer_name || '')}')">Đổi tên</button>
                                 </div>
                             </div>
                         `;
@@ -1550,97 +1568,6 @@
                 .catch(err => alert('Lỗi cập nhật tiền mặt: ' + err.message));
         }
 
-        function enableInlineRename(encodedOldName) {
-            const oldName = decodeURIComponent(encodedOldName || '');
-            const wrap = document.getElementById(`inline-name-wrap-${encodedOldName}`);
-            const textEl = document.getElementById(`inline-name-text-${encodedOldName}`);
-            if (!wrap || !textEl) return;
-
-            wrap.innerHTML = `
-                <input class="inline-name-input" id="inline-name-input-${encodedOldName}" value="${oldName.replace(/"/g, '&quot;')}">
-                <button class="edit-icon-btn" title="Lưu" onclick="saveInlineRename('${encodedOldName}')">✅</button>
-                <button class="edit-icon-btn" title="Huỷ" onclick="cancelInlineRename('${encodedOldName}', '${encodeURIComponent(oldName)}')">✖</button>
-            `;
-        }
-
-        function cancelInlineRename(encodedOldName, encodedValue) {
-            const oldName = decodeURIComponent(encodedValue || '');
-            const wrap = document.getElementById(`inline-name-wrap-${encodedOldName}`);
-            if (!wrap) return;
-
-            wrap.innerHTML = `
-                <strong style="color:#A0826D" id="inline-name-text-${encodedOldName}">${oldName}</strong>
-                <button class="edit-icon-btn" title="Sửa tên" onclick="enableInlineRename('${encodedOldName}')">✏️</button>
-            `;
-        }
-
-        function saveInlineRename(encodedOldName) {
-            const input = document.getElementById(`inline-name-input-${encodedOldName}`);
-            const oldName = decodeURIComponent(encodedOldName || '');
-            if (!input) return;
-
-            const newName = normalizeCustomerName(input.value);
-            if (!newName) {
-                alert('Tên mới không hợp lệ.');
-                return;
-            }
-
-            fetch(`${API_BASE}/api/admin/customers/rename`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ oldName, newName })
-            })
-                .then(res => res.json())
-                .then(data => {
-                    if (data.error) {
-                        throw new Error(data.error);
-                    }
-
-                    loadHistory();
-                    loadDebtSummary();
-                    loadAdminPayments();
-                    if (currentHistoryDetailDate) {
-                        showDayDetail(currentHistoryDetailDate);
-                    }
-                })
-                .catch(err => alert('Lỗi cập nhật tên: ' + err.message));
-        }
-
-        function renameCustomer(encodedOldName) {
-            const oldName = decodeURIComponent(encodedOldName || '');
-            const newNameRaw = prompt(`Sửa tên khách từ "${oldName}" thành:`);
-            if (newNameRaw === null) {
-                return;
-            }
-
-            const newName = normalizeCustomerName(newNameRaw);
-            if (!newName) {
-                alert('Tên mới không hợp lệ.');
-                return;
-            }
-
-            fetch(`${API_BASE}/api/admin/customers/rename`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ oldName, newName })
-            })
-                .then(res => res.json())
-                .then(data => {
-                    if (data.error) {
-                        throw new Error(data.error);
-                    }
-
-                    alert(`Đã cập nhật tên thành công!
-Orders: ${data.updatedOrders}
-Yêu cầu thanh toán: ${data.updatedPaymentRequests}
-Lịch sử thanh toán: ${data.updatedPaymentTransactions}`);
-                    loadHistory();
-                    loadDebtSummary();
-                    loadAdminPayments();
-                })
-                .catch(err => alert('Lỗi cập nhật tên: ' + err.message));
-        }
-
         function normalizeCustomerName(name) {
             const compact = (name || '').trim().replace(/\s+/g, ' ');
             if (!compact) {
@@ -1690,8 +1617,8 @@ Lịch sử thanh toán: ${data.updatedPaymentTransactions}`);
             element.innerHTML = `<div class="${className}">${message}</div>`;
         }
 
-        function deleteOrder(orderId, date) {
-            if (!confirm('Bạn có chắc chắn muốn xóa đơn hàng này?')) {
+        function deleteOrder(orderId, date, skipConfirm = false) {
+            if (!skipConfirm && !confirm('Bạn có chắc chắn muốn xóa đơn hàng này?')) {
                 return;
             }
 
@@ -1712,8 +1639,12 @@ Lịch sử thanh toán: ${data.updatedPaymentTransactions}`);
 
         window.addEventListener('click', (e) => {
             const modal = document.getElementById('dayModal');
+            const editModal = document.getElementById('orderEditModal');
             if (e.target === modal) {
                 modal.style.display = 'none';
+            }
+            if (e.target === editModal) {
+                editModal.style.display = 'none';
             }
         });
 
