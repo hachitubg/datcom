@@ -123,11 +123,12 @@
                             <option value="today">Hôm nay</option>
                             <option value="date">Theo ngày</option>
                             <option value="month">Theo tháng</option>
+                            <option value="range">Từ ngày → tới ngày</option>
                         </select>
                         <input type="date" id="paymentDateFilter" style="display:none;">
                         <input type="month" id="paymentMonthFilter" style="display:none;">
-                        <input type="date" id="paymentFromDateFilter" title="Từ ngày">
-                        <input type="date" id="paymentToDateFilter" title="Tới ngày">
+                        <input type="date" id="paymentFromDateFilter" style="display:none;" title="Từ ngày">
+                        <input type="date" id="paymentToDateFilter" style="display:none;" title="Tới ngày">
                         <select id="paymentStatusFilter">
                             <option value="all">Tất cả trạng thái</option>
                             <option value="PENDING">Đang chờ</option>
@@ -532,9 +533,14 @@
             const period = document.getElementById('paymentPeriodFilter').value;
             const dateInput = document.getElementById('paymentDateFilter');
             const monthInput = document.getElementById('paymentMonthFilter');
+            const fromDateInput = document.getElementById('paymentFromDateFilter');
+            const toDateInput = document.getElementById('paymentToDateFilter');
 
             dateInput.style.display = period === 'date' ? 'block' : 'none';
             monthInput.style.display = period === 'month' ? 'block' : 'none';
+            const showRange = period === 'range';
+            fromDateInput.style.display = showRange ? 'block' : 'none';
+            toDateInput.style.display = showRange ? 'block' : 'none';
         }
 
         function resetPaymentFilters() {
@@ -644,7 +650,12 @@
                 return;
             }
 
-            if (fromDate && toDate && fromDate > toDate) {
+            if (period === 'range' && (!fromDate || !toDate)) {
+                alert('Vui lòng chọn đủ Từ ngày và Tới ngày');
+                return;
+            }
+
+            if (period === 'range' && fromDate > toDate) {
                 alert('Khoảng ngày không hợp lệ (Từ ngày phải nhỏ hơn hoặc bằng Tới ngày)');
                 return;
             }
@@ -655,8 +666,8 @@
             if (date) params.set('date', date);
             if (month) params.set('month', month);
             if (status) params.set('status', status);
-            if (fromDate) params.set('fromDate', fromDate);
-            if (toDate) params.set('toDate', toDate);
+            if (period === 'range' && fromDate) params.set('fromDate', fromDate);
+            if (period === 'range' && toDate) params.set('toDate', toDate);
 
             container.innerHTML = '<div class="loading">Đang tải...</div>';
             const url = `${API_BASE}/api/payments/history?${params.toString()}`;
