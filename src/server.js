@@ -359,6 +359,21 @@ app.get('/api/payments/today', (req, res) => {
   });
 });
 
+app.get('/api/admin/customers/:name/orders', (req, res) => {
+  const customerName = normalizeName(decodeURIComponent(req.params.name || ''));
+  if (!customerName) {
+    return res.status(400).json({ error: 'Thiếu tên khách hàng hợp lệ' });
+  }
+
+  db.getCustomerOrderDetails(customerName, (err, rows) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+
+    res.json({ customerName, rows });
+  });
+});
+
 // Tạo QR thanh toán cho khách hàng hôm nay
 app.post('/api/payments/create', async (req, res) => {
   const name = normalizeName(req.body.name);
@@ -521,6 +536,8 @@ app.get('/api/payments/history', (req, res) => {
     period: (req.query.period || 'all').toString(),
     date: (req.query.date || '').toString(),
     month: (req.query.month || '').toString(),
+    fromDate: (req.query.fromDate || '').toString(),
+    toDate: (req.query.toDate || '').toString(),
     status: (req.query.status || 'all').toString()
   };
 

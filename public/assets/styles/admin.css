@@ -544,6 +544,26 @@
         }
 
 
+        .payment-name-link {
+            cursor: pointer;
+            text-decoration: underline;
+        }
+
+        .pagination-wrap {
+            margin-top: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 10px;
+            color: #8B7355;
+            font-size: 13px;
+        }
+
+        .pagination-wrap button[disabled] {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
         .day-chip {
             border: 1px solid #d9c7b2;
             background: #fff;

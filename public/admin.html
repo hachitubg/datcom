@@ -117,6 +117,8 @@
                         </select>
                         <input type="date" id="paymentDateFilter" style="display:none;">
                         <input type="month" id="paymentMonthFilter" style="display:none;">
+                        <input type="date" id="paymentFromDateFilter" title="Từ ngày">
+                        <input type="date" id="paymentToDateFilter" title="Tới ngày">
                         <select id="paymentStatusFilter">
                             <option value="all">Tất cả trạng thái</option>
                             <option value="PENDING">Đang chờ</option>
@@ -130,6 +132,15 @@
                 </div>
                 <div id="adminPaymentList" class="loading" style="display:none;">Đang tải...</div>
             </div>
+        </div>
+    </div>
+
+    <!-- Modal chi tiết đặt cơm theo khách -->
+    <div id="customerOrderModal" class="modal">
+        <div class="modal-content" style="max-width:640px;">
+            <span class="close" onclick="closeCustomerOrderModal()">&times;</span>
+            <h2 id="customerOrderModalTitle">CHI TIẾT ĐẶT CƠM</h2>
+            <div id="customerOrderModalContent"></div>
         </div>
     </div>
 
@@ -174,6 +185,14 @@
         let currentHistoryDetailDate = '';
         let currentPaymentView = 'debt';
         let editingOrderId = 0;
+
+        const PAGE_SIZE = 10;
+        let historyOrders = [];
+        let historyCurrentPage = 1;
+        let debtRows = [];
+        let debtCurrentPage = 1;
+        let paymentRows = [];
+        let paymentCurrentPage = 1;
 
         function switchTab(tab, event) {
             // Hide all tabs
@@ -338,11 +357,9 @@
         }
 
         function updateOrderSummary(days, selectedDate) {
-            const today = new Date().toISOString().slice(0, 10);
             const selected = (days || []).find(d => d.date === selectedDate);
-            const todayInfo = (days || []).find(d => d.date === today);
             const summary = document.getElementById('orderSummaryInfo');
-            summary.innerHTML = `Tổng số xuất đặt trong hôm nay: <strong>${todayInfo?.ordered || 0}</strong>`;
+            summary.innerHTML = `Tổng số xuất ngày <strong>${selectedDate}</strong>: <strong>${selected?.ordered || 0}</strong>`;
         }
 
         function selectOrderDate(date) {
@@ -371,29 +388,42 @@
                 .then(res => res.json())
                 .then(data => {
                     if (data.error) throw new Error(data.error);
-                    const orders = data.orders || [];
-                    if (!orders.length) {
-                        list.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">Không có đơn hàng trong ngày này.</div>';
-                        return;
-                    }
-
-                    list.innerHTML = orders.map((order) => `
-                        <div class="order-row">
-                            <div class="order-info">
-                                <div class="order-name">${order.name}</div>
-                                <div class="order-details">Số lượng: ${order.quantity} xuất ${order.description ? '</br> Ghi chú: ' + order.description : ''}</div>
-                            </div>
-                            <div class="admin-payment-actions">
-                                <button class="edit-icon-btn" title="Chỉnh sửa đơn" onclick="openOrderEditModal(${order.id}, '${encodeURIComponent(order.name)}', ${order.quantity}, '${encodeURIComponent(order.description || '')}', '${date}')">✏️</button>
-                            </div>
-                        </div>
-                    `).join('');
+                    historyOrders = (data.orders || []);
+                    historyCurrentPage = 1;
+                    renderHistoryOrders();
                 })
                 .catch(err => {
                     list.innerHTML = `<div style="padding:20px; color:red; text-align:center;">Lỗi: ${err.message}</div>`;
                 });
         }
 
+        function renderHistoryOrders() {
+            const list = document.getElementById('historyList');
+            if (!historyOrders.length) {
+                list.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">Không có đơn hàng trong ngày này.</div>';
+                return;
+            }
+
+            const totalPages = Math.ceil(historyOrders.length / PAGE_SIZE);
+            if (historyCurrentPage > totalPages) historyCurrentPage = totalPages;
+            const startIndex = (historyCurrentPage - 1) * PAGE_SIZE;
+            const pageRows = historyOrders.slice(startIndex, startIndex + PAGE_SIZE);
+
+            const rowsHtml = pageRows.map((order) => `
+                <div class="order-row">
+                    <div class="order-info">
+                        <div class="order-name">${order.name}</div>
+                        <div class="order-details">Số lượng: ${order.quantity} xuất ${order.description ? '</br> Ghi chú: ' + order.description : ''}</div>
+                        <div class="admin-payment-meta">Thời gian đặt: ${order.created_at || '-'}</div>
+                    </div>
+                    <div class="admin-payment-actions">
+                        <button class="edit-icon-btn" title="Chỉnh sửa đơn" onclick="openOrderEditModal(${order.id}, '${encodeURIComponent(order.name)}', ${order.quantity}, '${encodeURIComponent(order.description || '')}', '${currentHistoryDetailDate}')">✏️</button>
+                    </div>
+                </div>
+            `).join('');
+
+            list.innerHTML = rowsHtml + renderPaginationControls('historyCurrentPage', historyCurrentPage, totalPages, 'renderHistoryOrders');
+        }
         function openOrderEditModal(orderId, encodedName, quantity, encodedDescription, date) {
             editingOrderId = Number(orderId || 0);
             currentHistoryDetailDate = date || currentHistoryDetailDate;
@@ -462,6 +492,8 @@
             document.getElementById('paymentDateFilter').value = '';
             document.getElementById('paymentMonthFilter').value = '';
             document.getElementById('paymentStatusFilter').value = 'all';
+            document.getElementById('paymentFromDateFilter').value = '';
+            document.getElementById('paymentToDateFilter').value = '';
             togglePaymentDateInputs();
             loadAdminPayments();
         }
@@ -501,29 +533,43 @@
             fetch(`${API_BASE}/api/payments/today`)
                 .then(res => res.json())
                 .then(rows => {
-                    if (!rows || rows.length === 0) {
-                        container.innerHTML = '<div style="padding: 14px; color:#999; text-align:center;">Không có công nợ cần xử lý.</div>';
-                        return;
-                    }
-
-                    container.innerHTML = rows.map((row) => {
-                        const remaining = Number(row.remainingAmount || 0);
-                        return `
-                            <div class="admin-payment-row">
-                                <div>
-                                    <div class="order-name">${row.name}</div>
-                                    <div class="admin-payment-meta">Số xuất: ${row.quantity} </br> Tổng tiền: ${AppUtils.formatCurrency(row.totalAmount || 0)}</div>
-                                </div>
-                                <div class="admin-payment-actions">
-                                    <button class="btn-warning btn-small" onclick="markCashPaid('${encodeURIComponent(row.name)}', ${remaining})">Đã thanh toán</button>
-                                </div>
-                            </div>
-                        `;
-                    }).join('');
+                    debtRows = rows || [];
+                    debtCurrentPage = 1;
+                    renderDebtSummary();
                 })
                 .catch(err => {
                     container.innerHTML = `<div style="padding: 14px; color:red; text-align:center;">Lỗi tải công nợ: ${err.message}</div>`;
                 });
+        }
+
+        function renderDebtSummary() {
+            const container = document.getElementById('adminDebtSummaryList');
+            if (!debtRows.length) {
+                container.innerHTML = '<div style="padding: 14px; color:#999; text-align:center;">Không có công nợ cần xử lý.</div>';
+                return;
+            }
+
+            const totalPages = Math.ceil(debtRows.length / PAGE_SIZE);
+            if (debtCurrentPage > totalPages) debtCurrentPage = totalPages;
+            const startIndex = (debtCurrentPage - 1) * PAGE_SIZE;
+            const pageRows = debtRows.slice(startIndex, startIndex + PAGE_SIZE);
+
+            const rowsHtml = pageRows.map((row) => {
+                const remaining = Number(row.remainingAmount || 0);
+                return `
+                    <div class="admin-payment-row">
+                        <div>
+                            <div class="order-name payment-name-link" onclick="openCustomerOrderModal('${encodeURIComponent(row.name || '')}')">${row.name}</div>
+                            <div class="admin-payment-meta">Số xuất: ${row.quantity} </br> Tổng tiền: ${AppUtils.formatCurrency(row.totalAmount || 0)}</div>
+                        </div>
+                        <div class="admin-payment-actions">
+                            <button class="btn-warning btn-small" onclick="markCashPaid('${encodeURIComponent(row.name)}', ${remaining})">Đã thanh toán</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            container.innerHTML = rowsHtml + renderPaginationControls('debtCurrentPage', debtCurrentPage, totalPages, 'renderDebtSummary');
         }
 
         function loadAdminPayments() {
@@ -532,6 +578,8 @@
             const date = document.getElementById('paymentDateFilter').value;
             const month = document.getElementById('paymentMonthFilter').value;
             const status = document.getElementById('paymentStatusFilter').value;
+            const fromDate = document.getElementById('paymentFromDateFilter').value;
+            const toDate = document.getElementById('paymentToDateFilter').value;
             const container = document.getElementById('adminPaymentList');
             container.style.display = 'block';
 
@@ -545,12 +593,19 @@
                 return;
             }
 
+            if (fromDate && toDate && fromDate > toDate) {
+                alert('Khoảng ngày không hợp lệ (Từ ngày phải nhỏ hơn hoặc bằng Tới ngày)');
+                return;
+            }
+
             const params = new URLSearchParams();
             if (keyword) params.set('search', keyword);
             if (period) params.set('period', period);
             if (date) params.set('date', date);
             if (month) params.set('month', month);
             if (status) params.set('status', status);
+            if (fromDate) params.set('fromDate', fromDate);
+            if (toDate) params.set('toDate', toDate);
 
             container.innerHTML = '<div class="loading">Đang tải...</div>';
             const url = `${API_BASE}/api/payments/history?${params.toString()}`;
@@ -558,35 +613,96 @@
             fetch(url)
                 .then(res => res.json())
                 .then(rows => {
-                    if (!rows || rows.length === 0) {
-                        container.innerHTML = '<div style="padding: 16px; color: #999; text-align: center;">Không có giao dịch theo bộ lọc hiện tại.</div>';
-                        return;
-                    }
-
-                    container.innerHTML = rows.map((row) => {
-                        const statusText = String(row.request_status || 'PENDING').toUpperCase();
-                        const paidAmount = Number(row.paid_amount || 0);
-                        const amount = Number(row.request_amount || 0);
-                        const paidAt = row.latest_paid_at || row.request_updated_at || row.request_created_at;
-                        const canManualPaid = statusText === 'PENDING';
-                        return `
-                            <div class="admin-payment-row">
-                                <div>
-                                    <div class="order-name">${row.customer_name}</div>
-                                    <div class="admin-payment-meta">Ngày: ${row.date} | OrderCode: ${row.order_code} | Trạng thái: <strong>${statusText}</strong></div>
-                                    <div class="admin-payment-meta">Số tiền: ${AppUtils.formatCurrency(amount)} | Đã thanh toán: ${AppUtils.formatCurrency(paidAmount)} | Ref: ${row.latest_reference || row.payment_link_id || '-'}</div>
-                                    <div class="admin-payment-meta">Cập nhật: ${paidAt || '-'}</div>
-                                </div>
-                                <div class="admin-payment-actions">
-                                    ${canManualPaid ? `<button class="btn-warning btn-small" onclick="markPaidManual(${row.order_code}, '${encodeURIComponent(row.customer_name || '')}')">Chuyển Paid</button>` : ''}
-                                </div>
-                            </div>
-                        `;
-                    }).join('');
+                    paymentRows = rows || [];
+                    paymentCurrentPage = 1;
+                    renderPaymentHistory();
                 })
                 .catch(err => {
                     container.innerHTML = `<div style="padding: 16px; color: red; text-align: center;">Lỗi tải dữ liệu: ${err.message}</div>`;
                 });
+        }
+
+        function renderPaymentHistory() {
+            const container = document.getElementById('adminPaymentList');
+            if (!paymentRows.length) {
+                container.innerHTML = '<div style="padding: 16px; color: #999; text-align: center;">Không có giao dịch theo bộ lọc hiện tại.</div>';
+                return;
+            }
+
+            const totalPages = Math.ceil(paymentRows.length / PAGE_SIZE);
+            if (paymentCurrentPage > totalPages) paymentCurrentPage = totalPages;
+            const startIndex = (paymentCurrentPage - 1) * PAGE_SIZE;
+            const pageRows = paymentRows.slice(startIndex, startIndex + PAGE_SIZE);
+
+            const rowsHtml = pageRows.map((row) => {
+                const statusText = String(row.request_status || 'PENDING').toUpperCase();
+                const paidAmount = Number(row.paid_amount || 0);
+                const amount = Number(row.request_amount || 0);
+                const paidAt = row.latest_paid_at || row.request_updated_at || row.request_created_at;
+                const canManualPaid = statusText === 'PENDING';
+                return `
+                    <div class="admin-payment-row">
+                        <div>
+                            <div class="order-name">${row.customer_name}</div>
+                            <div class="admin-payment-meta">Ngày: ${row.date} | OrderCode: ${row.order_code} | Trạng thái: <strong>${statusText}</strong></div>
+                            <div class="admin-payment-meta">Số tiền: ${AppUtils.formatCurrency(amount)} | Đã thanh toán: ${AppUtils.formatCurrency(paidAmount)} | Ref: ${row.latest_reference || row.payment_link_id || '-'}</div>
+                            <div class="admin-payment-meta">Cập nhật: ${paidAt || '-'}</div>
+                        </div>
+                        <div class="admin-payment-actions">
+                            ${canManualPaid ? `<button class="btn-warning btn-small" onclick="markPaidManual(${row.order_code}, '${encodeURIComponent(row.customer_name || '')}')">Chuyển Paid</button>` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            container.innerHTML = rowsHtml + renderPaginationControls('paymentCurrentPage', paymentCurrentPage, totalPages, 'renderPaymentHistory');
+        }
+
+        function renderPaginationControls(pageVarName, currentPage, totalPages, renderFnName) {
+            if (totalPages <= 1) return '';
+            return `
+                <div class="pagination-wrap">
+                    <button class="btn-secondary btn-small" ${currentPage <= 1 ? 'disabled' : ''} onclick="${pageVarName}=${currentPage - 1};${renderFnName}()">Trước</button>
+                    <span>Trang ${currentPage}/${totalPages}</span>
+                    <button class="btn-secondary btn-small" ${currentPage >= totalPages ? 'disabled' : ''} onclick="${pageVarName}=${currentPage + 1};${renderFnName}()">Sau</button>
+                </div>
+            `;
+        }
+
+        function openCustomerOrderModal(encodedName) {
+            const customerName = decodeURIComponent(encodedName || '');
+            if (!customerName) return;
+
+            document.getElementById('customerOrderModalTitle').textContent = `CHI TIẾT ĐẶT CƠM - ${customerName}`;
+            const content = document.getElementById('customerOrderModalContent');
+            content.innerHTML = '<div class="loading">Đang tải...</div>';
+            document.getElementById('customerOrderModal').style.display = 'block';
+
+            fetch(`${API_BASE}/api/admin/customers/${encodeURIComponent(customerName)}/orders`)
+                .then(res => res.json())
+                .then(data => {
+                    const rows = data.rows || [];
+                    if (!rows.length) {
+                        content.innerHTML = '<div style="padding: 12px; color:#999;">Không có dữ liệu đặt cơm của khách này.</div>';
+                        return;
+                    }
+
+                    content.innerHTML = rows.map((row) => `
+                        <div class="day-modal-order-item">
+                            <div><strong>Ngày:</strong> ${row.date}</div>
+                            <div><strong>Số xuất:</strong> ${row.quantity}</div>
+                            <div><strong>Tổng tiền:</strong> ${AppUtils.formatCurrency(row.totalAmount || 0)}</div>
+                            <div><strong>Lần đặt gần nhất:</strong> ${row.latestOrderTime || '-'}</div>
+                        </div>
+                    `).join('');
+                })
+                .catch(err => {
+                    content.innerHTML = `<div style="padding: 12px; color:red;">Lỗi tải chi tiết: ${err.message}</div>`;
+                });
+        }
+
+        function closeCustomerOrderModal() {
+            document.getElementById('customerOrderModal').style.display = 'none';
         }
 
         function markPaidManual(orderCode, encodedName) {
@@ -705,11 +821,15 @@
         window.addEventListener('click', (e) => {
             const modal = document.getElementById('dayModal');
             const editModal = document.getElementById('orderEditModal');
+            const customerModal = document.getElementById('customerOrderModal');
             if (e.target === modal) {
                 modal.style.display = 'none';
             }
             if (e.target === editModal) {
                 editModal.style.display = 'none';
+            }
+            if (e.target === customerModal) {
+                customerModal.style.display = 'none';
             }
         });
 
