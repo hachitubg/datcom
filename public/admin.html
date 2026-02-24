@@ -7,15 +7,6 @@
     <link rel="stylesheet" href="/assets/styles/admin.css">
 </head>
 <body>
-    <div id="adminAuthGate" class="admin-auth-overlay">
-        <div class="admin-auth-card">
-            <h2>Đăng nhập Admin</h2>
-            <p>Vui lòng nhập mật khẩu để truy cập trang quản trị.</p>
-            <input id="adminPasswordInput" type="password" placeholder="Nhập mật khẩu admin">
-            <div id="adminAuthMessage" class="admin-auth-message"></div>
-            <button class="btn-primary" type="button" onclick="verifyAdminPassword()">VÀO TRANG QUẢN TRỊ</button>
-        </div>
-    </div>
     <div class="container">
         <header>
             <h1>QUẢN LÝ CƠM ONLINE</h1>
@@ -203,48 +194,6 @@
         let debtCurrentPage = 1;
         let paymentRows = [];
         let paymentCurrentPage = 1;
-
-        const ADMIN_PASSWORD = 'hachitu';
-        const ADMIN_AUTH_KEY = 'admin-auth-ok';
-
-        function verifyAdminPassword() {
-            const input = document.getElementById('adminPasswordInput');
-            const message = document.getElementById('adminAuthMessage');
-            const value = (input.value || '').trim();
-
-            if (value !== ADMIN_PASSWORD) {
-                message.textContent = 'Mật khẩu chưa đúng. Vui lòng thử lại.';
-                input.focus();
-                return;
-            }
-
-            sessionStorage.setItem(ADMIN_AUTH_KEY, '1');
-            message.textContent = '';
-            document.getElementById('adminAuthGate').style.display = 'none';
-            loadTodayInfo();
-            loadHistory();
-            switchPaymentView('debt');
-        }
-
-        function initAdminAuth() {
-            const isAuth = sessionStorage.getItem(ADMIN_AUTH_KEY) === '1';
-            const gate = document.getElementById('adminAuthGate');
-            const input = document.getElementById('adminPasswordInput');
-            if (isAuth) {
-                gate.style.display = 'none';
-                return true;
-            }
-
-            gate.style.display = 'flex';
-            setTimeout(() => input.focus(), 50);
-            input.addEventListener('keydown', (event) => {
-                if (event.key === 'Enter') {
-                    event.preventDefault();
-                    verifyAdminPassword();
-                }
-            });
-            return false;
-        }
 
         function switchTab(tab, event) {
             // Hide all tabs
@@ -896,14 +845,10 @@
         });
 
         // Load today info on page load
-        if (initAdminAuth()) {
-            loadTodayInfo();
-            loadHistory();
-            togglePaymentDateInputs();
-            switchPaymentView('debt');
-        } else {
-            togglePaymentDateInputs();
-        }
+        loadTodayInfo();
+        loadHistory();
+        togglePaymentDateInputs();
+        switchPaymentView('debt');
     </script>
 </body>
 </html>
