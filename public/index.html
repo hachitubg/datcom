@@ -9,6 +9,9 @@
 <body>
     <div class="container">
         <header>
+            <div class="header-tools">
+                <a href="/admin" class="admin-link">Admin</a>
+            </div>
             <h1>CƠM CÔ GIANG</h1>
             <p class="subtitle">Chào mọi người đã tới với tiệm cơm nhỏ của mẹ em, cảm ơn mọi người rất nhiều vì đã ủng hộ. Nếu vấn đề gì mọi người cứ góp ý cho em nhé ^^</p>
         </header>
@@ -61,12 +64,21 @@
                 <div class="countdown-text">Đã có <span id="orderedCount">0</span> xuất được đặt</div>
             </div>
 
+            <div class="quick-actions-hint">
+                <span>💡 Mẹo: Bấm <strong>ĐẶT CƠM</strong> để đặt nhanh, hoặc <strong>THANH TOÁN</strong> để thanh toán nợ hiện tại.</span>
+            </div>
+
             <div class="buttons-group">
                 <button class="btn-primary" id="btnOrder">ĐẶT CƠM</button>
                 <button class="btn-secondary" id="btnList">DANH SÁCH ĐƠN</button>
                 <button class="btn-secondary" id="btnPayment">THANH TOÁN</button>
             </div>
         </div>
+    </div>
+
+    <div class="mobile-action-bar">
+        <button class="btn-primary" id="mobileBtnOrder">Đặt cơm</button>
+        <button class="btn-secondary" id="mobileBtnPayment">Thanh toán</button>
     </div>
 
     <!-- Modal Đặt Cơm -->
@@ -156,6 +168,14 @@
         document.getElementById('btnPayment').addEventListener('click', () => {
             paymentModal.style.display = 'block';
             loadPaymentList();
+        });
+
+        document.getElementById('mobileBtnOrder').addEventListener('click', () => {
+            document.getElementById('btnOrder').click();
+        });
+
+        document.getElementById('mobileBtnPayment').addEventListener('click', () => {
+            document.getElementById('btnPayment').click();
         });
 
         document.getElementById('closePayment').addEventListener('click', () => {
@@ -454,10 +474,12 @@
                         orderBtn.disabled = true;
                         orderBtn.classList.add('disabled');
                         orderBtn.textContent = '❌ Hết xuất';
+                        document.getElementById('mobileBtnOrder').disabled = true;
                     } else {
                         orderBtn.disabled = false;
                         orderBtn.classList.remove('disabled');
                         orderBtn.textContent = 'ĐẶT CƠM';
+                        document.getElementById('mobileBtnOrder').disabled = false;
                     }
 
                     // Update max quantity
