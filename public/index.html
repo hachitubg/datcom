@@ -61,10 +61,6 @@
                 <div class="countdown-text">Đã có <span id="orderedCount">0</span> xuất được đặt</div>
             </div>
 
-            <div class="quick-actions-hint">
-                <span>💡 Mẹo: Bấm <strong>ĐẶT CƠM</strong> để đặt nhanh, hoặc <strong>THANH TOÁN</strong> để thanh toán nợ hiện tại.</span>
-            </div>
-
             <div class="buttons-group">
                 <button class="btn-primary" id="btnOrder">ĐẶT CƠM</button>
                 <button class="btn-secondary" id="btnList">DANH SÁCH ĐƠN</button>
@@ -75,6 +71,7 @@
 
     <div class="mobile-action-bar">
         <button class="btn-primary" id="mobileBtnOrder">Đặt cơm</button>
+        <button class="btn-secondary" id="mobileBtnList">Danh sách</button>
         <button class="btn-secondary" id="mobileBtnPayment">Thanh toán</button>
     </div>
 
@@ -173,6 +170,10 @@
 
         document.getElementById('mobileBtnPayment').addEventListener('click', () => {
             document.getElementById('btnPayment').click();
+        });
+
+        document.getElementById('mobileBtnList').addEventListener('click', () => {
+            document.getElementById('btnList').click();
         });
 
         document.getElementById('closePayment').addEventListener('click', () => {
