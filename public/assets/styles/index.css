@@ -63,6 +63,7 @@
             z-index: 1;
         }
 
+
         h1 {
             font-size: 42px;
             margin-bottom: 10px;
@@ -557,14 +558,42 @@
         }
 
 
+        .mobile-action-bar {
+            display: none;
+        }
+
+
         @media (max-width: 768px) {
             body {
                 padding: 12px;
+                padding-bottom: 84px;
             }
 
             .container {
                 border-radius: 12px;
             }
+
+            .mobile-action-bar {
+                position: fixed;
+                left: 10px;
+                right: 10px;
+                bottom: 10px;
+                z-index: 1200;
+                display: grid;
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+                gap: 8px;
+                background: rgba(254, 252, 249, 0.97);
+                border: 1px solid #ead8c3;
+                border-radius: 12px;
+                padding: 8px;
+                box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+            }
+
+            .mobile-action-bar button {
+                padding: 12px 8px;
+                font-size: 14px;
+            }
+
 
             header {
                 padding: 35px 16px;
@@ -666,9 +695,7 @@
             }
 
             .buttons-group {
-                flex-direction: column;
-                gap: 10px;
-                margin-top: 16px;
+                display: none;
             }
 
             button {

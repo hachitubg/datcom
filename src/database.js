@@ -242,7 +242,7 @@ class Database {
         } else {
           console.log('📦 Tìm thấy ngày:', date);
           this.db.all(
-            `SELECT id, name, quantity, description, created_at FROM orders WHERE day_id = ? ORDER BY created_at ASC`,
+            `SELECT id, name, quantity, description, created_at FROM orders WHERE day_id = ? ORDER BY created_at DESC, id DESC`,
             [dayRow.id],
             (err, orders) => {
               if (err) {
@@ -276,6 +276,41 @@ class Database {
             }
           );
         }
+      }
+    );
+  }
+
+  getCustomerOrderDetails(name, callback) {
+    const normalizedName = String(name || '').trim();
+    if (!normalizedName) {
+      callback(new Error('Thiếu tên khách hàng'));
+      return;
+    }
+
+    this.db.all(
+      `SELECT
+         d.date,
+         SUM(o.quantity) AS quantity,
+         SUM(o.quantity * d.price) AS total_amount,
+         MAX(o.created_at) AS latest_order_time
+       FROM orders o
+       JOIN days d ON d.id = o.day_id
+       WHERE LOWER(o.name) = LOWER(?)
+       GROUP BY d.date
+       ORDER BY d.date DESC`,
+      [normalizedName],
+      (err, rows = []) => {
+        if (err) {
+          callback(err);
+          return;
+        }
+
+        callback(null, rows.map((row) => ({
+          date: row.date,
+          quantity: Number(row.quantity || 0),
+          totalAmount: Number(row.total_amount || 0),
+          latestOrderTime: row.latest_order_time || ''
+        })));
       }
     );
   }
@@ -453,7 +488,7 @@ class Database {
       ${normalizedKeyword ? "AND LOWER(REPLACE(REPLACE(o.name, '''', ''), ' ', '')) LIKE ?" : ''}
       GROUP BY LOWER(o.name)
       HAVING SUM(o.quantity * d.price) > COALESCE(paid.total_paid, 0)
-      ORDER BY MIN(o.name) COLLATE NOCASE ASC
+      ORDER BY MAX(o.created_at) DESC, MIN(o.name) COLLATE NOCASE ASC
     `;
 
     this.db.all(sql, searchParams, (err, rows = []) => {
@@ -736,6 +771,8 @@ class Database {
     const status = String((normalizedFilters && normalizedFilters.status) || 'all').toUpperCase();
     const selectedDate = String((normalizedFilters && normalizedFilters.date) || '').trim();
     const selectedMonth = String((normalizedFilters && normalizedFilters.month) || '').trim();
+    const fromDate = String((normalizedFilters && normalizedFilters.fromDate) || '').trim();
+    const toDate = String((normalizedFilters && normalizedFilters.toDate) || '').trim();
 
     const whereClauses = ['1 = 1'];
     const params = [];
@@ -753,6 +790,16 @@ class Database {
     } else if (period === 'month' && selectedMonth) {
       whereClauses.push('SUBSTR(d.date, 1, 7) = ?');
       params.push(selectedMonth);
+    }
+
+    if (fromDate) {
+      whereClauses.push('d.date >= ?');
+      params.push(fromDate);
+    }
+
+    if (toDate) {
+      whereClauses.push('d.date <= ?');
+      params.push(toDate);
     }
 
     if (status && status !== 'ALL') {

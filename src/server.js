@@ -3,6 +3,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const path = require('path');
+const crypto = require('crypto');
 const Database = require('./database');
 const PayOSService = require('./payos');
 
@@ -62,11 +63,61 @@ app.post('/api/payments/webhook/payos',
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
+app.use((req, res, next) => {
+  if (req.path === '/admin.html') {
+    const token = getAdminSessionToken(req);
+    if (!token || !adminSessions.has(token)) {
+      return res.redirect('/admin-login');
+    }
+  }
+  next();
+});
 app.use(express.static('public'));
 
 // Khởi tạo database
 const db = new Database();
 const payos = new PayOSService();
+const ADMIN_PASSWORD = 'hachitu';
+const adminSessions = new Set();
+
+function parseCookies(req) {
+  const cookieHeader = req.headers.cookie || '';
+  const cookies = {};
+  cookieHeader.split(';').forEach((part) => {
+    const [rawKey, ...rawValueParts] = part.trim().split('=');
+    if (!rawKey) return;
+    cookies[rawKey] = decodeURIComponent(rawValueParts.join('='));
+  });
+  return cookies;
+}
+
+function getAdminSessionToken(req) {
+  const cookies = parseCookies(req);
+  return cookies.admin_session || '';
+}
+
+function requireAdminApiAuth(req, res, next) {
+  const token = getAdminSessionToken(req);
+  if (!token || !adminSessions.has(token)) {
+    return res.status(401).json({ error: 'UNAUTHORIZED_ADMIN' });
+  }
+  next();
+}
+
+function requireAdminPageAuth(req, res, next) {
+  const token = getAdminSessionToken(req);
+  if (!token || !adminSessions.has(token)) {
+    return res.redirect('/admin-login');
+  }
+  next();
+}
+
+app.use('/api/admin', (req, res, next) => {
+  if (req.path === '/login' || req.path === '/logout') {
+    return next();
+  }
+  return requireAdminApiAuth(req, res, next);
+});
 
 function normalizeName(name) {
   const compact = (name || '').trim().replace(/\s+/g, ' ');
@@ -359,6 +410,21 @@ app.get('/api/payments/today', (req, res) => {
   });
 });
 
+app.get('/api/admin/customers/:name/orders', (req, res) => {
+  const customerName = normalizeName(decodeURIComponent(req.params.name || ''));
+  if (!customerName) {
+    return res.status(400).json({ error: 'Thiếu tên khách hàng hợp lệ' });
+  }
+
+  db.getCustomerOrderDetails(customerName, (err, rows) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+
+    res.json({ customerName, rows });
+  });
+});
+
 // Tạo QR thanh toán cho khách hàng hôm nay
 app.post('/api/payments/create', async (req, res) => {
   const name = normalizeName(req.body.name);
@@ -521,6 +587,8 @@ app.get('/api/payments/history', (req, res) => {
     period: (req.query.period || 'all').toString(),
     date: (req.query.date || '').toString(),
     month: (req.query.month || '').toString(),
+    fromDate: (req.query.fromDate || '').toString(),
+    toDate: (req.query.toDate || '').toString(),
     status: (req.query.status || 'all').toString()
   };
 
@@ -538,8 +606,37 @@ app.get('/', (req, res) => {
 });
 
 // Serve trang admin
-app.get('/admin', (req, res) => {
+app.get('/admin', requireAdminPageAuth, (req, res) => {
   res.sendFile(path.join(__dirname, '../public/admin.html'));
+});
+
+app.get('/admin-login', (req, res) => {
+  const token = getAdminSessionToken(req);
+  if (token && adminSessions.has(token)) {
+    return res.redirect('/admin');
+  }
+  res.sendFile(path.join(__dirname, '../public/admin-login.html'));
+});
+
+app.post('/api/admin/login', (req, res) => {
+  const password = String(req.body.password || '');
+  if (password !== ADMIN_PASSWORD) {
+    return res.status(401).json({ error: 'Mật khẩu không đúng' });
+  }
+
+  const sessionToken = crypto.randomBytes(24).toString('hex');
+  adminSessions.add(sessionToken);
+  res.setHeader('Set-Cookie', `admin_session=${encodeURIComponent(sessionToken)}; HttpOnly; Path=/; Max-Age=28800; SameSite=Lax`);
+  res.json({ success: true });
+});
+
+app.post('/api/admin/logout', (req, res) => {
+  const token = getAdminSessionToken(req);
+  if (token && adminSessions.has(token)) {
+    adminSessions.delete(token);
+  }
+  res.setHeader('Set-Cookie', 'admin_session=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax');
+  res.json({ success: true });
 });
 
 const payosAutoSyncMs = Number(process.env.PAYOS_AUTO_SYNC_MS || 30000);

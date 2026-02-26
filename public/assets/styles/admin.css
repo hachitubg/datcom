@@ -10,6 +10,48 @@
             padding: 20px;
         }
 
+        .admin-auth-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.45);
+            z-index: 2000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+
+        .admin-auth-card {
+            width: 100%;
+            max-width: 420px;
+            background: #fefcf9;
+            border-radius: 12px;
+            padding: 22px;
+            box-shadow: 0 16px 40px rgba(0,0,0,0.25);
+        }
+
+        .admin-auth-card h2 {
+            color: #8B7355;
+            margin-bottom: 8px;
+        }
+
+        .admin-auth-card p {
+            color: #8B7355;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+
+        .admin-auth-card input {
+            margin-bottom: 10px;
+        }
+
+        .admin-auth-message {
+            min-height: 20px;
+            color: #9b3f3f;
+            font-size: 13px;
+        }
+
+
         .container {
             max-width: 1200px;
             margin: 0 auto;
@@ -543,6 +585,26 @@
             letter-spacing: 0.3px;
         }
 
+
+        .payment-name-link {
+            cursor: pointer;
+            text-decoration: underline;
+        }
+
+        .pagination-wrap {
+            margin-top: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 10px;
+            color: #8B7355;
+            font-size: 13px;
+        }
+
+        .pagination-wrap button[disabled] {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
 
         .day-chip {
             border: 1px solid #d9c7b2;

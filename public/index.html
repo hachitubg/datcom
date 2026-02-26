@@ -69,6 +69,12 @@
         </div>
     </div>
 
+    <div class="mobile-action-bar">
+        <button class="btn-primary" id="mobileBtnOrder">Đặt cơm</button>
+        <button class="btn-secondary" id="mobileBtnList">Danh sách</button>
+        <button class="btn-secondary" id="mobileBtnPayment">Thanh toán</button>
+    </div>
+
     <!-- Modal Đặt Cơm -->
     <div id="orderModal" class="modal">
         <div class="modal-content">
@@ -156,6 +162,18 @@
         document.getElementById('btnPayment').addEventListener('click', () => {
             paymentModal.style.display = 'block';
             loadPaymentList();
+        });
+
+        document.getElementById('mobileBtnOrder').addEventListener('click', () => {
+            document.getElementById('btnOrder').click();
+        });
+
+        document.getElementById('mobileBtnPayment').addEventListener('click', () => {
+            document.getElementById('btnPayment').click();
+        });
+
+        document.getElementById('mobileBtnList').addEventListener('click', () => {
+            document.getElementById('btnList').click();
         });
 
         document.getElementById('closePayment').addEventListener('click', () => {
@@ -454,10 +472,12 @@
                         orderBtn.disabled = true;
                         orderBtn.classList.add('disabled');
                         orderBtn.textContent = '❌ Hết xuất';
+                        document.getElementById('mobileBtnOrder').disabled = true;
                     } else {
                         orderBtn.disabled = false;
                         orderBtn.classList.remove('disabled');
                         orderBtn.textContent = 'ĐẶT CƠM';
+                        document.getElementById('mobileBtnOrder').disabled = false;
                     }
 
                     // Update max quantity
