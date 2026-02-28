@@ -145,6 +145,20 @@
         </div>
     </div>
 
+
+
+    <div id="confirmModal" class="modal">
+        <div class="modal-content modal-confirm">
+            <span class="close" onclick="closeConfirmModal()">&times;</span>
+            <h2 id="confirmModalTitle">XÁC NHẬN THANH TOÁN</h2>
+            <p id="confirmModalMessage" class="confirm-modal-text"></p>
+            <div class="button-group" style="margin-top:12px;">
+                <button class="btn-primary" type="button" id="confirmModalYesBtn">ĐỒNG Ý</button>
+                <button class="btn-secondary" type="button" onclick="closeConfirmModal()">HỦY</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal xem chi tiết ngày -->
     <div id="dayModal" class="modal">
         <div class="modal-content">
@@ -561,7 +575,6 @@
             const pageRows = debtRows.slice(startIndex, startIndex + PAGE_SIZE);
 
             const rowsHtml = pageRows.map((row) => {
-                const remaining = Number(row.remainingAmount || 0);
                 return `
                     <div class="admin-payment-row">
                         <div>
@@ -569,7 +582,7 @@
                             <div class="admin-payment-meta">Số xuất: ${row.quantity} </br> Tổng tiền: ${AppUtils.formatCurrency(row.totalAmount || 0)}</div>
                         </div>
                         <div class="admin-payment-actions">
-                            <button class="btn-warning btn-small" onclick="markCashPaid('${encodeURIComponent(row.name)}', ${remaining})">Đã thanh toán</button>
+                            <button class="btn-warning btn-small" onclick="markCashPaid('${encodeURIComponent(row.name)}')">Đã thanh toán</button>
                         </div>
                     </div>
                 `;
@@ -745,37 +758,61 @@
                 .catch(err => alert('Lỗi chuyển trạng thái: ' + err.message));
         }
 
-        function markCashPaid(encodedName, suggestedAmount) {
+        const confirmModal = document.getElementById('confirmModal');
+        const confirmModalTitle = document.getElementById('confirmModalTitle');
+        const confirmModalMessage = document.getElementById('confirmModalMessage');
+        const confirmModalYesBtn = document.getElementById('confirmModalYesBtn');
+
+        function closeConfirmModal() {
+            confirmModal.style.display = 'none';
+            confirmModalYesBtn.onclick = null;
+        }
+
+        function openConfirmModal({ title, message, onConfirm }) {
+            confirmModalTitle.textContent = title || 'XÁC NHẬN';
+            confirmModalMessage.textContent = message || '';
+            confirmModalYesBtn.onclick = () => {
+                confirmModalYesBtn.disabled = true;
+                Promise.resolve()
+                    .then(() => onConfirm && onConfirm())
+                    .finally(() => {
+                        confirmModalYesBtn.disabled = false;
+                    });
+            };
+            confirmModal.style.display = 'block';
+        }
+
+        function markCashPaid(encodedName) {
             const name = decodeURIComponent(encodedName || '');
-            const defaultAmount = Number(suggestedAmount || 0);
-            const inputAmount = prompt(`Nhập số tiền đã thu của ${name} (để trống = thu đủ công nợ):`, defaultAmount > 0 ? String(defaultAmount) : '');
-
-            if (inputAmount === null) {
+            if (!name) {
+                alert('Không xác định được người dùng cần cập nhật.');
                 return;
             }
 
-            const amount = String(inputAmount).trim() ? Number(inputAmount) : 0;
-            if (String(inputAmount).trim() && (!Number.isFinite(amount) || amount <= 0)) {
-                alert('Số tiền không hợp lệ.');
-                return;
-            }
+            openConfirmModal({
+                title: 'XÁC NHẬN ĐÃ THANH TOÁN',
+                message: `Bạn xác nhận ${name} đã thanh toán đủ công nợ?`,
+                onConfirm: () => {
+                    return fetch(`${API_BASE}/api/admin/payments/manual-cash`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name })
+                    })
+                        .then(res => res.json())
+                        .then(data => {
+                            if (data.error) {
+                                throw new Error(data.error);
+                            }
 
-            fetch(`${API_BASE}/api/admin/payments/manual-cash`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, amount })
-            })
-                .then(res => res.json())
-                .then(data => {
-                    if (data.error) {
-                        throw new Error(data.error);
-                    }
-
-                    alert(`Đã cập nhật thanh toán tiền mặt cho ${name}: ${AppUtils.formatCurrency(data.amount)}.`);
-                    loadDebtSummary();
-                    loadAdminPayments();
-                })
-                .catch(err => alert('Lỗi cập nhật tiền mặt: ' + err.message));
+                            closeConfirmModal();
+                            loadDebtSummary();
+                            loadAdminPayments();
+                        })
+                        .catch(err => {
+                            alert('Lỗi cập nhật tiền mặt: ' + err.message);
+                        });
+                }
+            });
         }
 
 
@@ -833,6 +870,7 @@
             const modal = document.getElementById('dayModal');
             const editModal = document.getElementById('orderEditModal');
             const customerModal = document.getElementById('customerOrderModal');
+            const confirmModalEl = document.getElementById('confirmModal');
             if (e.target === modal) {
                 modal.style.display = 'none';
             }
@@ -841,6 +879,9 @@
             }
             if (e.target === customerModal) {
                 customerModal.style.display = 'none';
+            }
+            if (e.target === confirmModalEl) {
+                closeConfirmModal();
             }
         });
 

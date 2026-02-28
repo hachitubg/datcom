@@ -141,6 +141,20 @@
         <div class="modal-content modal-wide">
             <span class="close" id="closePaymentHistory">&times;</span>
             <h2>LỊCH SỬ THANH TOÁN</h2>
+            <div class="payment-history-toolbar">
+                <input type="text" id="historyNameSearch" placeholder="Tìm theo tên người dùng...">
+                <select id="historyPeriodFilter">
+                    <option value="all">Toàn bộ</option>
+                    <option value="date">Theo ngày</option>
+                    <option value="week">Theo tuần</option>
+                    <option value="month">Theo tháng</option>
+                </select>
+                <input type="date" id="historyDateFilter" style="display:none;">
+                <input type="week" id="historyWeekFilter" style="display:none;">
+                <input type="month" id="historyMonthFilter" style="display:none;">
+                <button class="btn-submit" type="button" id="btnApplyHistoryFilter">LỌC</button>
+                <button class="btn-cancel" type="button" id="btnResetHistoryFilter">ĐẶT LẠI</button>
+            </div>
             <div id="paymentHistoryList" class="orders-list"></div>
         </div>
     </div>
@@ -197,6 +211,9 @@
         });
 
         document.getElementById('btnPaymentHistory').addEventListener('click', loadPaymentHistory);
+        document.getElementById('historyPeriodFilter').addEventListener('change', togglePaymentHistoryInputs);
+        document.getElementById('btnApplyHistoryFilter').addEventListener('click', loadPaymentHistory);
+        document.getElementById('btnResetHistoryFilter').addEventListener('click', resetPaymentHistoryFilter);
 
         customerNameInput.addEventListener('blur', () => {
             customerNameInput.value = AppUtils.normalizeName(customerNameInput.value);
@@ -360,39 +377,127 @@
         }
 
 
-        function loadPaymentHistory() {
-            const keyword = document.getElementById('paymentSearch').value.trim();
-            const historyBox = document.getElementById('paymentHistoryList');
+        function togglePaymentHistoryInputs() {
+            const period = document.getElementById('historyPeriodFilter').value;
+            const dateInput = document.getElementById('historyDateFilter');
+            const weekInput = document.getElementById('historyWeekFilter');
+            const monthInput = document.getElementById('historyMonthFilter');
 
-            if (!keyword) {
-                historyBox.innerHTML = '<div style="padding:16px">Vui lòng nhập tên để xem lịch sử thanh toán.</div>';
-                paymentHistoryModal.style.display = 'block';
-                return;
+            dateInput.style.display = period === 'date' ? 'block' : 'none';
+            weekInput.style.display = period === 'week' ? 'block' : 'none';
+            monthInput.style.display = period === 'month' ? 'block' : 'none';
+        }
+
+        function getWeekDateRange(weekValue) {
+            if (!weekValue || !weekValue.includes('-W')) {
+                return null;
             }
 
-            const url = `${API_BASE}/api/payments/history?search=${encodeURIComponent(keyword)}`;
+            const [yearPart, weekPart] = weekValue.split('-W');
+            const year = Number(yearPart);
+            const week = Number(weekPart);
+            if (!Number.isFinite(year) || !Number.isFinite(week)) {
+                return null;
+            }
+
+            const simple = new Date(Date.UTC(year, 0, 1 + (week - 1) * 7));
+            const dayOfWeek = simple.getUTCDay();
+            const monday = new Date(simple);
+            if (dayOfWeek <= 4) {
+                monday.setUTCDate(simple.getUTCDate() - simple.getUTCDay() + 1);
+            } else {
+                monday.setUTCDate(simple.getUTCDate() + (8 - simple.getUTCDay()));
+            }
+
+            const sunday = new Date(monday);
+            sunday.setUTCDate(monday.getUTCDate() + 6);
+
+            const toIsoDate = (date) => {
+                const y = date.getUTCFullYear();
+                const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+                const d = String(date.getUTCDate()).padStart(2, '0');
+                return `${y}-${m}-${d}`;
+            };
+
+            return {
+                fromDate: toIsoDate(monday),
+                toDate: toIsoDate(sunday)
+            };
+        }
+
+        function resetPaymentHistoryFilter() {
+            document.getElementById('historyNameSearch').value = '';
+            document.getElementById('historyPeriodFilter').value = 'all';
+            document.getElementById('historyDateFilter').value = '';
+            document.getElementById('historyWeekFilter').value = '';
+            document.getElementById('historyMonthFilter').value = '';
+            togglePaymentHistoryInputs();
+            loadPaymentHistory();
+        }
+
+        function loadPaymentHistory() {
+            const keyword = document.getElementById('historyNameSearch').value.trim();
+            const period = document.getElementById('historyPeriodFilter').value;
+            const selectedDate = document.getElementById('historyDateFilter').value;
+            const selectedWeek = document.getElementById('historyWeekFilter').value;
+            const selectedMonth = document.getElementById('historyMonthFilter').value;
+            const historyBox = document.getElementById('paymentHistoryList');
+
+            const params = new URLSearchParams();
+            params.set('status', 'PAID');
+            if (keyword) params.set('search', keyword);
+
+            if (period === 'date') {
+                if (!selectedDate) {
+                    historyBox.innerHTML = '<div style="padding:16px">Vui lòng chọn ngày cần lọc.</div>';
+                    paymentHistoryModal.style.display = 'block';
+                    return;
+                }
+                params.set('period', 'date');
+                params.set('date', selectedDate);
+            } else if (period === 'month') {
+                if (!selectedMonth) {
+                    historyBox.innerHTML = '<div style="padding:16px">Vui lòng chọn tháng cần lọc.</div>';
+                    paymentHistoryModal.style.display = 'block';
+                    return;
+                }
+                params.set('period', 'month');
+                params.set('month', selectedMonth);
+            } else if (period === 'week') {
+                const weekRange = getWeekDateRange(selectedWeek);
+                if (!weekRange) {
+                    historyBox.innerHTML = '<div style="padding:16px">Vui lòng chọn tuần cần lọc.</div>';
+                    paymentHistoryModal.style.display = 'block';
+                    return;
+                }
+                params.set('period', 'all');
+                params.set('fromDate', weekRange.fromDate);
+                params.set('toDate', weekRange.toDate);
+            } else {
+                params.set('period', 'all');
+            }
+
+            const url = `${API_BASE}/api/payments/history?${params.toString()}`;
             historyBox.innerHTML = '<div style="padding: 16px">Đang tải...</div>';
+            paymentHistoryModal.style.display = 'block';
 
             fetch(url)
                 .then(res => res.json())
                 .then(rows => {
                     if (!rows || rows.length === 0) {
-                        historyBox.innerHTML = '<div style="padding:16px">Không tìm thấy lịch sử thanh toán theo tên đã nhập.</div>';
-                        paymentHistoryModal.style.display = 'block';
+                        historyBox.innerHTML = '<div style="padding:16px">Không tìm thấy lịch sử thanh toán phù hợp bộ lọc.</div>';
                         return;
                     }
 
                     let html = '<div style="overflow:auto"><table class="payment-table"><thead><tr><th>Ngày đơn</th><th>Tên</th><th>Số tiền</th><th>Mã đơn PayOS</th><th>Thời gian giao dịch</th></tr></thead><tbody>';
                     rows.forEach((row) => {
-                        html += `<tr><td>${row.date}</td><td>${row.customer_name}</td><td>${AppUtils.formatCurrency(row.amount)}</td><td>${row.order_code}</td><td>${row.transaction_date || row.created_at}</td></tr>`;
+                        html += `<tr><td>${row.date}</td><td>${row.customer_name}</td><td>${AppUtils.formatCurrency(row.paid_amount || row.request_amount || 0)}</td><td>${row.order_code}</td><td>${row.latest_paid_at || row.request_updated_at || row.request_created_at || '-'}</td></tr>`;
                     });
                     html += '</tbody></table></div>';
                     historyBox.innerHTML = html;
-                    paymentHistoryModal.style.display = 'block';
                 })
                 .catch(err => {
                     historyBox.innerHTML = `<div style="padding:16px;color:#9b3f3f">Lỗi tải lịch sử: ${err.message}</div>`;
-                    paymentHistoryModal.style.display = 'block';
                 });
         }
 
@@ -618,6 +723,7 @@
         // Load on page load
         handlePaymentReturn();
         loadTodayInfo();
+        togglePaymentHistoryInputs();
         loadCustomerNameSuggestions();
         setInterval(loadTodayInfo, 5000); // Refresh every 5 seconds
     </script>

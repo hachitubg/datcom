@@ -504,6 +504,20 @@
             margin-bottom: 15px;
         }
 
+
+        .payment-history-toolbar {
+            display: grid;
+            grid-template-columns: 1.4fr repeat(3, minmax(130px, 1fr)) auto auto;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .payment-history-toolbar input,
+        .payment-history-toolbar select,
+        .payment-history-toolbar button {
+            min-height: 42px;
+        }
+
         .payment-table {
             width: 100%;
             border-collapse: collapse;
@@ -711,6 +725,10 @@
             }
 
             .payment-toolbar {
+                grid-template-columns: 1fr;
+            }
+
+            .payment-history-toolbar {
                 grid-template-columns: 1fr;
             }
 
