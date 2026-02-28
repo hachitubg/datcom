@@ -25,24 +25,76 @@
             width: 100%;
             max-width: 420px;
             background: #fefcf9;
-            border-radius: 12px;
-            padding: 22px;
-            box-shadow: 0 16px 40px rgba(0,0,0,0.25);
+            border-radius: 20px;
+            padding: 28px;
+            box-shadow: 0 20px 45px rgba(0,0,0,0.25);
+            border: 1px solid #e5d7c6;
+            text-align: center;
         }
 
         .admin-auth-card h2 {
             color: #8B7355;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
+            font-size: 27px;
         }
 
         .admin-auth-card p {
             color: #8B7355;
-            margin-bottom: 10px;
+            margin-bottom: 16px;
             font-size: 14px;
         }
 
         .admin-auth-card input {
             margin-bottom: 10px;
+        }
+
+        .admin-auth-icon {
+            width: 62px;
+            height: 62px;
+            margin: 0 auto 12px;
+            border-radius: 50%;
+            display: grid;
+            place-items: center;
+            font-size: 28px;
+            background: linear-gradient(135deg, #f3e8da 0%, #ead8c3 100%);
+            border: 1px solid #d9c7b2;
+        }
+
+        .admin-auth-input-wrap {
+            text-align: left;
+        }
+
+        .admin-auth-input-wrap input {
+            border-radius: 12px;
+            border: 1px solid #d8c4ad;
+            background: #fff;
+            min-height: 48px;
+            font-size: 15px;
+        }
+
+        .admin-auth-submit {
+            width: 100%;
+            margin-top: 4px;
+            min-height: 46px;
+        }
+
+        .admin-auth-back-link {
+            display: inline-block;
+            margin-top: 12px;
+            width: 100%;
+            text-align: center;
+            color: #8B7355;
+            font-weight: 600;
+            text-decoration: none;
+            border: 1px solid #d9c7b2;
+            border-radius: 10px;
+            padding: 11px;
+            background: #f8f3eb;
+        }
+
+        .admin-auth-back-link:hover {
+            background: #ece1d2;
+            color: #6f5a40;
         }
 
         .admin-auth-message {
@@ -620,6 +672,16 @@
             background: #A0826D;
             color: #fff;
             border-color: #A0826D;
+        }
+
+        .modal-confirm {
+            max-width: 420px;
+        }
+
+        .confirm-modal-text {
+            color: #8B7355;
+            margin-bottom: 8px;
+            line-height: 1.5;
         }
 
         .order-edit-grid {
