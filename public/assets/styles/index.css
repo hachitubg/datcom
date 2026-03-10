@@ -442,6 +442,19 @@ textarea {
     border-bottom: none;
 }
 
+
+.payment-order-item {
+    align-items: center;
+    gap: 12px;
+}
+
+.payment-order-item .order-info p {
+    margin: 3px 0;
+}
+
+.payment-order-item .payment-action-group {
+    margin-left: auto;
+}
 .order-info h4 {
     color: #A0826D;
     margin-bottom: 5px;
@@ -499,9 +512,22 @@ textarea {
 
 .payment-toolbar {
     display: grid;
-    grid-template-columns: 1fr auto auto;
+    grid-template-columns: 1fr auto;
     gap: 10px;
     margin-bottom: 15px;
+    align-items: center;
+}
+
+.payment-toolbar-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.btn-payment-toolbar {
+    min-height: 38px;
+    padding: 8px 14px;
+    font-size: 13px;
+    flex: 0 0 auto;
 }
 
 
@@ -760,6 +786,20 @@ textarea {
 
     .payment-toolbar {
         grid-template-columns: 1fr;
+        gap: 8px;
+    }
+
+    .payment-toolbar-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+
+    .btn-payment-toolbar {
+        min-height: 34px;
+        padding: 7px 10px;
+        font-size: 12px;
+        width: 100%;
     }
 
     .payment-history-toolbar {
@@ -813,6 +853,16 @@ textarea {
 
     .payment-action-group {
         gap: 6px;
+    }
+
+    .payment-order-item {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .payment-order-item .payment-action-group {
+        width: 100%;
+        margin-left: 0;
     }
 
     .pay-btn,

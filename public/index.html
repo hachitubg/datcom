@@ -123,8 +123,10 @@
             <h2>THANH TOÁN ĐƠN CƠM</h2>
             <div class="payment-toolbar">
                 <input type="text" id="paymentSearch" placeholder="Tìm theo tên...">
-                <button class="btn-submit" id="btnSearchPayment" type="button">TÌM</button>
-                <button class="btn-cancel" id="btnPaymentHistory" type="button">LỊCH SỬ</button>
+                <div class="payment-toolbar-actions">
+                    <button class="btn-submit btn-payment-toolbar" id="btnSearchPayment" type="button">Tìm kiếm</button>
+                    <button class="btn-cancel btn-payment-toolbar" id="btnPaymentHistory" type="button">Lịch sử</button>
+                </div>
             </div>
             <div id="paymentList" class="orders-list"></div>
         </div>
@@ -315,22 +317,19 @@
                         return;
                     }
 
-                    let html = '<div class="payment-table-wrap"><table class="payment-table payment-summary-table"><thead><tr><th>Tên</th><th>Xuất cơm</th><th>Tổng tiền</th><th>Thao tác</th></tr></thead><tbody>';
-                    rows.forEach((row) => {
-                        html += `<tr>
-                            <td data-label="Tên">${row.name}</td>
-                            <td data-label="Xuất cơm">${row.quantity}</td>
-                            <td data-label="Tổng tiền">${AppUtils.formatCurrency(row.totalAmount)}</td>
-                            <td data-label="Thao tác">
-                                <div class="payment-action-group">
-                                    <button class="payment-detail-btn" data-customer-name="${encodeURIComponent(row.name)}">Chi tiết</button>
-                                    <button class="pay-btn" data-customer-name="${encodeURIComponent(row.name)}" ${row.remainingAmount <= 0 ? 'disabled' : ''}>Thanh toán</button>
-                                </div>
-                            </td>
-                        </tr>`;
-                    });
-                    html += '</tbody></table></div>';
-                    list.innerHTML = html;
+                    list.innerHTML = rows.map((row) => `
+                        <div class="order-item payment-order-item">
+                            <div class="order-info">
+                                <h4>${row.name}</h4>
+                                <p><strong>Số xuất:</strong> ${row.quantity} xuất</p>
+                                <p><strong>Tổng tiền:</strong> ${AppUtils.formatCurrency(row.totalAmount)}</p>
+                            </div>
+                            <div class="payment-action-group">
+                                <button class="payment-detail-btn" data-customer-name="${encodeURIComponent(row.name)}">Chi tiết</button>
+                                <button class="pay-btn" data-customer-name="${encodeURIComponent(row.name)}" ${row.remainingAmount <= 0 ? 'disabled' : ''}>Thanh toán</button>
+                            </div>
+                        </div>
+                    `).join('');
                 })
                 .catch(err => {
                     list.innerHTML = `<div style="padding:16px;color:#9b3f3f">Lỗi tải danh sách thanh toán: ${err.message}</div>`;
