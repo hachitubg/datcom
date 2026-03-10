@@ -519,6 +519,50 @@ class Database {
     });
   }
 
+
+  getTodayCustomerOrderDetails(name, callback) {
+    const normalizedName = String(name || '').trim();
+    if (!normalizedName) {
+      callback(new Error('Thiếu tên khách hàng'));
+      return;
+    }
+
+    const today = this.getDateString();
+    this.db.all(
+      `SELECT o.id, o.quantity, o.description, o.created_at, d.price
+       FROM orders o
+       JOIN days d ON d.id = o.day_id
+       WHERE LOWER(o.name) = LOWER(?) AND d.date = ?
+       ORDER BY o.created_at ASC, o.id ASC`,
+      [normalizedName, today],
+      (err, rows = []) => {
+        if (err) {
+          callback(err);
+          return;
+        }
+
+        const mappedRows = rows.map((row) => ({
+          id: Number(row.id),
+          quantity: Number(row.quantity || 0),
+          description: row.description || '',
+          createdAt: row.created_at || '',
+          amount: Number(row.quantity || 0) * Number(row.price || 0)
+        }));
+
+        const totalQuantity = mappedRows.reduce((sum, row) => sum + row.quantity, 0);
+        const totalAmount = mappedRows.reduce((sum, row) => sum + row.amount, 0);
+
+        callback(null, {
+          name: normalizedName,
+          date: today,
+          totalQuantity,
+          totalAmount,
+          rows: mappedRows
+        });
+      }
+    );
+  }
+
   getTodayCustomerPayment(name, callback) {
     const today = this.getDateString();
     this.db.get(

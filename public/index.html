@@ -130,6 +130,14 @@
         </div>
     </div>
 
+    <div id="paymentDetailModal" class="modal">
+        <div class="modal-content modal-wide">
+            <span class="close" id="closePaymentDetail">&times;</span>
+            <h2>CHI TIẾT XUẤT ĐÃ ĐẶT HÔM NAY</h2>
+            <div id="paymentDetailContent" class="orders-list"></div>
+        </div>
+    </div>
+
     <div id="paymentQrModal" class="modal">
         <div class="modal-content">
             <span class="close" id="closePaymentQr">&times;</span>
@@ -168,6 +176,7 @@
         const listModal = document.getElementById('listModal');
 
         const paymentModal = document.getElementById('paymentModal');
+        const paymentDetailModal = document.getElementById('paymentDetailModal');
         const paymentQrModal = document.getElementById('paymentQrModal');
         const paymentHistoryModal = document.getElementById('paymentHistoryModal');
 
@@ -194,6 +203,10 @@
             paymentModal.style.display = 'none';
         });
 
+        document.getElementById('closePaymentDetail').addEventListener('click', () => {
+            paymentDetailModal.style.display = 'none';
+        });
+
         document.getElementById('closePaymentQr').addEventListener('click', () => {
             paymentQrModal.style.display = 'none';
         });
@@ -218,20 +231,6 @@
         customerNameInput.addEventListener('blur', () => {
             customerNameInput.value = AppUtils.normalizeName(customerNameInput.value);
         });
-
-        function getStatusClass(status) {
-            if (status === 'PAID') return 'status-paid';
-            if (status === 'PARTIAL') return 'status-partial';
-            return 'status-unpaid';
-        }
-
-        function getStatusText(status) {
-            if (status === 'PAID') return 'Đã thanh toán';
-            if (status === 'PARTIAL') return 'Thanh toán một phần';
-            return 'Chưa thanh toán';
-        }
-
-
 
         function cleanPaymentQueryParams() {
             const url = new URL(window.location.href);
@@ -316,16 +315,16 @@
                         return;
                     }
 
-                    let html = '<div style="overflow:auto"><table class="payment-table"><thead><tr><th>Tên</th><th>Xuất cơm</th><th>Tổng tiền</th><th>Đã thanh toán</th><th>Còn lại</th><th>Trạng thái</th><th></th></tr></thead><tbody>';
+                    let html = '<div style="overflow:auto"><table class="payment-table"><thead><tr><th>Tên</th><th>Xuất cơm</th><th>Tổng tiền cần thanh toán</th><th>Thao tác</th></tr></thead><tbody>';
                     rows.forEach((row) => {
                         html += `<tr>
                             <td>${row.name}</td>
                             <td>${row.quantity}</td>
                             <td>${AppUtils.formatCurrency(row.totalAmount)}</td>
-                            <td>${AppUtils.formatCurrency(row.paidAmount)}</td>
-                            <td>${AppUtils.formatCurrency(row.remainingAmount)}</td>
-                            <td><span class="payment-status ${getStatusClass(row.status)}">${getStatusText(row.status)}</span></td>
-                            <td><button class="pay-btn" data-customer-name="${encodeURIComponent(row.name)}" ${row.remainingAmount <= 0 ? 'disabled' : ''}>Thanh toán</button></td>
+                            <td>
+                                <button class="payment-detail-btn" data-customer-name="${encodeURIComponent(row.name)}">Chi tiết</button>
+                                <button class="pay-btn" data-customer-name="${encodeURIComponent(row.name)}" ${row.remainingAmount <= 0 ? 'disabled' : ''}>Thanh toán</button>
+                            </td>
                         </tr>`;
                     });
                     html += '</tbody></table></div>';
@@ -336,13 +335,77 @@
                 });
         }
 
+        function formatDateTime(value) {
+            if (!value) return '-';
+            const date = new Date(value.replace(' ', 'T'));
+            if (Number.isNaN(date.getTime())) return value;
+            return date.toLocaleString('vi-VN');
+        }
+
+        function openPaymentDetail(name) {
+            const container = document.getElementById('paymentDetailContent');
+            container.innerHTML = '<div style="padding: 16px">Đang tải chi tiết...</div>';
+            paymentDetailModal.style.display = 'block';
+
+            AppUtils.fetchJson(`${API_BASE}/api/payments/today/${encodeURIComponent(name)}/details`)
+                .then((data) => {
+                    const rows = Array.isArray(data.rows) ? data.rows : [];
+                    if (!rows.length) {
+                        container.innerHTML = '<div style="padding: 16px">Không tìm thấy xuất đã đặt hôm nay.</div>';
+                        return;
+                    }
+
+                    let html = `
+                        <div style="padding: 0 10px 12px; color: #8B7355;">
+                            <strong>${data.name}</strong> - Tổng ${data.totalQuantity} xuất - ${AppUtils.formatCurrency(data.totalAmount)}
+                        </div>
+                        <div style="overflow:auto">
+                            <table class="payment-table">
+                                <thead>
+                                    <tr><th>#</th><th>Số xuất</th><th>Ghi chú</th><th>Thời gian đặt</th><th>Thành tiền</th></tr>
+                                </thead>
+                                <tbody>
+                    `;
+
+                    rows.forEach((row, index) => {
+                        html += `
+                            <tr>
+                                <td>${index + 1}</td>
+                                <td>${row.quantity}</td>
+                                <td>${row.description || '-'}</td>
+                                <td>${formatDateTime(row.createdAt)}</td>
+                                <td>${AppUtils.formatCurrency(row.amount)}</td>
+                            </tr>
+                        `;
+                    });
+
+                    html += '</tbody></table></div>';
+                    container.innerHTML = html;
+                })
+                .catch((error) => {
+                    container.innerHTML = `<div style="padding:16px;color:#9b3f3f">Lỗi tải chi tiết: ${error.message}</div>`;
+                });
+        }
+
         document.getElementById('paymentList').addEventListener('click', (event) => {
-            const btn = event.target.closest('.pay-btn');
-            if (!btn || btn.disabled) {
+            const detailBtn = event.target.closest('.payment-detail-btn');
+            if (detailBtn) {
+                const encodedName = detailBtn.getAttribute('data-customer-name') || '';
+                const name = decodeURIComponent(encodedName);
+                if (!name) {
+                    alert('Không xác định được tên người đặt cơm. Vui lòng tải lại danh sách.');
+                    return;
+                }
+                openPaymentDetail(name);
                 return;
             }
 
-            const encodedName = btn.getAttribute('data-customer-name') || '';
+            const payBtn = event.target.closest('.pay-btn');
+            if (!payBtn || payBtn.disabled) {
+                return;
+            }
+
+            const encodedName = payBtn.getAttribute('data-customer-name') || '';
             const name = decodeURIComponent(encodedName);
             if (!name) {
                 alert('Không xác định được tên người đặt cơm. Vui lòng tải lại danh sách.');
@@ -531,6 +594,9 @@
             }
             if (e.target === paymentModal) {
                 paymentModal.style.display = 'none';
+            }
+            if (e.target === paymentDetailModal) {
+                paymentDetailModal.style.display = 'none';
             }
             if (e.target === paymentQrModal) {
                 paymentQrModal.style.display = 'none';

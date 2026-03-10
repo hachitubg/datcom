@@ -542,14 +542,24 @@ textarea {
 .status-partial { color: #c27f00; }
 .status-unpaid { color: #9b3f3f; }
 
-.pay-btn {
-    background: #A0826D;
-    color: #fff;
+.pay-btn,
+.payment-detail-btn {
     border: none;
     border-radius: 6px;
     padding: 8px 10px;
     font-size: 12px;
     cursor: pointer;
+    margin-right: 6px;
+}
+
+.pay-btn {
+    background: #A0826D;
+    color: #fff;
+}
+
+.payment-detail-btn {
+    background: #efe5d8;
+    color: #7c634f;
 }
 
 .pay-btn:disabled {
