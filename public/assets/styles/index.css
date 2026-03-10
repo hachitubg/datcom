@@ -455,6 +455,53 @@ textarea {
 .payment-order-item .payment-action-group {
     margin-left: auto;
 }
+
+
+.payment-detail-header {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    background: #f6efe5;
+    border: 1px solid #ead8c3;
+    border-radius: 8px;
+    color: #7d634d;
+}
+
+.payment-detail-header strong {
+    font-size: 16px;
+}
+
+.payment-detail-header span {
+    font-size: 13px;
+}
+
+.payment-detail-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.payment-detail-item {
+    background: #fff;
+    border: 1px solid #ead8c3;
+    border-radius: 8px;
+    padding: 12px;
+}
+
+.payment-detail-item-time {
+    color: #a0826d;
+    font-size: 12px;
+}
+
+.payment-detail-item-amount {
+    color: #8b7355;
+    font-weight: 700;
+    font-size: 15px;
+    white-space: nowrap;
+    margin-left: 12px;
+}
 .order-info h4 {
     color: #A0826D;
     margin-bottom: 5px;
@@ -598,7 +645,8 @@ textarea {
     border-radius: 8px;
     padding: 8px 12px;
     font-size: 12px;
-    font-weight: 600;
+    font-weight: 700;
+    font-family: inherit;
     cursor: pointer;
 }
 
@@ -608,8 +656,13 @@ textarea {
 }
 
 .payment-detail-btn {
-    background: #efe5d8;
-    color: #7c634f;
+    background: #d7b08a;
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(160, 130, 109, 0.28);
+}
+
+.payment-detail-btn:hover {
+    background: #c7976b;
 }
 
 .pay-btn:disabled {
@@ -863,6 +916,17 @@ textarea {
     .payment-order-item .payment-action-group {
         width: 100%;
         margin-left: 0;
+    }
+
+
+    .payment-detail-item {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .payment-detail-item-amount {
+        margin-left: 0;
+        margin-top: 6px;
     }
 
     .pay-btn,

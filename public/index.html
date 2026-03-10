@@ -357,30 +357,28 @@
                     }
 
                     let html = `
-                        <div style="padding: 0 10px 12px; color: #8B7355;">
-                            <strong>${data.name}</strong> - Tổng ${data.totalQuantity} xuất - ${AppUtils.formatCurrency(data.totalAmount)}
+                        <div class="payment-detail-header">
+                            <strong>${data.name}</strong>
+                            <span>Tổng ${data.totalQuantity} xuất • ${AppUtils.formatCurrency(data.totalAmount)}</span>
                         </div>
-                        <div class="payment-table-wrap">
-                            <table class="payment-table payment-detail-table">
-                                <thead>
-                                    <tr><th>#</th><th>Số xuất</th><th>Ghi chú</th><th>Thời gian đặt</th><th>Thành tiền</th></tr>
-                                </thead>
-                                <tbody>
+                        <div class="payment-detail-list">
                     `;
 
                     rows.forEach((row, index) => {
                         html += `
-                            <tr>
-                                <td data-label="#">${index + 1}</td>
-                                <td data-label="Số xuất">${row.quantity}</td>
-                                <td data-label="Ghi chú">${row.description || '-'}</td>
-                                <td data-label="Thời gian đặt">${formatDateTime(row.createdAt)}</td>
-                                <td data-label="Thành tiền">${AppUtils.formatCurrency(row.amount)}</td>
-                            </tr>
+                            <div class="order-item payment-detail-item">
+                                <div class="order-info">
+                                    <h4>Lần đặt #${index + 1}</h4>
+                                    <p><strong>Số xuất:</strong> ${row.quantity}</p>
+                                    <p><strong>Ghi chú:</strong> ${row.description || '-'}</p>
+                                    <p class="payment-detail-item-time">${formatDateTime(row.createdAt)}</p>
+                                </div>
+                                <div class="payment-detail-item-amount">${AppUtils.formatCurrency(row.amount)}</div>
+                            </div>
                         `;
                     });
 
-                    html += '</tbody></table></div>';
+                    html += '</div>';
                     container.innerHTML = html;
                 })
                 .catch((error) => {
