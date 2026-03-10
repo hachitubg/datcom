@@ -370,7 +370,6 @@
                                 <div class="order-info">
                                     <h4>Lần đặt #${index + 1}</h4>
                                     <p><strong>Số xuất:</strong> ${row.quantity}</p>
-                                    <p><strong>Ghi chú:</strong> ${row.description || '-'}</p>
                                     <p class="payment-detail-item-time">${formatDateTime(row.createdAt)}</p>
                                 </div>
                                 <div class="payment-detail-item-amount">${AppUtils.formatCurrency(row.amount)}</div>
