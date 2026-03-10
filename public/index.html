@@ -315,15 +315,17 @@
                         return;
                     }
 
-                    let html = '<div style="overflow:auto"><table class="payment-table"><thead><tr><th>Tên</th><th>Xuất cơm</th><th>Tổng tiền cần thanh toán</th><th>Thao tác</th></tr></thead><tbody>';
+                    let html = '<div class="payment-table-wrap"><table class="payment-table payment-summary-table"><thead><tr><th>Tên</th><th>Xuất cơm</th><th>Tổng tiền</th><th>Thao tác</th></tr></thead><tbody>';
                     rows.forEach((row) => {
                         html += `<tr>
-                            <td>${row.name}</td>
-                            <td>${row.quantity}</td>
-                            <td>${AppUtils.formatCurrency(row.totalAmount)}</td>
-                            <td>
-                                <button class="payment-detail-btn" data-customer-name="${encodeURIComponent(row.name)}">Chi tiết</button>
-                                <button class="pay-btn" data-customer-name="${encodeURIComponent(row.name)}" ${row.remainingAmount <= 0 ? 'disabled' : ''}>Thanh toán</button>
+                            <td data-label="Tên">${row.name}</td>
+                            <td data-label="Xuất cơm">${row.quantity}</td>
+                            <td data-label="Tổng tiền">${AppUtils.formatCurrency(row.totalAmount)}</td>
+                            <td data-label="Thao tác">
+                                <div class="payment-action-group">
+                                    <button class="payment-detail-btn" data-customer-name="${encodeURIComponent(row.name)}">Chi tiết</button>
+                                    <button class="pay-btn" data-customer-name="${encodeURIComponent(row.name)}" ${row.remainingAmount <= 0 ? 'disabled' : ''}>Thanh toán</button>
+                                </div>
                             </td>
                         </tr>`;
                     });
@@ -359,8 +361,8 @@
                         <div style="padding: 0 10px 12px; color: #8B7355;">
                             <strong>${data.name}</strong> - Tổng ${data.totalQuantity} xuất - ${AppUtils.formatCurrency(data.totalAmount)}
                         </div>
-                        <div style="overflow:auto">
-                            <table class="payment-table">
+                        <div class="payment-table-wrap">
+                            <table class="payment-table payment-detail-table">
                                 <thead>
                                     <tr><th>#</th><th>Số xuất</th><th>Ghi chú</th><th>Thời gian đặt</th><th>Thành tiền</th></tr>
                                 </thead>
@@ -370,11 +372,11 @@
                     rows.forEach((row, index) => {
                         html += `
                             <tr>
-                                <td>${index + 1}</td>
-                                <td>${row.quantity}</td>
-                                <td>${row.description || '-'}</td>
-                                <td>${formatDateTime(row.createdAt)}</td>
-                                <td>${AppUtils.formatCurrency(row.amount)}</td>
+                                <td data-label="#">${index + 1}</td>
+                                <td data-label="Số xuất">${row.quantity}</td>
+                                <td data-label="Ghi chú">${row.description || '-'}</td>
+                                <td data-label="Thời gian đặt">${formatDateTime(row.createdAt)}</td>
+                                <td data-label="Thành tiền">${AppUtils.formatCurrency(row.amount)}</td>
                             </tr>
                         `;
                     });

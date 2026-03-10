@@ -518,19 +518,37 @@ textarea {
     min-height: 42px;
 }
 
+.payment-table-wrap {
+    overflow: auto;
+    border: 1px solid #ead8c3;
+    border-radius: 12px;
+    background: #fff;
+}
+
 .payment-table {
     width: 100%;
     border-collapse: collapse;
     min-width: 620px;
 }
 
+.payment-table thead {
+    background: #f7efe5;
+}
+
 .payment-table th,
 .payment-table td {
     text-align: left;
-    padding: 10px;
-    border-bottom: 1px solid #d4c4b0;
+    padding: 12px;
+    border-bottom: 1px solid #eddcc9;
     font-size: 14px;
-    color: #8B7355;
+    color: #7b654f;
+}
+
+.payment-table th {
+    font-size: 13px;
+    color: #9b7f64;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
 }
 
 .payment-status {
@@ -542,14 +560,20 @@ textarea {
 .status-partial { color: #c27f00; }
 .status-unpaid { color: #9b3f3f; }
 
+.payment-action-group {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
 .pay-btn,
 .payment-detail-btn {
     border: none;
-    border-radius: 6px;
-    padding: 8px 10px;
+    border-radius: 8px;
+    padding: 8px 12px;
     font-size: 12px;
+    font-weight: 600;
     cursor: pointer;
-    margin-right: 6px;
 }
 
 .pay-btn {
@@ -740,6 +764,62 @@ textarea {
 
     .payment-history-toolbar {
         grid-template-columns: 1fr;
+    }
+
+    .payment-table-wrap {
+        border-radius: 10px;
+    }
+
+    .payment-table {
+        min-width: 100%;
+    }
+
+    .payment-table thead {
+        display: none;
+    }
+
+    .payment-table,
+    .payment-table tbody,
+    .payment-table tr,
+    .payment-table td {
+        display: block;
+        width: 100%;
+    }
+
+    .payment-table tr {
+        padding: 12px;
+        border-bottom: 1px solid #ead8c3;
+        background: #fff;
+    }
+
+    .payment-table tr:last-child {
+        border-bottom: none;
+    }
+
+    .payment-table td {
+        border-bottom: none;
+        padding: 6px 0;
+        font-size: 13px;
+    }
+
+    .payment-table td::before {
+        content: attr(data-label);
+        display: block;
+        font-size: 11px;
+        color: #aa8e74;
+        margin-bottom: 2px;
+        text-transform: uppercase;
+    }
+
+    .payment-action-group {
+        gap: 6px;
+    }
+
+    .pay-btn,
+    .payment-detail-btn {
+        flex: 1;
+        min-width: 120px;
+        text-align: center;
     }
 
     .modal h2 {
