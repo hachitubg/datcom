@@ -123,10 +123,20 @@
             <h2>THANH TOÁN ĐƠN CƠM</h2>
             <div class="payment-toolbar">
                 <input type="text" id="paymentSearch" placeholder="Tìm theo tên...">
-                <button class="btn-submit" id="btnSearchPayment" type="button">TÌM</button>
-                <button class="btn-cancel" id="btnPaymentHistory" type="button">LỊCH SỬ</button>
+                <div class="payment-toolbar-actions">
+                    <button class="btn-submit btn-payment-toolbar" id="btnSearchPayment" type="button">Tìm kiếm</button>
+                    <button class="btn-cancel btn-payment-toolbar" id="btnPaymentHistory" type="button">Lịch sử</button>
+                </div>
             </div>
             <div id="paymentList" class="orders-list"></div>
+        </div>
+    </div>
+
+    <div id="paymentDetailModal" class="modal">
+        <div class="modal-content modal-wide">
+            <span class="close" id="closePaymentDetail">&times;</span>
+            <h2>LỊCH SỬ ĐẶT CƠM</h2>
+            <div id="paymentDetailContent"></div>
         </div>
     </div>
 
@@ -168,6 +178,7 @@
         const listModal = document.getElementById('listModal');
 
         const paymentModal = document.getElementById('paymentModal');
+        const paymentDetailModal = document.getElementById('paymentDetailModal');
         const paymentQrModal = document.getElementById('paymentQrModal');
         const paymentHistoryModal = document.getElementById('paymentHistoryModal');
 
@@ -194,6 +205,10 @@
             paymentModal.style.display = 'none';
         });
 
+        document.getElementById('closePaymentDetail').addEventListener('click', () => {
+            paymentDetailModal.style.display = 'none';
+        });
+
         document.getElementById('closePaymentQr').addEventListener('click', () => {
             paymentQrModal.style.display = 'none';
         });
@@ -218,20 +233,6 @@
         customerNameInput.addEventListener('blur', () => {
             customerNameInput.value = AppUtils.normalizeName(customerNameInput.value);
         });
-
-        function getStatusClass(status) {
-            if (status === 'PAID') return 'status-paid';
-            if (status === 'PARTIAL') return 'status-partial';
-            return 'status-unpaid';
-        }
-
-        function getStatusText(status) {
-            if (status === 'PAID') return 'Đã thanh toán';
-            if (status === 'PARTIAL') return 'Thanh toán một phần';
-            return 'Chưa thanh toán';
-        }
-
-
 
         function cleanPaymentQueryParams() {
             const url = new URL(window.location.href);
@@ -316,33 +317,89 @@
                         return;
                     }
 
-                    let html = '<div style="overflow:auto"><table class="payment-table"><thead><tr><th>Tên</th><th>Xuất cơm</th><th>Tổng tiền</th><th>Đã thanh toán</th><th>Còn lại</th><th>Trạng thái</th><th></th></tr></thead><tbody>';
-                    rows.forEach((row) => {
-                        html += `<tr>
-                            <td>${row.name}</td>
-                            <td>${row.quantity}</td>
-                            <td>${AppUtils.formatCurrency(row.totalAmount)}</td>
-                            <td>${AppUtils.formatCurrency(row.paidAmount)}</td>
-                            <td>${AppUtils.formatCurrency(row.remainingAmount)}</td>
-                            <td><span class="payment-status ${getStatusClass(row.status)}">${getStatusText(row.status)}</span></td>
-                            <td><button class="pay-btn" data-customer-name="${encodeURIComponent(row.name)}" ${row.remainingAmount <= 0 ? 'disabled' : ''}>Thanh toán</button></td>
-                        </tr>`;
-                    });
-                    html += '</tbody></table></div>';
-                    list.innerHTML = html;
+                    list.innerHTML = rows.map((row) => `
+                        <div class="order-item payment-order-item">
+                            <div class="order-info">
+                                <h4>${row.name}</h4>
+                                <p><strong>Số xuất:</strong> ${row.quantity} xuất</p>
+                                <p><strong>Tổng tiền:</strong> ${AppUtils.formatCurrency(row.totalAmount)}</p>
+                            </div>
+                            <div class="payment-action-group">
+                                <button class="payment-detail-btn" data-customer-name="${encodeURIComponent(row.name)}">Chi tiết</button>
+                                <button class="pay-btn" data-customer-name="${encodeURIComponent(row.name)}" ${row.remainingAmount <= 0 ? 'disabled' : ''}>Thanh toán</button>
+                            </div>
+                        </div>
+                    `).join('');
                 })
                 .catch(err => {
                     list.innerHTML = `<div style="padding:16px;color:#9b3f3f">Lỗi tải danh sách thanh toán: ${err.message}</div>`;
                 });
         }
 
+        function formatDateTime(value) {
+            return AppUtils.formatDateTime(value);
+        }
+
+        function openPaymentDetail(name) {
+            const container = document.getElementById('paymentDetailContent');
+            container.innerHTML = '<div style="padding: 16px">Đang tải chi tiết...</div>';
+            paymentDetailModal.style.display = 'block';
+
+            AppUtils.fetchJson(`${API_BASE}/api/payments/today/${encodeURIComponent(name)}/details`)
+                .then((data) => {
+                    const rows = Array.isArray(data.rows) ? data.rows : [];
+                    if (!rows.length) {
+                        container.innerHTML = '<div style="padding: 16px">Không tìm thấy xuất đã đặt hôm nay.</div>';
+                        return;
+                    }
+
+                    let html = `
+                        <div class="payment-detail-header">
+                            <strong>${data.name}</strong>
+                            <span>Tổng ${data.totalQuantity} xuất • ${AppUtils.formatCurrency(data.totalAmount)}</span>
+                        </div>
+                        <div class="payment-detail-list">
+                    `;
+
+                    rows.forEach((row, index) => {
+                        html += `
+                            <div class="order-item payment-detail-item">
+                                <div class="order-info">
+                                    <h4>Ngày đặt: ${formatDateTime(row.createdAt)}</h4>
+                                    <p><strong>Số xuất:</strong> ${row.quantity}</p>
+                                </div>
+                                <div class="payment-detail-item-amount">${AppUtils.formatCurrency(row.amount)}</div>
+                            </div>
+                        `;
+                    });
+
+                    html += '</div>';
+                    container.innerHTML = html;
+                })
+                .catch((error) => {
+                    container.innerHTML = `<div style="padding:16px;color:#9b3f3f">Lỗi tải chi tiết: ${error.message}</div>`;
+                });
+        }
+
         document.getElementById('paymentList').addEventListener('click', (event) => {
-            const btn = event.target.closest('.pay-btn');
-            if (!btn || btn.disabled) {
+            const detailBtn = event.target.closest('.payment-detail-btn');
+            if (detailBtn) {
+                const encodedName = detailBtn.getAttribute('data-customer-name') || '';
+                const name = decodeURIComponent(encodedName);
+                if (!name) {
+                    alert('Không xác định được tên người đặt cơm. Vui lòng tải lại danh sách.');
+                    return;
+                }
+                openPaymentDetail(name);
                 return;
             }
 
-            const encodedName = btn.getAttribute('data-customer-name') || '';
+            const payBtn = event.target.closest('.pay-btn');
+            if (!payBtn || payBtn.disabled) {
+                return;
+            }
+
+            const encodedName = payBtn.getAttribute('data-customer-name') || '';
             const name = decodeURIComponent(encodedName);
             if (!name) {
                 alert('Không xác định được tên người đặt cơm. Vui lòng tải lại danh sách.');
@@ -491,7 +548,7 @@
 
                     let html = '<div style="overflow:auto"><table class="payment-table"><thead><tr><th>Ngày đơn</th><th>Tên</th><th>Số tiền</th><th>Mã đơn PayOS</th><th>Thời gian giao dịch</th></tr></thead><tbody>';
                     rows.forEach((row) => {
-                        html += `<tr><td>${row.date}</td><td>${row.customer_name}</td><td>${AppUtils.formatCurrency(row.paid_amount || row.request_amount || 0)}</td><td>${row.order_code}</td><td>${row.latest_paid_at || row.request_updated_at || row.request_created_at || '-'}</td></tr>`;
+                        html += `<tr><td>${row.date}</td><td>${row.customer_name}</td><td>${AppUtils.formatCurrency(row.paid_amount || row.request_amount || 0)}</td><td>${row.order_code}</td><td>${AppUtils.formatDateTime(row.latest_paid_at || row.request_updated_at || row.request_created_at)}</td></tr>`;
                     });
                     html += '</tbody></table></div>';
                     historyBox.innerHTML = html;
@@ -531,6 +588,9 @@
             }
             if (e.target === paymentModal) {
                 paymentModal.style.display = 'none';
+            }
+            if (e.target === paymentDetailModal) {
+                paymentDetailModal.style.display = 'none';
             }
             if (e.target === paymentQrModal) {
                 paymentQrModal.style.display = 'none';
@@ -663,15 +723,13 @@
                         ordersList.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">Chưa có đơn hàng</div>';
                     } else {
                         ordersList.innerHTML = orders.map(order => {
-                            const time = new Date(order.created_at).toLocaleTimeString('vi-VN');
-                            const date = new Date(order.created_at).toLocaleDateString('vi-VN');
                             return `
                                 <div class="order-item">
                                     <div class="order-info">
                                         <h4>${order.name}</h4>
                                         <p><strong>Số lượng:</strong> ${order.quantity} xuất</p>
                                         ${order.description ? `<p><strong>Ghi chú:</strong> ${order.description}</p>` : ''}
-                                        <p class="order-time">${date} ${time}</p>
+                                        <p class="order-time">${AppUtils.formatDateTime(order.created_at)}</p>
                                     </div>
                                 </div>
                             `;

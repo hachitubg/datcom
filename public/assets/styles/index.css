@@ -442,6 +442,76 @@ textarea {
     border-bottom: none;
 }
 
+
+.payment-order-item {
+    align-items: center;
+    gap: 12px;
+}
+
+.payment-order-item .order-info p {
+    margin: 3px 0;
+}
+
+.payment-order-item .payment-action-group {
+    margin-left: auto;
+}
+
+
+.payment-detail-header {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 10px;
+    margin-bottom: 8px;
+    background: #f6efe5;
+    border: 1px solid #ead8c3;
+    border-radius: 8px;
+    color: #7d634d;
+}
+
+.payment-detail-header strong {
+    font-size: 16px;
+}
+
+.payment-detail-header span {
+    font-size: 13px;
+}
+
+.payment-detail-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.payment-detail-item {
+    background: #fff;
+    border: 1px solid #ead8c3;
+    border-radius: 8px;
+    padding: 10px;
+}
+
+.payment-detail-item .order-info h4 {
+    margin-bottom: 2px;
+    font-size: 15px;
+}
+
+.payment-detail-item .order-info p {
+    margin: 2px 0;
+    font-size: 13px;
+}
+
+.payment-detail-item-time {
+    color: #a0826d;
+    font-size: 12px;
+}
+
+.payment-detail-item-amount {
+    color: #8b7355;
+    font-weight: 700;
+    font-size: 15px;
+    white-space: nowrap;
+    margin-left: 12px;
+}
 .order-info h4 {
     color: #A0826D;
     margin-bottom: 5px;
@@ -499,9 +569,22 @@ textarea {
 
 .payment-toolbar {
     display: grid;
-    grid-template-columns: 1fr auto auto;
+    grid-template-columns: 1fr auto;
     gap: 10px;
     margin-bottom: 15px;
+    align-items: center;
+}
+
+.payment-toolbar-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.btn-payment-toolbar {
+    min-height: 38px;
+    padding: 8px 14px;
+    font-size: 13px;
+    flex: 0 0 auto;
 }
 
 
@@ -518,19 +601,37 @@ textarea {
     min-height: 42px;
 }
 
+.payment-table-wrap {
+    overflow: auto;
+    border: 1px solid #ead8c3;
+    border-radius: 12px;
+    background: #fff;
+}
+
 .payment-table {
     width: 100%;
     border-collapse: collapse;
     min-width: 620px;
 }
 
+.payment-table thead {
+    background: #f7efe5;
+}
+
 .payment-table th,
 .payment-table td {
     text-align: left;
-    padding: 10px;
-    border-bottom: 1px solid #d4c4b0;
+    padding: 12px;
+    border-bottom: 1px solid #eddcc9;
     font-size: 14px;
-    color: #8B7355;
+    color: #7b654f;
+}
+
+.payment-table th {
+    font-size: 13px;
+    color: #9b7f64;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
 }
 
 .payment-status {
@@ -542,14 +643,36 @@ textarea {
 .status-partial { color: #c27f00; }
 .status-unpaid { color: #9b3f3f; }
 
+.payment-action-group {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.pay-btn,
+.payment-detail-btn {
+    border: none;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+}
+
 .pay-btn {
     background: #A0826D;
     color: #fff;
-    border: none;
-    border-radius: 6px;
-    padding: 8px 10px;
-    font-size: 12px;
-    cursor: pointer;
+}
+
+.payment-detail-btn {
+    background: #d7b08a;
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(160, 130, 109, 0.28);
+}
+
+.payment-detail-btn:hover {
+    background: #c7976b;
 }
 
 .pay-btn:disabled {
@@ -580,7 +703,7 @@ textarea {
 @media (max-width: 768px) {
     body {
         padding: 12px;
-        padding-bottom: 84px;
+        padding-bottom: calc(120px + env(safe-area-inset-bottom));
     }
 
     .container {
@@ -591,7 +714,7 @@ textarea {
         position: fixed;
         left: 10px;
         right: 10px;
-        bottom: 10px;
+        bottom: calc(10px + env(safe-area-inset-bottom));
         z-index: 1200;
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -726,10 +849,101 @@ textarea {
 
     .payment-toolbar {
         grid-template-columns: 1fr;
+        gap: 8px;
+    }
+
+    .payment-toolbar-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+
+    .btn-payment-toolbar {
+        min-height: 34px;
+        padding: 7px 10px;
+        font-size: 12px;
+        width: 100%;
     }
 
     .payment-history-toolbar {
         grid-template-columns: 1fr;
+    }
+
+    .payment-table-wrap {
+        border-radius: 10px;
+    }
+
+    .payment-table {
+        min-width: 100%;
+    }
+
+    .payment-table thead {
+        display: none;
+    }
+
+    .payment-table,
+    .payment-table tbody,
+    .payment-table tr,
+    .payment-table td {
+        display: block;
+        width: 100%;
+    }
+
+    .payment-table tr {
+        padding: 12px;
+        border-bottom: 1px solid #ead8c3;
+        background: #fff;
+    }
+
+    .payment-table tr:last-child {
+        border-bottom: none;
+    }
+
+    .payment-table td {
+        border-bottom: none;
+        padding: 6px 0;
+        font-size: 13px;
+    }
+
+    .payment-table td::before {
+        content: attr(data-label);
+        display: block;
+        font-size: 11px;
+        color: #aa8e74;
+        margin-bottom: 2px;
+        text-transform: uppercase;
+    }
+
+    .payment-action-group {
+        gap: 6px;
+    }
+
+    .payment-order-item {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .payment-order-item .payment-action-group {
+        width: 100%;
+        margin-left: 0;
+    }
+
+
+    .payment-detail-item {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .payment-detail-item-amount {
+        margin-left: 0;
+        margin-top: 6px;
+    }
+
+    .pay-btn,
+    .payment-detail-btn {
+        flex: 1;
+        min-width: 120px;
+        text-align: center;
     }
 
     .modal h2 {
@@ -766,6 +980,7 @@ textarea {
 @media (max-width: 480px) {
     body {
         padding: 10px;
+        padding-bottom: calc(120px + env(safe-area-inset-bottom));
     }
 
     .container {

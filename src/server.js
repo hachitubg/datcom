@@ -425,6 +425,21 @@ app.get('/api/admin/customers/:name/orders', (req, res) => {
   });
 });
 
+app.get('/api/payments/today/:name/details', (req, res) => {
+  const customerName = normalizeName(decodeURIComponent(req.params.name || ''));
+  if (!customerName) {
+    return res.status(400).json({ error: 'Thiếu tên khách hàng hợp lệ' });
+  }
+
+  db.getTodayCustomerOrderDetails(customerName, (err, data) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+
+    res.json(data);
+  });
+});
+
 // Tạo QR thanh toán cho khách hàng hôm nay
 app.post('/api/payments/create', async (req, res) => {
   const name = normalizeName(req.body.name);

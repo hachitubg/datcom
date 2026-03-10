@@ -458,13 +458,15 @@ class Database {
   }
 
   getTodayPaymentSummary(searchKeyword, callback) {
+    const today = this.getDateString();
     const keyword = (searchKeyword || '').trim().toLowerCase();
     const normalizedKeyword = keyword.replace(/['\s]+/g, '');
-    const searchParams = normalizedKeyword ? [`%${normalizedKeyword}%`] : [];
+    const searchParams = [today, ...(normalizedKeyword ? [`%${normalizedKeyword}%`] : [])];
 
     const sql = `
       SELECT
         MIN(o.name) AS name,
+        d.id AS day_id,
         SUM(o.quantity) AS quantity,
         SUM(o.quantity * d.price) AS total_amount,
         COALESCE(paid.total_paid, 0) AS paid_amount,
@@ -473,20 +475,20 @@ class Database {
       FROM orders o
       JOIN days d ON o.day_id = d.id
       LEFT JOIN (
-        SELECT LOWER(customer_name) AS normalized_name, SUM(amount) AS total_paid
+        SELECT day_id, LOWER(customer_name) AS normalized_name, SUM(amount) AS total_paid
         FROM payment_transactions
         WHERE status = 'PAID'
-        GROUP BY LOWER(customer_name)
-      ) paid ON paid.normalized_name = LOWER(o.name)
+        GROUP BY day_id, LOWER(customer_name)
+      ) paid ON paid.day_id = o.day_id AND paid.normalized_name = LOWER(o.name)
       LEFT JOIN (
-        SELECT LOWER(customer_name) AS normalized_name, MAX(order_code) AS latest_pending_order_code
+        SELECT day_id, LOWER(customer_name) AS normalized_name, MAX(order_code) AS latest_pending_order_code
         FROM payment_requests
         WHERE status = 'PENDING'
-        GROUP BY LOWER(customer_name)
-      ) pending ON pending.normalized_name = LOWER(o.name)
-      WHERE 1 = 1
+        GROUP BY day_id, LOWER(customer_name)
+      ) pending ON pending.day_id = o.day_id AND pending.normalized_name = LOWER(o.name)
+      WHERE d.date = ?
       ${normalizedKeyword ? "AND LOWER(REPLACE(REPLACE(o.name, '''', ''), ' ', '')) LIKE ?" : ''}
-      GROUP BY LOWER(o.name)
+      GROUP BY d.id, LOWER(o.name)
       HAVING SUM(o.quantity * d.price) > COALESCE(paid.total_paid, 0)
       ORDER BY MAX(o.created_at) DESC, MIN(o.name) COLLATE NOCASE ASC
     `;
@@ -517,13 +519,59 @@ class Database {
     });
   }
 
+
+  getTodayCustomerOrderDetails(name, callback) {
+    const normalizedName = String(name || '').trim();
+    if (!normalizedName) {
+      callback(new Error('Thiếu tên khách hàng'));
+      return;
+    }
+
+    const today = this.getDateString();
+    this.db.all(
+      `SELECT o.id, o.quantity, o.description, o.created_at, d.price
+       FROM orders o
+       JOIN days d ON d.id = o.day_id
+       WHERE LOWER(o.name) = LOWER(?) AND d.date = ?
+       ORDER BY o.created_at ASC, o.id ASC`,
+      [normalizedName, today],
+      (err, rows = []) => {
+        if (err) {
+          callback(err);
+          return;
+        }
+
+        const mappedRows = rows.map((row) => ({
+          id: Number(row.id),
+          quantity: Number(row.quantity || 0),
+          description: row.description || '',
+          createdAt: row.created_at || '',
+          amount: Number(row.quantity || 0) * Number(row.price || 0)
+        }));
+
+        const totalQuantity = mappedRows.reduce((sum, row) => sum + row.quantity, 0);
+        const totalAmount = mappedRows.reduce((sum, row) => sum + row.amount, 0);
+
+        callback(null, {
+          name: normalizedName,
+          date: today,
+          totalQuantity,
+          totalAmount,
+          rows: mappedRows
+        });
+      }
+    );
+  }
+
   getTodayCustomerPayment(name, callback) {
+    const today = this.getDateString();
     this.db.get(
-      `SELECT MAX(d.id) AS latest_day_id, SUM(o.quantity) AS quantity, SUM(o.quantity * d.price) AS total_amount
+      `SELECT d.id AS day_id, SUM(o.quantity) AS quantity, SUM(o.quantity * d.price) AS total_amount
        FROM orders o
        JOIN days d ON o.day_id = d.id
-       WHERE LOWER(o.name) = LOWER(?)`,
-      [name],
+       WHERE LOWER(o.name) = LOWER(?) AND d.date = ?
+       GROUP BY d.id`,
+      [name, today],
       (err, row) => {
         if (err) {
           callback(err);
@@ -538,8 +586,8 @@ class Database {
         this.db.get(
           `SELECT COALESCE(SUM(amount), 0) AS paid_amount
            FROM payment_transactions
-           WHERE LOWER(customer_name) = LOWER(?) AND status = 'PAID'`,
-          [name],
+           WHERE day_id = ? AND LOWER(customer_name) = LOWER(?) AND status = 'PAID'`,
+          [row.day_id, name],
           (paidErr, paidRow) => {
             if (paidErr) {
               callback(paidErr);
@@ -549,7 +597,7 @@ class Database {
             const totalAmount = row.total_amount || 0;
             const paidAmount = (paidRow && paidRow.paid_amount) || 0;
             callback(null, {
-              dayId: row.latest_day_id,
+              dayId: row.day_id,
               name,
               quantity: row.quantity,
               unitPrice: row.quantity > 0 ? Math.round(totalAmount / row.quantity) : 0,
