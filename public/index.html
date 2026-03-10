@@ -135,8 +135,8 @@
     <div id="paymentDetailModal" class="modal">
         <div class="modal-content modal-wide">
             <span class="close" id="closePaymentDetail">&times;</span>
-            <h2>CHI TIẾT XUẤT ĐÃ ĐẶT HÔM NAY</h2>
-            <div id="paymentDetailContent" class="orders-list"></div>
+            <h2>LỊCH SỬ ĐẶT CƠM</h2>
+            <div id="paymentDetailContent"></div>
         </div>
     </div>
 
@@ -337,10 +337,7 @@
         }
 
         function formatDateTime(value) {
-            if (!value) return '-';
-            const date = new Date(value.replace(' ', 'T'));
-            if (Number.isNaN(date.getTime())) return value;
-            return date.toLocaleString('vi-VN');
+            return AppUtils.formatDateTime(value);
         }
 
         function openPaymentDetail(name) {
@@ -368,9 +365,8 @@
                         html += `
                             <div class="order-item payment-detail-item">
                                 <div class="order-info">
-                                    <h4>Lần đặt #${index + 1}</h4>
+                                    <h4>Ngày đặt: ${formatDateTime(row.createdAt)}</h4>
                                     <p><strong>Số xuất:</strong> ${row.quantity}</p>
-                                    <p class="payment-detail-item-time">${formatDateTime(row.createdAt)}</p>
                                 </div>
                                 <div class="payment-detail-item-amount">${AppUtils.formatCurrency(row.amount)}</div>
                             </div>
@@ -552,7 +548,7 @@
 
                     let html = '<div style="overflow:auto"><table class="payment-table"><thead><tr><th>Ngày đơn</th><th>Tên</th><th>Số tiền</th><th>Mã đơn PayOS</th><th>Thời gian giao dịch</th></tr></thead><tbody>';
                     rows.forEach((row) => {
-                        html += `<tr><td>${row.date}</td><td>${row.customer_name}</td><td>${AppUtils.formatCurrency(row.paid_amount || row.request_amount || 0)}</td><td>${row.order_code}</td><td>${row.latest_paid_at || row.request_updated_at || row.request_created_at || '-'}</td></tr>`;
+                        html += `<tr><td>${row.date}</td><td>${row.customer_name}</td><td>${AppUtils.formatCurrency(row.paid_amount || row.request_amount || 0)}</td><td>${row.order_code}</td><td>${AppUtils.formatDateTime(row.latest_paid_at || row.request_updated_at || row.request_created_at)}</td></tr>`;
                     });
                     html += '</tbody></table></div>';
                     historyBox.innerHTML = html;
@@ -727,15 +723,13 @@
                         ordersList.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">Chưa có đơn hàng</div>';
                     } else {
                         ordersList.innerHTML = orders.map(order => {
-                            const time = new Date(order.created_at).toLocaleTimeString('vi-VN');
-                            const date = new Date(order.created_at).toLocaleDateString('vi-VN');
                             return `
                                 <div class="order-item">
                                     <div class="order-info">
                                         <h4>${order.name}</h4>
                                         <p><strong>Số lượng:</strong> ${order.quantity} xuất</p>
                                         ${order.description ? `<p><strong>Ghi chú:</strong> ${order.description}</p>` : ''}
-                                        <p class="order-time">${date} ${time}</p>
+                                        <p class="order-time">${AppUtils.formatDateTime(order.created_at)}</p>
                                     </div>
                                 </div>
                             `;
