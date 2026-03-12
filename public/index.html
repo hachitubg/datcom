@@ -347,8 +347,7 @@
                     list.innerHTML = rows.map((row) => `
                         <div class="order-item payment-order-item">
                             <div class="order-info">
-                                <h4>${row.name} - </h4>
-                                <p><strong>Số xuất:</strong> ${row.quantity} xuất</p>
+                                <h4>${row.name} - ${row.quantity} xuất</h4>
                                 <p><strong>Tổng tiền:</strong> ${AppUtils.formatCurrency(row.totalAmount)}</p>
                             </div>
                             <div class="payment-action-group">
@@ -392,12 +391,11 @@
                         html += `
                             <div class="order-item payment-detail-item">
                                 <div class="order-info">
-                                    <h4>Ngày đặt: ${formatDateTime(row.createdAt)}</h4>
-                                    <p><strong>Số xuất:</strong> ${row.quantity}</p>
+                                    <h4>Đã đặt ${row.quantity} xuất vào ngày ${formatDateTime(row.createdAt)}</h4>
+                                    <h4>Tổng tiền ${AppUtils.formatCurrency(row.amount)}</h4>
                                 </div>
-                                <div class="payment-detail-item-amount">${AppUtils.formatCurrency(row.amount)}</div>
                             </div>
-                        `;
+                        `; 
                     });
 
                     html += '</div>';
@@ -766,7 +764,7 @@
                             return `
                                 <div class="order-item">
                                     <div class="order-info">
-                                        <h4>${order.name} - ${order.quantity} xuất</h4>
+                                        <h4>${order.name} đã đặt ${order.quantity} xuất</h4>
                                         ${order.description ? `<p><strong>Ghi chú:</strong> ${order.description}</p>` : ''}
                                         <p class="order-time">${AppUtils.formatDateTime(order.created_at)}</p>
                                     </div>
