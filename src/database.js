@@ -472,32 +472,37 @@ class Database {
     const normalizedKeyword = keyword.replace(/['\s]+/g, '');
     const searchParams = [...(normalizedKeyword ? [`%${normalizedKeyword}%`] : [])];
 
+    // Inner query: tính theo từng (ngày, khách), lọc ra những ngày chưa trả đủ
+    // Outer query: gom lại thành 1 dòng per khách, chỉ tính xuất của các ngày chưa trả
     const sql = `
       SELECT
-        MIN(o.name) AS name,
-        SUM(o.quantity) AS quantity,
-        SUM(o.quantity * d.price) AS total_amount,
-        COALESCE(paid.total_paid, 0) AS paid_amount,
-        MAX(o.created_at) AS last_order_time,
-        pending.latest_pending_order_code
-      FROM orders o
-      JOIN days d ON o.day_id = d.id
-      LEFT JOIN (
-        SELECT LOWER(customer_name) AS normalized_name, SUM(amount) AS total_paid
-        FROM payment_transactions
-        WHERE status = 'PAID'
-        GROUP BY LOWER(customer_name)
-      ) paid ON paid.normalized_name = LOWER(o.name)
-      LEFT JOIN (
-        SELECT LOWER(customer_name) AS normalized_name, MAX(order_code) AS latest_pending_order_code
-        FROM payment_requests
-        WHERE status = 'PENDING'
-        GROUP BY LOWER(customer_name)
-      ) pending ON pending.normalized_name = LOWER(o.name)
-      ${normalizedKeyword ? "WHERE LOWER(REPLACE(REPLACE(o.name, '''', ''), ' ', '')) LIKE ?" : ''}
-      GROUP BY LOWER(o.name)
-      HAVING SUM(o.quantity * d.price) > COALESCE(paid.total_paid, 0)
-      ORDER BY MAX(o.created_at) DESC, MIN(o.name) COLLATE NOCASE ASC
+        name,
+        SUM(quantity)      AS quantity,
+        SUM(total_amount)  AS total_amount,
+        SUM(paid_amount)   AS paid_amount,
+        SUM(total_amount - paid_amount) AS remaining_amount,
+        MAX(last_order_time) AS last_order_time
+      FROM (
+        SELECT
+          MIN(o.name)                          AS name,
+          SUM(o.quantity)                      AS quantity,
+          SUM(o.quantity * d.price)            AS total_amount,
+          COALESCE(paid.total_paid, 0)         AS paid_amount,
+          MAX(o.created_at)                    AS last_order_time
+        FROM orders o
+        JOIN days d ON o.day_id = d.id
+        LEFT JOIN (
+          SELECT day_id, LOWER(customer_name) AS normalized_name, SUM(amount) AS total_paid
+          FROM payment_transactions
+          WHERE status = 'PAID'
+          GROUP BY day_id, LOWER(customer_name)
+        ) paid ON paid.day_id = o.day_id AND paid.normalized_name = LOWER(o.name)
+        ${normalizedKeyword ? "WHERE LOWER(REPLACE(REPLACE(o.name, '''', ''), ' ', '')) LIKE ?" : ''}
+        GROUP BY o.day_id, LOWER(o.name)
+        HAVING SUM(o.quantity * d.price) > COALESCE(paid.total_paid, 0)
+      ) unpaid_days
+      GROUP BY LOWER(name)
+      ORDER BY MAX(last_order_time) DESC, name COLLATE NOCASE ASC
     `;
 
     this.db.all(sql, searchParams, (err, rows = []) => {
@@ -509,16 +514,17 @@ class Database {
       const summary = rows.map((row) => {
         const totalAmount = row.total_amount || 0;
         const paidAmount = row.paid_amount || 0;
+        const remainingAmount = row.remaining_amount || 0;
         return {
           name: row.name,
           quantity: row.quantity,
           unitPrice: row.quantity > 0 ? Math.round(totalAmount / row.quantity) : 0,
           totalAmount,
           paidAmount,
-          remainingAmount: Math.max(0, totalAmount - paidAmount),
+          remainingAmount: Math.max(0, remainingAmount),
           status: paidAmount >= totalAmount ? 'PAID' : paidAmount > 0 ? 'PARTIAL' : 'UNPAID',
           lastOrderTime: row.last_order_time,
-          latestPendingOrderCode: row.latest_pending_order_code || 0
+          latestPendingOrderCode: 0
         };
       });
 
