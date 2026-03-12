@@ -506,9 +506,7 @@
         }
 
         .loading {
-            /* text-align: center; */
             color: #A0826D;
-            padding: 20px;
         }
 
         .order-row {
@@ -1021,7 +1019,6 @@
 
             .loading {
                 font-size: 12px;
-                padding: 15px;
             }
 
             .success-message,

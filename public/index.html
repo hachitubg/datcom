@@ -320,7 +320,7 @@
                     list.innerHTML = rows.map((row) => `
                         <div class="order-item payment-order-item">
                             <div class="order-info">
-                                <h4>${row.name}</h4>
+                                <h4>${row.name} - </h4>
                                 <p><strong>Số xuất:</strong> ${row.quantity} xuất</p>
                                 <p><strong>Tổng tiền:</strong> ${AppUtils.formatCurrency(row.totalAmount)}</p>
                             </div>
@@ -546,11 +546,24 @@
                         return;
                     }
 
-                    let html = '<div style="overflow:auto"><table class="payment-table"><thead><tr><th>Ngày đơn</th><th>Tên</th><th>Số tiền</th><th>Mã đơn PayOS</th><th>Thời gian giao dịch</th></tr></thead><tbody>';
+                    const toDateOnly = (value) => {
+                        if (!value) return '-';
+                        const s = String(value).replace(' ', 'T');
+                        const d = new Date(/[Zz]$|[+\-]\d{2}:\d{2}$/.test(s) ? s : s + 'Z');
+                        return isNaN(d) ? String(value) : d.toLocaleDateString('vi-VN');
+                    };
+                    let html = '<div class="history-simple-list">';
                     rows.forEach((row) => {
-                        html += `<tr><td>${row.date}</td><td>${row.customer_name}</td><td>${AppUtils.formatCurrency(row.paid_amount || row.request_amount || 0)}</td><td>${row.order_code}</td><td>${AppUtils.formatDateTime(row.latest_paid_at || row.request_updated_at || row.request_created_at)}</td></tr>`;
+                        const paidDate = toDateOnly(row.latest_paid_at || row.request_updated_at || row.request_created_at);
+                        const amount = AppUtils.formatCurrency(row.paid_amount || row.request_amount || 0);
+                        html += `
+                            <div class="history-simple-item">
+                                <span class="history-simple-name">${row.customer_name}</span>
+                                <span class="history-simple-meta">${paidDate}</span>
+                                <span class="history-simple-amount">${amount}</span>
+                            </div>`;
                     });
-                    html += '</tbody></table></div>';
+                    html += '</div>';
                     historyBox.innerHTML = html;
                 })
                 .catch(err => {
@@ -726,8 +739,7 @@
                             return `
                                 <div class="order-item">
                                     <div class="order-info">
-                                        <h4>${order.name}</h4>
-                                        <p><strong>Số lượng:</strong> ${order.quantity} xuất</p>
+                                        <h4>${order.name} - ${order.quantity} xuất</h4>
                                         ${order.description ? `<p><strong>Ghi chú:</strong> ${order.description}</p>` : ''}
                                         <p class="order-time">${AppUtils.formatDateTime(order.created_at)}</p>
                                     </div>

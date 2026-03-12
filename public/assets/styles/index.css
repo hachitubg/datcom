@@ -699,11 +699,52 @@ textarea {
     display: none;
 }
 
+/* Lịch sử thanh toán - danh sách đơn giản */
+.history-simple-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 4px 0;
+}
+
+.history-simple-item {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: #fdf8f2;
+    border: 1px solid #e8dcc8;
+    border-radius: 8px;
+}
+
+.history-simple-name {
+    font-weight: 600;
+    color: #5c3d2e;
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.history-simple-meta {
+    font-size: 13px;
+    color: #8B7355;
+    white-space: nowrap;
+}
+
+.history-simple-amount {
+    font-weight: 700;
+    color: #A0826D;
+    font-size: 14px;
+    white-space: nowrap;
+}
+
 
 @media (max-width: 768px) {
     body {
         padding: 12px;
-        padding-bottom: calc(120px + env(safe-area-inset-bottom));
+        padding-bottom: calc(80px + env(safe-area-inset-bottom));
     }
 
     .container {
@@ -714,21 +755,22 @@ textarea {
         position: fixed;
         left: 10px;
         right: 10px;
-        bottom: calc(10px + env(safe-area-inset-bottom));
+        bottom: calc(8px + env(safe-area-inset-bottom));
         z-index: 1200;
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 8px;
+        gap: 6px;
         background: rgba(254, 252, 249, 0.97);
         border: 1px solid #ead8c3;
-        border-radius: 12px;
-        padding: 8px;
+        border-radius: 10px;
+        padding: 6px;
         box-shadow: 0 8px 20px rgba(0,0,0,0.12);
     }
 
     .mobile-action-bar button {
-        padding: 12px 8px;
-        font-size: 14px;
+        padding: 8px 4px;
+        font-size: 12px;
+        border-radius: 7px;
     }
 
 
