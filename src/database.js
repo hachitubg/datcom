@@ -287,40 +287,51 @@ class Database {
       return;
     }
 
+    // Lấy tất cả ngày đặt, sắp xếp cũ nhất trước để áp dụng FIFO
     this.db.all(
-      `SELECT
-         d.date,
-         SUM(o.quantity) AS quantity,
-         SUM(o.quantity * d.price) AS total_amount,
-         COALESCE(paid.total_paid, 0) AS paid_amount,
-         MAX(o.created_at) AS latest_order_time
-       FROM orders o
-       JOIN days d ON d.id = o.day_id
-       LEFT JOIN (
-         SELECT day_id, LOWER(customer_name) AS normalized_name, SUM(amount) AS total_paid
-         FROM payment_transactions
-         WHERE status = 'PAID'
-         GROUP BY day_id, LOWER(customer_name)
-       ) paid ON paid.day_id = d.id AND paid.normalized_name = LOWER(o.name)
+      `SELECT d.date, SUM(o.quantity) AS quantity, SUM(o.quantity * d.price) AS day_amount
+       FROM orders o JOIN days d ON d.id = o.day_id
        WHERE LOWER(o.name) = LOWER(?)
-       GROUP BY d.date
-       HAVING SUM(o.quantity * d.price) > COALESCE(paid.total_paid, 0)
-       ORDER BY d.date DESC`,
+       GROUP BY d.date ORDER BY d.date ASC`,
       [normalizedName],
-      (err, rows = []) => {
-        if (err) {
-          callback(err);
-          return;
-        }
+      (err, orderRows = []) => {
+        if (err) { callback(err); return; }
 
-        callback(null, rows.map((row) => ({
-          date: row.date,
-          quantity: Number(row.quantity || 0),
-          totalAmount: Number(row.total_amount || 0),
-          paidAmount: Number(row.paid_amount || 0),
-          remainingAmount: Number(row.total_amount || 0) - Number(row.paid_amount || 0),
-          latestOrderTime: row.latest_order_time || ''
-        })));
+        // Lấy tổng tiền đã thanh toán (toàn bộ lịch sử, không phân biệt day_id)
+        this.db.get(
+          `SELECT COALESCE(SUM(amount), 0) AS total_paid
+           FROM payment_transactions
+           WHERE status = 'PAID' AND LOWER(customer_name) = LOWER(?)`,
+          [normalizedName],
+          (err2, payRow) => {
+            if (err2) { callback(err2); return; }
+
+            // FIFO waterfall: trừ tiền đã trả từ đơn cũ nhất trước
+            let pool = Number(payRow?.total_paid || 0);
+            const unpaidRows = [];
+
+            for (const row of orderRows) {
+              const dayAmount = Number(row.day_amount || 0);
+              const applied = Math.min(pool, dayAmount);
+              pool -= applied;
+              const dayRemaining = dayAmount - applied;
+
+              if (dayRemaining > 0) {
+                unpaidRows.push({
+                  date: row.date,
+                  quantity: Number(row.quantity || 0),
+                  totalAmount: dayAmount,
+                  paidAmount: applied,
+                  remainingAmount: dayRemaining
+                });
+              }
+            }
+
+            // Hiển thị ngày gần nhất lên trên
+            unpaidRows.reverse();
+            callback(null, unpaidRows);
+          }
+        );
       }
     );
   }
@@ -472,37 +483,65 @@ class Database {
     const normalizedKeyword = keyword.replace(/['\s]+/g, '');
     const searchParams = [...(normalizedKeyword ? [`%${normalizedKeyword}%`] : [])];
 
-    // Inner query: tính theo từng (ngày, khách), lọc ra những ngày chưa trả đủ
-    // Outer query: gom lại thành 1 dòng per khách, chỉ tính xuất của các ngày chưa trả
+    // FIFO waterfall bằng SQL CTE + window function:
+    // 1. order_days: tính running_total (cộng dồn từ ngày cũ nhất) theo từng khách
+    // 2. customer_paid: tổng tiền đã trả toàn bộ lịch sử per khách
+    // 3. day_rem: áp dụng công thức FIFO để tính phần còn nợ mỗi ngày
+    // 4. Gom lại 1 dòng per khách, chỉ tính ngày còn nợ
     const sql = `
-      SELECT
-        name,
-        SUM(quantity)      AS quantity,
-        SUM(total_amount)  AS total_amount,
-        SUM(paid_amount)   AS paid_amount,
-        SUM(total_amount - paid_amount) AS remaining_amount,
-        MAX(last_order_time) AS last_order_time
-      FROM (
+      WITH order_days AS (
         SELECT
-          MIN(o.name)                          AS name,
-          SUM(o.quantity)                      AS quantity,
-          SUM(o.quantity * d.price)            AS total_amount,
-          COALESCE(paid.total_paid, 0)         AS paid_amount,
-          MAX(o.created_at)                    AS last_order_time
+          LOWER(o.name)                    AS norm_name,
+          MIN(o.name)                      AS display_name,
+          d.date,
+          SUM(o.quantity)                  AS quantity,
+          SUM(o.quantity * d.price)        AS day_amount,
+          SUM(SUM(o.quantity * d.price)) OVER (
+            PARTITION BY LOWER(o.name)
+            ORDER BY d.date ASC
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+          )                                AS running_total,
+          MAX(o.created_at)                AS last_order_time
         FROM orders o
         JOIN days d ON o.day_id = d.id
-        LEFT JOIN (
-          SELECT day_id, LOWER(customer_name) AS normalized_name, SUM(amount) AS total_paid
-          FROM payment_transactions
-          WHERE status = 'PAID'
-          GROUP BY day_id, LOWER(customer_name)
-        ) paid ON paid.day_id = o.day_id AND paid.normalized_name = LOWER(o.name)
         ${normalizedKeyword ? "WHERE LOWER(REPLACE(REPLACE(o.name, '''', ''), ' ', '')) LIKE ?" : ''}
-        GROUP BY o.day_id, LOWER(o.name)
-        HAVING SUM(o.quantity * d.price) > COALESCE(paid.total_paid, 0)
-      ) unpaid_days
-      GROUP BY LOWER(name)
-      ORDER BY MAX(last_order_time) DESC, name COLLATE NOCASE ASC
+        GROUP BY LOWER(o.name), d.date
+      ),
+      customer_paid AS (
+        SELECT
+          LOWER(customer_name)             AS norm_name,
+          COALESCE(SUM(amount), 0)         AS total_paid
+        FROM payment_transactions
+        WHERE status = 'PAID'
+        GROUP BY LOWER(customer_name)
+      ),
+      day_rem AS (
+        SELECT
+          od.norm_name,
+          od.display_name,
+          od.quantity,
+          od.day_amount,
+          od.last_order_time,
+          CASE
+            WHEN od.running_total - COALESCE(cp.total_paid, 0) <= 0
+              THEN 0
+            WHEN od.running_total - COALESCE(cp.total_paid, 0) < od.day_amount
+              THEN od.running_total - COALESCE(cp.total_paid, 0)
+            ELSE od.day_amount
+          END AS rem
+        FROM order_days od
+        LEFT JOIN customer_paid cp ON cp.norm_name = od.norm_name
+      )
+      SELECT
+        MIN(display_name)                                          AS name,
+        SUM(CASE WHEN rem > 0 THEN quantity ELSE 0 END)           AS quantity,
+        SUM(CASE WHEN rem > 0 THEN day_amount ELSE 0 END)         AS total_amount,
+        SUM(rem)                                                   AS remaining_amount,
+        MAX(last_order_time)                                       AS last_order_time
+      FROM day_rem
+      GROUP BY norm_name
+      HAVING SUM(rem) > 0
+      ORDER BY MAX(last_order_time) DESC, MIN(display_name) COLLATE NOCASE ASC
     `;
 
     this.db.all(sql, searchParams, (err, rows = []) => {
@@ -513,16 +552,15 @@ class Database {
 
       const summary = rows.map((row) => {
         const totalAmount = row.total_amount || 0;
-        const paidAmount = row.paid_amount || 0;
         const remainingAmount = row.remaining_amount || 0;
         return {
           name: row.name,
           quantity: row.quantity,
           unitPrice: row.quantity > 0 ? Math.round(totalAmount / row.quantity) : 0,
           totalAmount,
-          paidAmount,
+          paidAmount: Math.max(0, totalAmount - remainingAmount),
           remainingAmount: Math.max(0, remainingAmount),
-          status: paidAmount >= totalAmount ? 'PAID' : paidAmount > 0 ? 'PARTIAL' : 'UNPAID',
+          status: remainingAmount <= 0 ? 'PAID' : totalAmount > remainingAmount ? 'PARTIAL' : 'UNPAID',
           lastOrderTime: row.last_order_time,
           latestPendingOrderCode: 0
         };
@@ -540,38 +578,76 @@ class Database {
       return;
     }
 
-    const today = this.getDateString();
+    // Bước 1: lấy tổng tiền mỗi ngày (cũ nhất trước) để tính FIFO
     this.db.all(
-      `SELECT o.id, o.quantity, o.description, o.created_at, d.price
-       FROM orders o
-       JOIN days d ON d.id = o.day_id
-       WHERE LOWER(o.name) = LOWER(?) AND d.date = ?
-       ORDER BY o.created_at ASC, o.id ASC`,
-      [normalizedName, today],
-      (err, rows = []) => {
-        if (err) {
-          callback(err);
-          return;
-        }
+      `SELECT d.date, SUM(o.quantity * d.price) AS day_amount
+       FROM orders o JOIN days d ON d.id = o.day_id
+       WHERE LOWER(o.name) = LOWER(?)
+       GROUP BY d.date ORDER BY d.date ASC`,
+      [normalizedName],
+      (err, dayRows = []) => {
+        if (err) { callback(err); return; }
 
-        const mappedRows = rows.map((row) => ({
-          id: Number(row.id),
-          quantity: Number(row.quantity || 0),
-          description: row.description || '',
-          createdAt: row.created_at || '',
-          amount: Number(row.quantity || 0) * Number(row.price || 0)
-        }));
+        // Bước 2: tổng tiền đã thanh toán (toàn bộ lịch sử)
+        this.db.get(
+          `SELECT COALESCE(SUM(amount), 0) AS total_paid
+           FROM payment_transactions
+           WHERE status = 'PAID' AND LOWER(customer_name) = LOWER(?)`,
+          [normalizedName],
+          (err2, payRow) => {
+            if (err2) { callback(err2); return; }
 
-        const totalQuantity = mappedRows.reduce((sum, row) => sum + row.quantity, 0);
-        const totalAmount = mappedRows.reduce((sum, row) => sum + row.amount, 0);
+            // Bước 3: FIFO waterfall - xác định ngày nào còn nợ và còn bao nhiêu
+            let pool = Number(payRow?.total_paid || 0);
+            const unpaidDates = new Set();
+            let totalRemaining = 0;
 
-        callback(null, {
-          name: normalizedName,
-          date: today,
-          totalQuantity,
-          totalAmount,
-          rows: mappedRows
-        });
+            for (const day of dayRows) {
+              const dayAmount = Number(day.day_amount || 0);
+              const applied = Math.min(pool, dayAmount);
+              pool -= applied;
+              const dayRemaining = dayAmount - applied;
+              if (dayRemaining > 0) {
+                unpaidDates.add(day.date);
+                totalRemaining += dayRemaining;
+              }
+            }
+
+            if (unpaidDates.size === 0) {
+              return callback(null, { name: normalizedName, totalQuantity: 0, totalAmount: 0, rows: [] });
+            }
+
+            // Bước 4: lấy từng đơn lẻ thuộc các ngày còn nợ
+            const placeholders = Array.from(unpaidDates).map(() => '?').join(', ');
+            this.db.all(
+              `SELECT o.id, o.quantity, o.description, o.created_at, d.price, d.date
+               FROM orders o JOIN days d ON d.id = o.day_id
+               WHERE LOWER(o.name) = LOWER(?) AND d.date IN (${placeholders})
+               ORDER BY d.date ASC, o.created_at ASC, o.id ASC`,
+              [normalizedName, ...Array.from(unpaidDates)],
+              (err3, orderRows = []) => {
+                if (err3) { callback(err3); return; }
+
+                const mappedRows = orderRows.map((row) => ({
+                  id: Number(row.id),
+                  quantity: Number(row.quantity || 0),
+                  description: row.description || '',
+                  createdAt: row.created_at || '',
+                  amount: Number(row.quantity || 0) * Number(row.price || 0)
+                }));
+
+                const totalQuantity = mappedRows.reduce((sum, r) => sum + r.quantity, 0);
+
+                callback(null, {
+                  name: normalizedName,
+                  totalQuantity,
+                  totalAmount: totalRemaining,
+                  rows: mappedRows
+                });
+              }
+            );
+          }
+        );
       }
     );
   }

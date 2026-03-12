@@ -349,7 +349,7 @@
                 .then((data) => {
                     const rows = Array.isArray(data.rows) ? data.rows : [];
                     if (!rows.length) {
-                        container.innerHTML = '<div style="padding: 16px">Không tìm thấy xuất đã đặt hôm nay.</div>';
+                        container.innerHTML = '<div style="padding: 16px">Không có xuất chưa thanh toán.</div>';
                         return;
                     }
 
