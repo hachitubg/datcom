@@ -155,7 +155,7 @@ class Database {
        FROM orders o
        JOIN days d ON o.day_id = d.id
        WHERE d.date = ?
-       ORDER BY o.created_at ASC`,
+       ORDER BY o.created_at DESC`,
       [today],
       callback
     );
@@ -292,11 +292,19 @@ class Database {
          d.date,
          SUM(o.quantity) AS quantity,
          SUM(o.quantity * d.price) AS total_amount,
+         COALESCE(paid.total_paid, 0) AS paid_amount,
          MAX(o.created_at) AS latest_order_time
        FROM orders o
        JOIN days d ON d.id = o.day_id
+       LEFT JOIN (
+         SELECT day_id, LOWER(customer_name) AS normalized_name, SUM(amount) AS total_paid
+         FROM payment_transactions
+         WHERE status = 'PAID'
+         GROUP BY day_id, LOWER(customer_name)
+       ) paid ON paid.day_id = d.id AND paid.normalized_name = LOWER(o.name)
        WHERE LOWER(o.name) = LOWER(?)
        GROUP BY d.date
+       HAVING SUM(o.quantity * d.price) > COALESCE(paid.total_paid, 0)
        ORDER BY d.date DESC`,
       [normalizedName],
       (err, rows = []) => {
@@ -309,6 +317,8 @@ class Database {
           date: row.date,
           quantity: Number(row.quantity || 0),
           totalAmount: Number(row.total_amount || 0),
+          paidAmount: Number(row.paid_amount || 0),
+          remainingAmount: Number(row.total_amount || 0) - Number(row.paid_amount || 0),
           latestOrderTime: row.latest_order_time || ''
         })));
       }
@@ -458,15 +468,13 @@ class Database {
   }
 
   getTodayPaymentSummary(searchKeyword, callback) {
-    const today = this.getDateString();
     const keyword = (searchKeyword || '').trim().toLowerCase();
     const normalizedKeyword = keyword.replace(/['\s]+/g, '');
-    const searchParams = [today, ...(normalizedKeyword ? [`%${normalizedKeyword}%`] : [])];
+    const searchParams = [...(normalizedKeyword ? [`%${normalizedKeyword}%`] : [])];
 
     const sql = `
       SELECT
         MIN(o.name) AS name,
-        d.id AS day_id,
         SUM(o.quantity) AS quantity,
         SUM(o.quantity * d.price) AS total_amount,
         COALESCE(paid.total_paid, 0) AS paid_amount,
@@ -475,20 +483,19 @@ class Database {
       FROM orders o
       JOIN days d ON o.day_id = d.id
       LEFT JOIN (
-        SELECT day_id, LOWER(customer_name) AS normalized_name, SUM(amount) AS total_paid
+        SELECT LOWER(customer_name) AS normalized_name, SUM(amount) AS total_paid
         FROM payment_transactions
         WHERE status = 'PAID'
-        GROUP BY day_id, LOWER(customer_name)
-      ) paid ON paid.day_id = o.day_id AND paid.normalized_name = LOWER(o.name)
+        GROUP BY LOWER(customer_name)
+      ) paid ON paid.normalized_name = LOWER(o.name)
       LEFT JOIN (
-        SELECT day_id, LOWER(customer_name) AS normalized_name, MAX(order_code) AS latest_pending_order_code
+        SELECT LOWER(customer_name) AS normalized_name, MAX(order_code) AS latest_pending_order_code
         FROM payment_requests
         WHERE status = 'PENDING'
-        GROUP BY day_id, LOWER(customer_name)
-      ) pending ON pending.day_id = o.day_id AND pending.normalized_name = LOWER(o.name)
-      WHERE d.date = ?
-      ${normalizedKeyword ? "AND LOWER(REPLACE(REPLACE(o.name, '''', ''), ' ', '')) LIKE ?" : ''}
-      GROUP BY d.id, LOWER(o.name)
+        GROUP BY LOWER(customer_name)
+      ) pending ON pending.normalized_name = LOWER(o.name)
+      ${normalizedKeyword ? "WHERE LOWER(REPLACE(REPLACE(o.name, '''', ''), ' ', '')) LIKE ?" : ''}
+      GROUP BY LOWER(o.name)
       HAVING SUM(o.quantity * d.price) > COALESCE(paid.total_paid, 0)
       ORDER BY MAX(o.created_at) DESC, MIN(o.name) COLLATE NOCASE ASC
     `;

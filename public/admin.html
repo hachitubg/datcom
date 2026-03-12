@@ -697,7 +697,7 @@
             const customerName = decodeURIComponent(encodedName || '');
             if (!customerName) return;
 
-            document.getElementById('customerOrderModalTitle').textContent = `CHI TIẾT ĐẶT CƠM - ${customerName}`;
+            document.getElementById('customerOrderModalTitle').textContent = `CÔNG NỢ CHƯA THANH TOÁN - ${customerName}`;
             const content = document.getElementById('customerOrderModalContent');
             content.innerHTML = '<div class="loading">Đang tải...</div>';
             document.getElementById('customerOrderModal').style.display = 'block';
@@ -707,7 +707,7 @@
                 .then(data => {
                     const rows = data.rows || [];
                     if (!rows.length) {
-                        content.innerHTML = '<div style="padding: 12px; color:#999;">Không có dữ liệu đặt cơm của khách này.</div>';
+                        content.innerHTML = '<div style="padding: 12px; color:#999;">Không có công nợ chưa thanh toán.</div>';
                         return;
                     }
 
@@ -715,8 +715,8 @@
                         <div class="day-modal-order-item">
                             <div><strong>Ngày:</strong> ${row.date}</div>
                             <div><strong>Số xuất:</strong> ${row.quantity}</div>
-                            <div><strong>Tổng tiền:</strong> ${AppUtils.formatCurrency(row.totalAmount || 0)}</div>
-                            <div><strong>Lần đặt gần nhất:</strong> ${row.latestOrderTime || '-'}</div>
+                            <div><strong>Còn nợ:</strong> ${AppUtils.formatCurrency(row.remainingAmount || 0)}</div>
+                            ${row.paidAmount > 0 ? `<div><strong>Đã trả:</strong> ${AppUtils.formatCurrency(row.paidAmount)}</div>` : ''}
                         </div>
                     `).join('');
                 })
