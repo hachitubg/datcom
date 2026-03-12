@@ -760,11 +760,11 @@
                     if (orders.length === 0) {
                         ordersList.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">Chưa có đơn hàng</div>';
                     } else {
-                        ordersList.innerHTML = orders.map(order => {
+                        ordersList.innerHTML = orders.map((order, index) => {
                             return `
                                 <div class="order-item">
                                     <div class="order-info">
-                                        <h4>${order.name} đã đặt ${order.quantity} xuất</h4>
+                                        <h4>${orders.length - index}. ${order.name} đã đặt ${order.quantity} xuất</h4>
                                         ${order.description ? `<p><strong>Ghi chú:</strong> ${order.description}</p>` : ''}
                                         <p class="order-time">${AppUtils.formatDateTime(order.created_at)}</p>
                                     </div>
