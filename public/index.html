@@ -78,8 +78,11 @@
     <!-- Modal Đặt Cơm -->
     <div id="orderModal" class="modal">
         <div class="modal-content">
-            <span class="close" id="closeOrder">&times;</span>
-            <h2>Đặt Cơm</h2>
+            <div class="modal-header">
+                <h2>Đặt cơm</h2>
+                <button type="button" class="modal-close" id="closeOrder">&times;</button>
+            </div>
+            <div class="modal-body">
             <div id="orderMessage"></div>
             <form id="orderForm">
                 <div class="form-group">
@@ -96,20 +99,25 @@
                     <textarea id="description" placeholder="Ví dụ: Ít mặn, thêm rau..."></textarea>
                 </div>
                 <div class="form-buttons">
-                    <button type="submit" class="btn-submit">ĐẶT HÀNG</button>
+                    <button type="submit" class="btn-submit">ĐẶT CƠM</button>
                     <button type="button" class="btn-cancel" id="cancelOrder">HỦY</button>
                 </div>
             </form>
+            </div>
         </div>
     </div>
 
     <!-- Modal Danh sách đơn -->
     <div id="listModal" class="modal">
         <div class="modal-content">
-            <span class="close" id="closeList">&times;</span>
-            <h2>DANH SÁCH ĐƠN HÔM NAY</h2>
-            <div id="ordersList" class="orders-list">
-                <div style="padding: 20px; text-align: center; color: #8B7355;">Đang tải...</div>
+            <div class="modal-header">
+                <h2>Danh sách đơn hôm nay</h2>
+                <button type="button" class="modal-close" id="closeList">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="ordersList" class="orders-list">
+                    <div style="padding: 20px; text-align: center; color: #8B7355;">Đang tải...</div>
+                </div>
             </div>
         </div>
     </div>
@@ -119,8 +127,11 @@
     <!-- Modal Thanh toán -->
     <div id="paymentModal" class="modal">
         <div class="modal-content modal-wide">
-            <span class="close" id="closePayment">&times;</span>
-            <h2>THANH TOÁN ĐƠN CƠM</h2>
+            <div class="modal-header">
+                <h2>Thanh toán đơn cơm</h2>
+                <button type="button" class="modal-close" id="closePayment">&times;</button>
+            </div>
+            <div class="modal-body">
             <div class="payment-toolbar">
                 <input type="text" id="paymentSearch" placeholder="Tìm theo tên...">
                 <div class="payment-toolbar-actions">
@@ -129,28 +140,41 @@
                 </div>
             </div>
             <div id="paymentList" class="orders-list"></div>
+            </div>
         </div>
     </div>
 
     <div id="paymentDetailModal" class="modal">
         <div class="modal-content modal-wide">
-            <span class="close" id="closePaymentDetail">&times;</span>
-            <h2>LỊCH SỬ ĐẶT CƠM</h2>
-            <div id="paymentDetailContent"></div>
+            <div class="modal-header">
+                <h2>Lịch sử đặt cơm</h2>
+                <button type="button" class="modal-close" id="closePaymentDetail">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="paymentDetailContent"></div>
+            </div>
         </div>
     </div>
 
     <div id="paymentQrModal" class="modal">
         <div class="modal-content">
-            <span class="close" id="closePaymentQr">&times;</span>
-            <div id="paymentQrContent"></div>
+            <div class="modal-header">
+                <h2>Thanh toán</h2>
+                <button type="button" class="modal-close" id="closePaymentQr">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="paymentQrContent"></div>
+            </div>
         </div>
     </div>
 
     <div id="paymentHistoryModal" class="modal">
         <div class="modal-content modal-wide">
-            <span class="close" id="closePaymentHistory">&times;</span>
-            <h2>LỊCH SỬ THANH TOÁN</h2>
+            <div class="modal-header">
+                <h2>Lịch sử thanh toán</h2>
+                <button type="button" class="modal-close" id="closePaymentHistory">&times;</button>
+            </div>
+            <div class="modal-body">
             <div class="payment-history-toolbar">
                 <input type="text" id="historyNameSearch" placeholder="Tìm theo tên người dùng...">
                 <select id="historyPeriodFilter" class="hct-input">
@@ -162,10 +186,13 @@
                 <input type="date" id="historyDateFilter" style="display:none;" class="hct-input">
                 <input type="week" id="historyWeekFilter" style="display:none;" class="hct-input">
                 <input type="month" id="historyMonthFilter" style="display:none;" class="hct-input">
-                <button class="btn-submit" type="button" id="btnApplyHistoryFilter">LỌC</button>
-                <button class="btn-cancel" type="button" id="btnResetHistoryFilter">ĐẶT LẠI</button>
+                <div class="filter-actions">
+                    <button class="btn-submit" type="button" id="btnApplyHistoryFilter">Lọc</button>
+                    <button class="btn-cancel" type="button" id="btnResetHistoryFilter">Đặt lại</button>
+                </div>
             </div>
             <div id="paymentHistoryList" class="orders-list"></div>
+            </div>
         </div>
     </div>
 
