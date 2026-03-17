@@ -653,21 +653,20 @@ class Database {
   }
 
   getTodayCustomerPayment(name, callback) {
-    const today = this.getDateString();
-
-    // Bước 1: Lấy day_id của hôm nay để gắn vào payment_request
+    // Bước 1: Lấy day_id của ngày có đơn gần nhất (không bắt buộc hôm nay)
     this.db.get(
       `SELECT d.id AS day_id
        FROM days d
        JOIN orders o ON o.day_id = d.id
-       WHERE LOWER(o.name) = LOWER(?) AND d.date = ?
+       WHERE LOWER(o.name) = LOWER(?)
+       ORDER BY d.date DESC
        LIMIT 1`,
-      [name, today],
-      (err, todayRow) => {
+      [name],
+      (err, latestRow) => {
         if (err) { callback(err); return; }
 
-        if (!todayRow) {
-          callback(new Error('Không tìm thấy đơn đặt cơm của tên này hôm nay'));
+        if (!latestRow) {
+          callback(new Error('Không tìm thấy đơn đặt cơm nào của khách này'));
           return;
         }
 
@@ -695,7 +694,7 @@ class Database {
                 const quantity = Number(allRow?.quantity || 0);
 
                 callback(null, {
-                  dayId: todayRow.day_id,
+                  dayId: latestRow.day_id,
                   name,
                   quantity,
                   unitPrice: quantity > 0 ? Math.round(totalAmount / quantity) : 0,
