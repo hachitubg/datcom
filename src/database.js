@@ -848,24 +848,28 @@ class Database {
 
         const orderCode = Number(`${Date.now().toString().slice(-10)}${Math.floor(Math.random() * 90 + 10)}`);
         const finalName = (dayRow.db_name || normalizedName).trim();
+        const now = new Date().toISOString();
         const payload = {
           source: 'admin_cash_manual',
           note: 'Manual cash payment from admin panel'
         };
 
         this.db.run(
-          `INSERT INTO payment_transactions
-            (day_id, customer_name, order_code, amount, status, reference, transaction_date, raw_payload)
-           VALUES (?, ?, ?, ?, 'PAID', 'CASH-MANUAL', ?, ?)`,
-          [
-            Number(dayRow.latest_day_id),
-            finalName,
-            orderCode,
-            normalizedAmount,
-            new Date().toISOString(),
-            JSON.stringify(payload)
-          ],
-          callback
+          `INSERT INTO payment_requests
+            (day_id, customer_name, order_code, amount, payment_link_id, checkout_url, qr_code, status, created_at, updated_at)
+           VALUES (?, ?, ?, ?, NULL, NULL, NULL, 'PAID', ?, ?)`,
+          [Number(dayRow.latest_day_id), finalName, orderCode, normalizedAmount, now, now],
+          (reqErr) => {
+            if (reqErr) { callback(reqErr); return; }
+
+            this.db.run(
+              `INSERT INTO payment_transactions
+                (day_id, customer_name, order_code, amount, status, reference, transaction_date, raw_payload)
+               VALUES (?, ?, ?, ?, 'PAID', 'CASH-MANUAL', ?, ?)`,
+              [Number(dayRow.latest_day_id), finalName, orderCode, normalizedAmount, now, JSON.stringify(payload)],
+              callback
+            );
+          }
         );
       }
     );
