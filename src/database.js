@@ -541,7 +541,7 @@ class Database {
       FROM day_rem
       GROUP BY norm_name
       HAVING SUM(rem) > 0
-      ORDER BY MAX(last_order_time) DESC, MIN(display_name) COLLATE NOCASE ASC
+      ORDER BY SUM(rem) DESC, MIN(display_name) COLLATE NOCASE ASC
     `;
 
     this.db.all(sql, searchParams, (err, rows = []) => {
@@ -654,46 +654,57 @@ class Database {
 
   getTodayCustomerPayment(name, callback) {
     const today = this.getDateString();
+
+    // Bước 1: Lấy day_id của hôm nay để gắn vào payment_request
     this.db.get(
-      `SELECT d.id AS day_id, SUM(o.quantity) AS quantity, SUM(o.quantity * d.price) AS total_amount
-       FROM orders o
-       JOIN days d ON o.day_id = d.id
+      `SELECT d.id AS day_id
+       FROM days d
+       JOIN orders o ON o.day_id = d.id
        WHERE LOWER(o.name) = LOWER(?) AND d.date = ?
-       GROUP BY d.id`,
+       LIMIT 1`,
       [name, today],
-      (err, row) => {
-        if (err) {
-          callback(err);
+      (err, todayRow) => {
+        if (err) { callback(err); return; }
+
+        if (!todayRow) {
+          callback(new Error('Không tìm thấy đơn đặt cơm của tên này hôm nay'));
           return;
         }
 
-        if (!row || !row.quantity) {
-          callback(new Error('Không tìm thấy đơn đặt cơm của tên này'));
-          return;
-        }
-
+        // Bước 2: Tính tổng tiền và số lượng trên TẤT CẢ các ngày (không chỉ hôm nay)
         this.db.get(
-          `SELECT COALESCE(SUM(amount), 0) AS paid_amount
-           FROM payment_transactions
-           WHERE day_id = ? AND LOWER(customer_name) = LOWER(?) AND status = 'PAID'`,
-          [row.day_id, name],
-          (paidErr, paidRow) => {
-            if (paidErr) {
-              callback(paidErr);
-              return;
-            }
+          `SELECT SUM(o.quantity) AS quantity, SUM(o.quantity * d.price) AS total_amount
+           FROM orders o
+           JOIN days d ON o.day_id = d.id
+           WHERE LOWER(o.name) = LOWER(?)`,
+          [name],
+          (err2, allRow) => {
+            if (err2) { callback(err2); return; }
 
-            const totalAmount = row.total_amount || 0;
-            const paidAmount = (paidRow && paidRow.paid_amount) || 0;
-            callback(null, {
-              dayId: row.day_id,
-              name,
-              quantity: row.quantity,
-              unitPrice: row.quantity > 0 ? Math.round(totalAmount / row.quantity) : 0,
-              totalAmount,
-              paidAmount,
-              remainingAmount: Math.max(0, totalAmount - paidAmount)
-            });
+            // Bước 3: Tổng tiền đã thanh toán trên toàn bộ lịch sử (FIFO)
+            this.db.get(
+              `SELECT COALESCE(SUM(amount), 0) AS paid_amount
+               FROM payment_transactions
+               WHERE LOWER(customer_name) = LOWER(?) AND status = 'PAID'`,
+              [name],
+              (err3, paidRow) => {
+                if (err3) { callback(err3); return; }
+
+                const totalAmount = Number(allRow?.total_amount || 0);
+                const paidAmount = Number(paidRow?.paid_amount || 0);
+                const quantity = Number(allRow?.quantity || 0);
+
+                callback(null, {
+                  dayId: todayRow.day_id,
+                  name,
+                  quantity,
+                  unitPrice: quantity > 0 ? Math.round(totalAmount / quantity) : 0,
+                  totalAmount,
+                  paidAmount,
+                  remainingAmount: Math.max(0, totalAmount - paidAmount)
+                });
+              }
+            );
           }
         );
       }
@@ -765,6 +776,44 @@ class Database {
     );
   }
 
+
+  getCustomerRemainingDebt(name, callback) {
+    const normalizedName = String(name || '').trim();
+    if (!normalizedName) {
+      callback(new Error('Thiếu tên khách hàng'));
+      return;
+    }
+
+    this.db.get(
+      `SELECT COALESCE(SUM(o.quantity * d.price), 0) AS total_amount
+       FROM orders o
+       JOIN days d ON o.day_id = d.id
+       WHERE LOWER(o.name) = LOWER(?)`,
+      [normalizedName],
+      (err, allRow) => {
+        if (err) { callback(err); return; }
+
+        this.db.get(
+          `SELECT COALESCE(SUM(amount), 0) AS paid_amount
+           FROM payment_transactions
+           WHERE LOWER(customer_name) = LOWER(?) AND status = 'PAID'`,
+          [normalizedName],
+          (err2, paidRow) => {
+            if (err2) { callback(err2); return; }
+
+            const totalAmount = Number(allRow?.total_amount || 0);
+            const paidAmount = Number(paidRow?.paid_amount || 0);
+            callback(null, {
+              name: normalizedName,
+              totalAmount,
+              paidAmount,
+              remainingAmount: Math.max(0, totalAmount - paidAmount)
+            });
+          }
+        );
+      }
+    );
+  }
 
   markCustomerCashPaid(customerName, amount, callback) {
     const normalizedName = (customerName || '').trim().replace(/\s+/g, ' ');
@@ -887,6 +936,28 @@ class Database {
        WHERE order_code = ?`,
       [normalizedStatus, normalizedOrderCode],
       callback
+    );
+  }
+
+  deletePaymentRecord(orderCode, callback) {
+    const normalizedOrderCode = Number(orderCode);
+    if (!Number.isFinite(normalizedOrderCode) || normalizedOrderCode <= 0) {
+      callback(new Error('Mã đơn thanh toán không hợp lệ'));
+      return;
+    }
+
+    this.db.run(
+      `DELETE FROM payment_transactions WHERE order_code = ?`,
+      [normalizedOrderCode],
+      (err) => {
+        if (err) { callback(err); return; }
+
+        this.db.run(
+          `DELETE FROM payment_requests WHERE order_code = ?`,
+          [normalizedOrderCode],
+          callback
+        );
+      }
     );
   }
 

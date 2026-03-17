@@ -685,6 +685,7 @@
                         </div>
                         <div class="admin-payment-actions">
                             ${canManualPaid ? `<button class="btn-warning btn-small" onclick="markPaidManual(${row.order_code}, '${encodeURIComponent(row.customer_name || '')}')">Chuyển Paid</button>` : ''}
+                            <button class="btn-danger btn-small" onclick="deletePaymentRecord(${row.order_code}, '${encodeURIComponent(row.customer_name || '')}')">Xóa</button>
                         </div>
                     </div>
                 `;
@@ -767,6 +768,32 @@
                     loadAdminPayments();
                 })
                 .catch(err => alert('Lỗi chuyển trạng thái: ' + err.message));
+        }
+
+        function deletePaymentRecord(orderCode, encodedName) {
+            const name = decodeURIComponent(encodedName || '');
+            if (!orderCode) {
+                alert('Không tìm thấy mã đơn cần xóa.');
+                return;
+            }
+
+            openConfirmModal({
+                title: 'XÁC NHẬN XÓA',
+                message: `Xóa lịch sử thanh toán của ${name} (orderCode: ${orderCode})? Thao tác này không thể hoàn tác.`,
+                onConfirm: () => {
+                    return fetch(`${API_BASE}/api/admin/payments/${orderCode}`, {
+                        method: 'DELETE'
+                    })
+                        .then(res => res.json())
+                        .then(data => {
+                            if (data.error) throw new Error(data.error);
+                            closeConfirmModal();
+                            loadDebtSummary();
+                            loadAdminPayments();
+                        })
+                        .catch(err => alert('Lỗi xóa: ' + err.message));
+                }
+            });
         }
 
         const confirmModal = document.getElementById('confirmModal');

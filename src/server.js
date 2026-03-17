@@ -560,7 +560,7 @@ app.post('/api/admin/payments/manual-cash', (req, res) => {
     return res.status(400).json({ error: 'Thiếu tên khách hàng' });
   }
 
-  db.getTodayCustomerPayment(name, (paymentErr, paymentInfo) => {
+  db.getCustomerRemainingDebt(name, (paymentErr, paymentInfo) => {
     if (paymentErr) {
       return res.status(400).json({ error: paymentErr.message });
     }
@@ -592,6 +592,21 @@ app.post('/api/admin/payments/manual-cash', (req, res) => {
         remainingAmount: Math.max(0, paymentInfo.remainingAmount - manualAmount)
       });
     });
+  });
+});
+
+// Admin: xóa lịch sử thanh toán
+app.delete('/api/admin/payments/:orderCode', (req, res) => {
+  const orderCode = Number(req.params.orderCode || 0);
+  if (!orderCode) {
+    return res.status(400).json({ error: 'Thiếu mã orderCode hợp lệ' });
+  }
+
+  db.deletePaymentRecord(orderCode, (err) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    res.json({ success: true, orderCode });
   });
 });
 
