@@ -104,6 +104,9 @@
                 </div>
                 <h3 style="color:#8B7355; margin-bottom:10px;" id="paymentListTitle">Danh sách công nợ đặt cơm</h3>
                 <div class="quick-debt-list" id="paymentDebtSection">
+                    <div class="payment-toolbar" style="margin-bottom:10px;">
+                        <input type="text" id="debtSearchInput" placeholder="Tìm theo tên..." oninput="onDebtSearchInput()">
+                    </div>
                     <div id="adminDebtSummaryList" class="loading">Đang tải...</div>
                 </div>
                 <div class="payment-filter-panel" id="paymentHistorySection" style="display:none;">
@@ -155,6 +158,22 @@
             <div class="button-group" style="margin-top:12px;">
                 <button class="btn-primary" type="button" id="confirmModalYesBtn">ĐỒNG Ý</button>
                 <button class="btn-secondary" type="button" onclick="closeConfirmModal()">HỦY</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="cashPaymentModal" class="modal">
+        <div class="modal-content modal-confirm">
+            <span class="close" onclick="closeCashPaymentModal()">&times;</span>
+            <h2>THU TIỀN MẶT / CHUYỂN KHOẢN</h2>
+            <p id="cashPaymentInfo" class="confirm-modal-text"></p>
+            <div class="form-group" style="margin-top:12px;">
+                <label for="cashPaymentAmount">Số tiền thu (VNĐ)</label>
+                <input type="number" id="cashPaymentAmount" min="1000" step="1000" placeholder="Nhập số tiền...">
+            </div>
+            <div class="button-group" style="margin-top:12px;">
+                <button class="btn-primary" type="button" id="cashPaymentConfirmBtn" onclick="confirmCashPayment()">XÁC NHẬN</button>
+                <button class="btn-secondary" type="button" onclick="closeCashPaymentModal()">HỦY</button>
             </div>
         </div>
     </div>
@@ -557,11 +576,19 @@
             }
         }
 
+        let debtSearchTimer = null;
+        function onDebtSearchInput() {
+            clearTimeout(debtSearchTimer);
+            debtSearchTimer = setTimeout(() => loadDebtSummary(), 400);
+        }
+
         function loadDebtSummary() {
             const container = document.getElementById('adminDebtSummaryList');
             container.innerHTML = '<div class="loading">Đang tải...</div>';
+            const search = (document.getElementById('debtSearchInput')?.value || '').trim();
+            const url = search ? `${API_BASE}/api/payments/today?search=${encodeURIComponent(search)}` : `${API_BASE}/api/payments/today`;
 
-            fetch(`${API_BASE}/api/payments/today`)
+            fetch(url)
                 .then(res => res.json())
                 .then(rows => {
                     debtRows = rows || [];
@@ -593,7 +620,7 @@
                             <div class="admin-payment-meta">Số xuất: ${row.quantity} </br> Tổng tiền: ${AppUtils.formatCurrency(row.totalAmount || 0)}</div>
                         </div>
                         <div class="admin-payment-actions">
-                            <button class="btn-warning btn-small" onclick="markCashPaid('${encodeURIComponent(row.name)}')">Đã thanh toán</button>
+                            <button class="btn-warning btn-small" onclick="markCashPaid('${encodeURIComponent(row.name)}', ${row.remainingAmount})">Thanh toán</button>
                         </div>
                     </div>
                 `;
@@ -820,37 +847,53 @@
             confirmModal.style.display = 'block';
         }
 
-        function markCashPaid(encodedName) {
+        let cashPaymentTargetName = '';
+
+        function markCashPaid(encodedName, remainingAmount) {
             const name = decodeURIComponent(encodedName || '');
             if (!name) {
                 alert('Không xác định được người dùng cần cập nhật.');
                 return;
             }
+            cashPaymentTargetName = name;
+            document.getElementById('cashPaymentInfo').textContent =
+                `Khách: ${name} | Còn nợ: ${AppUtils.formatCurrency(remainingAmount || 0)}`;
+            const amtInput = document.getElementById('cashPaymentAmount');
+            amtInput.value = remainingAmount || '';
+            amtInput.max = remainingAmount || '';
+            document.getElementById('cashPaymentModal').style.display = 'block';
+            amtInput.focus();
+            amtInput.select();
+        }
 
-            openConfirmModal({
-                title: 'XÁC NHẬN ĐÃ THANH TOÁN',
-                message: `Bạn xác nhận ${name} đã thanh toán đủ công nợ?`,
-                onConfirm: () => {
-                    return fetch(`${API_BASE}/api/admin/payments/manual-cash`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ name })
-                    })
-                        .then(res => res.json())
-                        .then(data => {
-                            if (data.error) {
-                                throw new Error(data.error);
-                            }
+        function closeCashPaymentModal() {
+            document.getElementById('cashPaymentModal').style.display = 'none';
+            cashPaymentTargetName = '';
+        }
 
-                            closeConfirmModal();
-                            loadDebtSummary();
-                            loadAdminPayments();
-                        })
-                        .catch(err => {
-                            alert('Lỗi cập nhật tiền mặt: ' + err.message);
-                        });
-                }
-            });
+        function confirmCashPayment() {
+            const name = cashPaymentTargetName;
+            if (!name) return;
+            const amount = Number(document.getElementById('cashPaymentAmount').value || 0);
+            if (!amount || amount <= 0) {
+                alert('Vui lòng nhập số tiền hợp lệ.');
+                return;
+            }
+            const btn = document.getElementById('cashPaymentConfirmBtn');
+            btn.disabled = true;
+            fetch(`${API_BASE}/api/admin/payments/manual-cash`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, amount })
+            })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error) throw new Error(data.error);
+                    closeCashPaymentModal();
+                    loadDebtSummary();
+                })
+                .catch(err => alert('Lỗi cập nhật tiền mặt: ' + err.message))
+                .finally(() => { btn.disabled = false; });
         }
 
 
@@ -920,6 +963,10 @@
             }
             if (e.target === confirmModalEl) {
                 closeConfirmModal();
+            }
+            const cashPaymentModalEl = document.getElementById('cashPaymentModal');
+            if (e.target === cashPaymentModalEl) {
+                closeCashPaymentModal();
             }
         });
 
