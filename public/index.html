@@ -526,6 +526,7 @@
             const historyBox = document.getElementById('paymentHistoryList');
 
             const params = new URLSearchParams();
+            params.set('status', 'PAID');
             if (keyword) params.set('search', keyword);
 
             if (period === 'date') {
