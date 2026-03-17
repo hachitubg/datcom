@@ -813,15 +813,34 @@ textarea {
 }
 
 .history-simple-item {
-    display: grid;
-    grid-template-columns: 1fr auto auto;
-    align-items: center;
-    gap: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
     padding: 10px 12px;
     background: #fdf8f2;
     border: 1px solid #e8dcc8;
     border-radius: 8px;
 }
+
+.history-simple-top,
+.history-simple-bottom {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.history-simple-status {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+    white-space: nowrap;
+}
+.hss-paid      { background: #e8f5e8; color: #2d7a2d; }
+.hss-pending   { background: #fff3e0; color: #b36a00; }
+.hss-cancelled { background: #f0f0f0; color: #666666; }
+.hss-expired   { background: #fdecea; color: #9b3f3f; }
 
 .history-simple-name {
     font-weight: 600;
