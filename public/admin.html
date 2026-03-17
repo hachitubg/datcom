@@ -696,8 +696,15 @@
             const startIndex = (paymentCurrentPage - 1) * PAGE_SIZE;
             const pageRows = paymentRows.slice(startIndex, startIndex + PAGE_SIZE);
 
+            const statusBadgeMap = {
+                PAID:      { cls: 'psb-paid',      label: '✓ Đã thanh toán' },
+                PENDING:   { cls: 'psb-pending',   label: '⏳ Đang chờ' },
+                CANCELLED: { cls: 'psb-cancelled', label: '✗ Đã huỷ' },
+                EXPIRED:   { cls: 'psb-expired',   label: '⌛ Hết hạn' }
+            };
             const rowsHtml = pageRows.map((row) => {
                 const statusText = String(row.request_status || 'PENDING').toUpperCase();
+                const { cls, label } = statusBadgeMap[statusText] || { cls: 'psb-pending', label: statusText };
                 const paidAmount = Number(row.paid_amount || 0);
                 const amount = Number(row.request_amount || 0);
                 const paidAt = row.latest_paid_at || row.request_updated_at || row.request_created_at;
@@ -705,8 +712,8 @@
                 return `
                     <div class="admin-payment-row">
                         <div>
-                            <div class="order-name">${row.customer_name}</div>
-                            <div class="admin-payment-meta">Ngày: ${row.date} | OrderCode: ${row.order_code} | Trạng thái: <strong>${statusText}</strong></div>
+                            <div class="order-name" style="display:flex;align-items:center;gap:8px;">${row.customer_name} <span class="payment-status-badge ${cls}">${label}</span></div>
+                            <div class="admin-payment-meta">Ngày: ${row.date} | OrderCode: ${row.order_code}</div>
                             <div class="admin-payment-meta">Số tiền: ${AppUtils.formatCurrency(amount)} | Đã thanh toán: ${AppUtils.formatCurrency(paidAmount)} | Ref: ${row.latest_reference || row.payment_link_id || '-'}</div>
                             <div class="admin-payment-meta">Cập nhật: ${AppUtils.formatDateTime(paidAt)}</div>
                         </div>

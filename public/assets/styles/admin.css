@@ -598,6 +598,20 @@
             margin-top: 4px;
         }
 
+        .payment-status-badge {
+            display: inline-block;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 2px 10px;
+            border-radius: 10px;
+            vertical-align: middle;
+            white-space: nowrap;
+        }
+        .psb-paid      { background: #e8f5e8; color: #2d7a2d; }
+        .psb-pending   { background: #fff3e0; color: #b36a00; }
+        .psb-cancelled { background: #f0f0f0; color: #666666; }
+        .psb-expired   { background: #fdecea; color: #9b3f3f; }
+
         .payment-toolbar {
             display: grid;
             grid-template-columns: 1.6fr repeat(2, minmax(165px, 1fr)) minmax(180px, 1fr) auto auto;
