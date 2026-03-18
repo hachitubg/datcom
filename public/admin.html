@@ -84,11 +84,25 @@
                 <h2>DANH SÁCH ĐẶT CƠM</h2>
 
                 <div class="history-filter-panel">
-                    <div class="form-group">
-                        <label for="dateFilter">Chọn ngày</label>
-                        <input class="history-date-input" type="date" id="dateFilter" onchange="onPickOrderDate()">
+                    <div class="history-filter-row">
+                        <div class="form-group">
+                            <label for="dateFilter">Chọn ngày</label>
+                            <input class="history-date-input" type="date" id="dateFilter" onchange="onPickOrderDate()">
+                        </div>
+                        <div class="history-filter-divider"></div>
+                        <div class="form-group" style="position:relative; flex:1;">
+                            <label for="historyNameSearch">Tìm lịch sử theo tên</label>
+                            <div class="history-name-search-row">
+                                <div style="position:relative; flex:1;">
+                                    <input type="text" id="historyNameSearch" placeholder="Nhập tên khách hàng..." autocomplete="off"
+                                        oninput="onHistoryNameSearchInput()" onkeydown="onHistoryNameSearchKeyDown(event)">
+                                    <div id="historyNameSuggestions" class="name-suggestions-dropdown"></div>
+                                </div>
+                                <button class="btn-primary" style="white-space:nowrap;" onclick="searchHistoryByName()">XEM</button>
+                            </div>
+                        </div>
                     </div>
-                    <div id="orderSummaryInfo" class="admin-payment-meta" style="margin-top:0; margin-bottom:10px;"></div>
+                    <div id="orderSummaryInfo" class="admin-payment-meta" style="margin-top:6px; margin-bottom:0;"></div>
                 </div>
 
                 <div id="historyList" class="loading">Đang tải...</div>
@@ -139,6 +153,15 @@
         </div>
     </div>
 
+    <!-- Modal lịch sử đặt cơm toàn bộ của khách -->
+    <div id="customerFullHistoryModal" class="modal">
+        <div class="modal-content" style="max-width:680px;">
+            <span class="close" onclick="closeCustomerFullHistoryModal()">&times;</span>
+            <h2 id="customerFullHistoryTitle">LỊCH SỬ ĐẶT CƠM</h2>
+            <div id="customerFullHistoryContent"></div>
+        </div>
+    </div>
+
     <!-- Modal chi tiết đặt cơm theo khách -->
     <div id="customerOrderModal" class="modal">
         <div class="modal-content" style="max-width:640px;">
@@ -165,7 +188,7 @@
     <div id="cashPaymentModal" class="modal">
         <div class="modal-content modal-confirm">
             <span class="close" onclick="closeCashPaymentModal()">&times;</span>
-            <h2>THU TIỀN MẶT / CHUYỂN KHOẢN</h2>
+            <h2>THU TIỀN THỦ CÔNG</h2>
             <p id="cashPaymentInfo" class="confirm-modal-text"></p>
             <div class="form-group" style="margin-top:12px;">
                 <label for="cashPaymentAmount">Số tiền thu (VNĐ)</label>
@@ -227,6 +250,145 @@
         let debtCurrentPage = 1;
         let paymentRows = [];
         let paymentCurrentPage = 1;
+
+        // ===== Tìm kiếm lịch sử theo tên =====
+        let allCustomerNames = [];
+
+        function loadAllCustomerNames() {
+            fetch(`${API_BASE}/api/customers/names`)
+                .then(res => res.json())
+                .then(names => { allCustomerNames = names || []; })
+                .catch(() => {});
+        }
+
+        let historyNameSearchTimer = null;
+        function onHistoryNameSearchInput() {
+            clearTimeout(historyNameSearchTimer);
+            historyNameSearchTimer = setTimeout(updateHistoryNameSuggestions, 150);
+        }
+
+        function updateHistoryNameSuggestions() {
+            const input = document.getElementById('historyNameSearch');
+            const query = (input?.value || '').trim().toLowerCase();
+            const dropdown = document.getElementById('historyNameSuggestions');
+            if (!query) { dropdown.style.display = 'none'; return; }
+
+            const normalized = query.replace(/\s+/g, '');
+            const matches = allCustomerNames.filter(n =>
+                n.toLowerCase().includes(query) ||
+                n.toLowerCase().replace(/\s+/g, '').includes(normalized)
+            );
+            if (!matches.length) { dropdown.style.display = 'none'; return; }
+
+            dropdown.innerHTML = matches.slice(0, 12).map(name =>
+                `<div class="name-suggestion-item" onmousedown="selectHistoryName('${encodeURIComponent(name)}')">${name}</div>`
+            ).join('');
+            dropdown.style.display = 'block';
+        }
+
+        function selectHistoryName(encodedName) {
+            const name = decodeURIComponent(encodedName || '');
+            if (!name) return;
+            document.getElementById('historyNameSearch').value = name;
+            document.getElementById('historyNameSuggestions').style.display = 'none';
+            openCustomerFullHistoryModal(name);
+        }
+
+        function onHistoryNameSearchKeyDown(event) {
+            const dropdown = document.getElementById('historyNameSuggestions');
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                const firstItem = dropdown.querySelector('.name-suggestion-item');
+                if (firstItem) {
+                    firstItem.dispatchEvent(new MouseEvent('mousedown'));
+                } else {
+                    const name = (document.getElementById('historyNameSearch')?.value || '').trim();
+                    if (name) { dropdown.style.display = 'none'; openCustomerFullHistoryModal(name); }
+                }
+            } else if (event.key === 'Escape') {
+                dropdown.style.display = 'none';
+            }
+        }
+
+        function searchHistoryByName() {
+            const name = (document.getElementById('historyNameSearch')?.value || '').trim();
+            if (!name) { alert('Vui lòng nhập tên cần tìm kiếm.'); return; }
+            document.getElementById('historyNameSuggestions').style.display = 'none';
+            openCustomerFullHistoryModal(name);
+        }
+
+        function openCustomerFullHistoryModal(customerName) {
+            if (!customerName) return;
+            document.getElementById('customerFullHistoryTitle').textContent = `LỊCH SỬ ĐẶT CƠM — ${customerName}`;
+            const content = document.getElementById('customerFullHistoryContent');
+            content.innerHTML = '<div class="loading">Đang tải...</div>';
+            document.getElementById('customerFullHistoryModal').style.display = 'block';
+
+            fetch(`${API_BASE}/api/admin/customers/${encodeURIComponent(customerName)}/full-history`)
+                .then(res => res.json())
+                .then(data => {
+                    const rows = data.rows || [];
+                    if (!rows.length) {
+                        content.innerHTML = '<div style="padding: 12px; color:#999; text-align:center;">Không tìm thấy lịch sử đặt cơm của người này.</div>';
+                        return;
+                    }
+
+                    const statusBadgeMap = {
+                        PAID:    { cls: 'psb-paid',      label: '✓ Đã thanh toán' },
+                        PARTIAL: { cls: 'psb-pending',   label: '⚡ Thanh toán 1 phần' },
+                        UNPAID:  { cls: 'psb-expired',   label: '✗ Chưa thanh toán' }
+                    };
+
+                    const summaryHtml = `
+                        <div class="customer-history-summary">
+                            <div class="customer-history-stat">
+                                <div class="stat-val">${data.totalOrders || 0}</div>
+                                <div class="stat-lbl">Tổng xuất</div>
+                            </div>
+                            <div class="customer-history-stat">
+                                <div class="stat-val">${AppUtils.formatCurrency(data.totalAmount || 0)}</div>
+                                <div class="stat-lbl">Tổng tiền</div>
+                            </div>
+                            <div class="customer-history-stat">
+                                <div class="stat-val" style="color:#2d7a2d;">${AppUtils.formatCurrency(data.totalPaidAmount || 0)}</div>
+                                <div class="stat-lbl">Đã thanh toán</div>
+                            </div>
+                            <div class="customer-history-stat">
+                                <div class="stat-val" style="color:#c46060;">${AppUtils.formatCurrency(data.totalRemaining || 0)}</div>
+                                <div class="stat-lbl">Còn nợ</div>
+                            </div>
+                        </div>
+                    `;
+
+                    const rowsHtml = rows.map(row => {
+                        const { cls, label } = statusBadgeMap[row.paymentStatus] || statusBadgeMap['UNPAID'];
+                        const rowClass = row.paymentStatus === 'PAID' ? 'row-paid' : row.paymentStatus === 'PARTIAL' ? 'row-partial' : 'row-unpaid';
+                        return `
+                            <div class="customer-history-order-row ${rowClass}">
+                                <div>
+                                    <div style="font-weight:600; color:#A0826D; margin-bottom:3px;">${row.date}</div>
+                                    <div class="admin-payment-meta">${row.quantity} xuất × ${AppUtils.formatCurrency(row.unitPrice)}</div>
+                                    ${row.paidAmount > 0 ? `<div class="admin-payment-meta" style="color:#2d7a2d;">Đã trả: ${AppUtils.formatCurrency(row.paidAmount)}</div>` : ''}
+                                    ${row.remainingAmount > 0 ? `<div class="admin-payment-meta" style="color:#c46060;">Còn nợ: ${AppUtils.formatCurrency(row.remainingAmount)}</div>` : ''}
+                                </div>
+                                <div style="text-align:right; flex-shrink:0;">
+                                    <span class="payment-status-badge ${cls}">${label}</span>
+                                    <div style="font-weight:700; color:#A0826D; margin-top:6px; font-size:15px;">${AppUtils.formatCurrency(row.totalAmount)}</div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+
+                    content.innerHTML = summaryHtml + rowsHtml;
+                })
+                .catch(err => {
+                    content.innerHTML = `<div style="padding: 12px; color:red;">Lỗi tải dữ liệu: ${err.message}</div>`;
+                });
+        }
+
+        function closeCustomerFullHistoryModal() {
+            document.getElementById('customerFullHistoryModal').style.display = 'none';
+        }
 
         function switchTab(tab, event) {
             // Hide all tabs
@@ -958,6 +1120,7 @@
             const modal = document.getElementById('dayModal');
             const editModal = document.getElementById('orderEditModal');
             const customerModal = document.getElementById('customerOrderModal');
+            const customerFullHistoryModalEl = document.getElementById('customerFullHistoryModal');
             const confirmModalEl = document.getElementById('confirmModal');
             if (e.target === modal) {
                 modal.style.display = 'none';
@@ -968,6 +1131,9 @@
             if (e.target === customerModal) {
                 customerModal.style.display = 'none';
             }
+            if (e.target === customerFullHistoryModalEl) {
+                closeCustomerFullHistoryModal();
+            }
             if (e.target === confirmModalEl) {
                 closeConfirmModal();
             }
@@ -975,11 +1141,17 @@
             if (e.target === cashPaymentModalEl) {
                 closeCashPaymentModal();
             }
+            // Đóng dropdown gợi ý khi click ra ngoài
+            const searchDropdown = document.getElementById('historyNameSuggestions');
+            if (searchDropdown && !document.getElementById('historyNameSearch')?.contains(e.target) && !searchDropdown.contains(e.target)) {
+                searchDropdown.style.display = 'none';
+            }
         });
 
         // Load today info on page load
         loadTodayInfo();
         loadHistory();
+        loadAllCustomerNames();
         togglePaymentDateInputs();
         switchPaymentView('debt');
     </script>

@@ -636,13 +636,12 @@
         }
 
         .history-date-input {
-            max-width: 280px;
+            width: 180px;
             background: #fff;
             border-color: #dcc9b3;
             box-shadow: 0 2px 10px rgba(160, 130, 109, 0.08);
             border-radius: 10px;
             padding: 10px;
-            width: 100%;
             border: 1px solid #e8dcc8;
         }
 
@@ -726,6 +725,141 @@
             transform: translateY(-1px);
             box-shadow: 0 4px 10px rgba(160, 130, 109, 0.35);
         }
+
+        /* ===== Tìm kiếm lịch sử theo tên ===== */
+        .history-filter-row {
+            display: flex;
+            align-items: flex-end;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        @media (max-width: 640px) {
+            .history-filter-divider { display: none; }
+            .history-filter-row .form-group { width: 100%; }
+            .history-date-input { width: 100%; }
+        }
+
+        .history-filter-row .form-group {
+            margin-bottom: 0;
+        }
+
+        .history-filter-divider {
+            width: 1px;
+            height: 46px;
+            background: #d9c7b2;
+            flex-shrink: 0;
+            align-self: flex-end;
+        }
+
+        .history-name-search-panel {
+            /* kept for backwards compat, no longer used as top-level wrapper */
+        }
+
+        .history-name-search-panel label {
+            color: #7c6347;
+            font-weight: 700;
+        }
+
+        .history-name-search-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .history-name-search-row .form-group {
+            flex: 1;
+            margin-bottom: 0;
+            position: relative;
+        }
+
+        .name-suggestions-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #d9c7b2;
+            border-top: none;
+            border-radius: 0 0 10px 10px;
+            max-height: 240px;
+            overflow-y: auto;
+            z-index: 200;
+            box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+            display: none;
+        }
+
+        .name-suggestion-item {
+            padding: 10px 14px;
+            cursor: pointer;
+            font-size: 14px;
+            color: #6b5840;
+            border-bottom: 1px solid #f5efe7;
+            transition: background 0.15s;
+        }
+
+        .name-suggestion-item:last-child {
+            border-bottom: none;
+        }
+
+        .name-suggestion-item:hover,
+        .name-suggestion-item.active {
+            background: #f5efe7;
+            color: #A0826D;
+            font-weight: 600;
+        }
+
+        /* ===== Modal lịch sử đặt cơm toàn bộ ===== */
+        .customer-history-summary {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            background: linear-gradient(135deg, #f7f1e7 0%, #f0e8d8 100%);
+            border-radius: 10px;
+            padding: 14px 16px;
+            margin-bottom: 16px;
+            border: 1px solid #e3d3bf;
+        }
+
+        .customer-history-stat {
+            text-align: center;
+            flex: 1;
+            min-width: 70px;
+        }
+
+        .customer-history-stat .stat-val {
+            font-size: 17px;
+            font-weight: 700;
+            color: #A0826D;
+        }
+
+        .customer-history-stat .stat-lbl {
+            font-size: 11px;
+            color: #8B7355;
+            margin-top: 2px;
+        }
+
+        .customer-history-order-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 14px;
+            background: white;
+            border: 1px solid #e8dcc8;
+            border-left: 4px solid #e8dcc8;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            gap: 10px;
+            transition: box-shadow 0.2s;
+        }
+
+        .customer-history-order-row:hover {
+            box-shadow: 0 3px 10px rgba(160, 130, 109, 0.12);
+        }
+
+        .customer-history-order-row.row-paid    { border-left-color: #5a9a5a; }
+        .customer-history-order-row.row-partial  { border-left-color: #e0a75a; }
+        .customer-history-order-row.row-unpaid   { border-left-color: #c46060; }
 
         @media (max-width: 768px) {
             body {

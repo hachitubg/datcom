@@ -964,6 +964,65 @@ class Database {
     );
   }
 
+  getCustomerFullOrderHistory(name, callback) {
+    const normalizedName = String(name || '').trim();
+    if (!normalizedName) {
+      callback(new Error('Thiếu tên khách hàng'));
+      return;
+    }
+
+    this.db.all(
+      `SELECT d.date, SUM(o.quantity) AS quantity, SUM(o.quantity * d.price) AS day_amount, d.price
+       FROM orders o JOIN days d ON d.id = o.day_id
+       WHERE LOWER(o.name) = LOWER(?)
+       GROUP BY d.date ORDER BY d.date ASC`,
+      [normalizedName],
+      (err, orderRows = []) => {
+        if (err) { callback(err); return; }
+
+        this.db.get(
+          `SELECT COALESCE(SUM(amount), 0) AS total_paid
+           FROM payment_transactions
+           WHERE status = 'PAID' AND LOWER(customer_name) = LOWER(?)`,
+          [normalizedName],
+          (err2, payRow) => {
+            if (err2) { callback(err2); return; }
+
+            let pool = Number(payRow?.total_paid || 0);
+            const result = orderRows.map((row) => {
+              const dayAmount = Number(row.day_amount || 0);
+              const applied = Math.min(pool, dayAmount);
+              pool -= applied;
+              const remaining = dayAmount - applied;
+              let paymentStatus;
+              if (remaining <= 0) paymentStatus = 'PAID';
+              else if (applied > 0) paymentStatus = 'PARTIAL';
+              else paymentStatus = 'UNPAID';
+              return {
+                date: row.date,
+                quantity: Number(row.quantity || 0),
+                unitPrice: Number(row.price || 0),
+                totalAmount: dayAmount,
+                paidAmount: applied,
+                remainingAmount: remaining,
+                paymentStatus
+              };
+            });
+
+            result.reverse(); // newest first
+
+            const totalOrders = result.reduce((sum, r) => sum + r.quantity, 0);
+            const totalAmount = result.reduce((sum, r) => sum + r.totalAmount, 0);
+            const totalPaidAmount = result.reduce((sum, r) => sum + r.paidAmount, 0);
+            const totalRemaining = result.reduce((sum, r) => sum + r.remainingAmount, 0);
+
+            callback(null, { rows: result, totalOrders, totalAmount, totalPaidAmount, totalRemaining });
+          }
+        );
+      }
+    );
+  }
+
   getPaymentHistory(filters, callback) {
     let normalizedFilters = filters;
     if (typeof normalizedFilters === 'function') {

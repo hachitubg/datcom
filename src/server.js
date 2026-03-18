@@ -425,6 +425,20 @@ app.get('/api/admin/customers/:name/orders', (req, res) => {
   });
 });
 
+app.get('/api/admin/customers/:name/full-history', (req, res) => {
+  const customerName = normalizeName(decodeURIComponent(req.params.name || ''));
+  if (!customerName) {
+    return res.status(400).json({ error: 'Thiếu tên khách hàng hợp lệ' });
+  }
+
+  db.getCustomerFullOrderHistory(customerName, (err, data) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    res.json({ customerName, ...data });
+  });
+});
+
 app.get('/api/payments/today/:name/details', (req, res) => {
   const customerName = normalizeName(decodeURIComponent(req.params.name || ''));
   if (!customerName) {
