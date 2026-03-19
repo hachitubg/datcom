@@ -1001,7 +1001,7 @@ tr:hover {
 }
 
 .customer-history-stat .stat-val {
-    font-size: 1.75rem;
+    font-size: 1rem;
     font-weight: 700;
     color: var(--tertiary);
 }
