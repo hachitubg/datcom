@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content">
     <title>Cơm Cô Giang</title>
     <link rel="stylesheet" href="/assets/styles/index.css">
 </head>
@@ -294,10 +294,31 @@
         }, { passive: false });
 
         // =============================================
-        // 3. Scroll focused input into view inside modal
-        //    With interactive-widget=resizes-content, the
-        //    viewport resizes automatically. We just need
-        //    to scroll the input into the visible area.
+        // 3. Fallback for in-app browsers (Messenger, Zalo, etc.)
+        //    that don't support interactive-widget=resizes-content.
+        //    Uses visualViewport API to resize modal when keyboard opens.
+        // =============================================
+        if (window.visualViewport) {
+            var vv = window.visualViewport;
+
+            function handleViewportResize() {
+                // On in-app browsers, the .modal (position:fixed, height:100%)
+                // won't shrink with keyboard. We manually set its height.
+                var allModals = document.querySelectorAll('.modal');
+                for (var i = 0; i < allModals.length; i++) {
+                    if (allModals[i].style.display !== 'none' && allModals[i].style.display !== '') {
+                        allModals[i].style.height = vv.height + 'px';
+                        allModals[i].style.top = vv.offsetTop + 'px';
+                    }
+                }
+            }
+
+            vv.addEventListener('resize', handleViewportResize);
+            vv.addEventListener('scroll', handleViewportResize);
+        }
+
+        // =============================================
+        // 4. Scroll focused input into view inside modal
         // =============================================
         document.addEventListener('focusin', function(e) {
             var el = e.target;
@@ -312,6 +333,6 @@
         });
     })();
     </script>
-    <div style="text-align:center;padding:8px;font-size:11px;color:#999;">v1.2</div>
+    <div style="text-align:center;padding:8px;font-size:11px;color:#999;">v1.3</div>
 </body>
 </html>

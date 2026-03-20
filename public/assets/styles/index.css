@@ -545,9 +545,11 @@ label {
 
 input[type="text"],
 input[type="number"],
-textarea {
+textarea,
+select {
     width: 100%;
     padding: 14px 16px;
+    font-size: 16px; /* >= 16px prevents Safari auto-zoom on focus */
     background: var(--surface-container-highest);
     border: 1px solid rgba(212, 195, 190, 0.2);
     border-radius: var(--radius-md);
