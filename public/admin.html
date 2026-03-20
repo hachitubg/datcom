@@ -14,9 +14,26 @@
         </header>
 
         <div class="tab-buttons">
-            <button class="tab-btn active" onclick="switchTab('history', event)">DANH SÁCH ĐẶT CƠM</button>
-            <button class="tab-btn" onclick="switchTab('today', event)">QUẢN LÝ MENU</button>
-            <button class="tab-btn" onclick="switchTab('payments', event)">QUẢN LÝ THANH TOÁN</button>
+            <button class="tab-btn active" onclick="switchTab('history', event)">
+                <span class="tab-icon">📋</span>
+                <span class="tab-label">ĐẶT CƠM</span>
+            </button>
+            <button class="tab-btn" onclick="switchTab('today', event)">
+                <span class="tab-icon">🍽️</span>
+                <span class="tab-label">MENU</span>
+            </button>
+            <button class="tab-btn" onclick="switchTab('payments', event)">
+                <span class="tab-icon">💳</span>
+                <span class="tab-label">THANH TOÁN</span>
+            </button>
+            <button class="tab-btn" onclick="switchTab('promos', event)">
+                <span class="tab-icon">🏷️</span>
+                <span class="tab-label">KHUYẾN MÃI</span>
+            </button>
+            <button class="tab-btn" onclick="switchTab('users', event)">
+                <span class="tab-icon">👥</span>
+                <span class="tab-label">NGƯỜI DÙNG</span>
+            </button>
         </div>
 
         <!-- Tab Quản lý hôm nay -->
@@ -196,6 +213,74 @@
                     </div>
                 </div>
                 <div id="adminPaymentList" class="loading" style="display:none;">Đang tải...</div>
+            </div>
+        </div>
+        <!-- =============================================
+             Tab Mã khuyến mãi
+             ============================================= -->
+        <div id="promos" class="tab-content">
+            <div class="section">
+                <div class="filter-card">
+                    <h3 class="section-subtitle">TẠO MÃ KHUYẾN MÃI MỚI</h3>
+                    <div class="filter-row">
+                        <div class="filter-field filter-field--grow">
+                            <label for="newPromoCode">Mã khuyến mãi</label>
+                            <input type="text" id="newPromoCode" placeholder="VD: GIAM10, FREESHIP..." style="text-transform:uppercase;">
+                        </div>
+                        <div class="filter-field">
+                            <label for="newPromoDiscount">Giảm giá (%)</label>
+                            <input type="number" id="newPromoDiscount" min="1" max="100" placeholder="VD: 10">
+                        </div>
+                    </div>
+                    <div class="button-group" style="margin-top:12px;">
+                        <button class="btn-primary" onclick="createPromoCode()">TẠO MÃ</button>
+                    </div>
+                    <div id="promoAdminMessage" style="margin-top:8px;"></div>
+                </div>
+
+                <h3 class="section-subtitle" style="margin-top:20px;">DANH SÁCH MÃ KHUYẾN MÃI</h3>
+                <div id="promoCodeList" class="loading">Đang tải...</div>
+            </div>
+        </div>
+
+        <!-- =============================================
+             Tab Quản lý người dùng
+             ============================================= -->
+        <div id="users" class="tab-content">
+            <div class="section">
+                <div class="filter-card">
+                    <h3 class="section-subtitle">TẠO TÀI KHOẢN MỚI</h3>
+                    <div class="filter-row">
+                        <div class="filter-field filter-field--grow">
+                            <label for="newUserPhone">Số điện thoại</label>
+                            <input type="text" id="newUserPhone" placeholder="Nhập số điện thoại">
+                        </div>
+                        <div class="filter-field filter-field--grow">
+                            <label for="newUserName">Họ và tên</label>
+                            <input type="text" id="newUserName" placeholder="Nhập họ tên">
+                        </div>
+                    </div>
+                    <div class="filter-row">
+                        <div class="filter-field filter-field--grow">
+                            <label for="newUserPassword">Mật khẩu</label>
+                            <input type="password" id="newUserPassword" placeholder="Tối thiểu 6 ký tự">
+                        </div>
+                        <div class="filter-field">
+                            <label for="newUserRole">Vai trò</label>
+                            <select id="newUserRole">
+                                <option value="user">Người dùng</option>
+                                <option value="admin">Admin</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="button-group" style="margin-top:12px;">
+                        <button class="btn-primary" onclick="createUser()">TẠO TÀI KHOẢN</button>
+                    </div>
+                    <div id="userAdminMessage" style="margin-top:8px;"></div>
+                </div>
+
+                <h3 class="section-subtitle" style="margin-top:20px;">DANH SÁCH NGƯỜI DÙNG</h3>
+                <div id="userList" class="loading">Đang tải...</div>
             </div>
         </div>
     </div>

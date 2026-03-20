@@ -7,6 +7,68 @@
     <link rel="stylesheet" href="/assets/styles/index.css">
 </head>
 <body>
+    <!-- ===== User Auth Bar ===== -->
+    <div class="user-auth-bar" id="userAuthBar">
+        <div id="userAuthLoggedOut" class="user-auth-state">
+            <button class="user-auth-btn" id="btnShowLogin">Đăng nhập</button>
+        </div>
+        <div id="userAuthLoggedIn" class="user-auth-state" style="display:none;">
+            <span class="user-auth-name" id="userAuthName"></span>
+            <button class="user-auth-btn user-auth-btn-logout" id="btnUserLogout">Đăng xuất</button>
+        </div>
+    </div>
+
+    <!-- Login/Register Modal -->
+    <div id="authModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="authModalTitle">Đăng nhập</h2>
+                <button type="button" class="modal-close" id="closeAuth">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="authMessage"></div>
+                <!-- Login Form -->
+                <div id="loginForm">
+                    <div class="form-group">
+                        <label for="loginPhone">Số điện thoại</label>
+                        <input type="text" id="loginPhone" placeholder="Nhập số điện thoại">
+                    </div>
+                    <div class="form-group">
+                        <label for="loginPassword">Mật khẩu</label>
+                        <input type="password" id="loginPassword" placeholder="Nhập mật khẩu">
+                    </div>
+                    <div class="form-buttons">
+                        <button type="button" class="btn-submit" id="btnLogin">ĐĂNG NHẬP</button>
+                    </div>
+                    <div class="auth-switch">
+                        Chưa có tài khoản? <a href="#" id="btnSwitchToRegister">Đăng ký</a>
+                    </div>
+                </div>
+                <!-- Register Form -->
+                <div id="registerForm" style="display:none;">
+                    <div class="form-group">
+                        <label for="regPhone">Số điện thoại</label>
+                        <input type="text" id="regPhone" placeholder="Nhập số điện thoại">
+                    </div>
+                    <div class="form-group">
+                        <label for="regName">Họ và tên</label>
+                        <input type="text" id="regName" placeholder="Nhập họ và tên">
+                    </div>
+                    <div class="form-group">
+                        <label for="regPassword">Mật khẩu (tối thiểu 6 ký tự)</label>
+                        <input type="password" id="regPassword" placeholder="Nhập mật khẩu">
+                    </div>
+                    <div class="form-buttons">
+                        <button type="button" class="btn-submit" id="btnRegister">ĐĂNG KÝ</button>
+                    </div>
+                    <div class="auth-switch">
+                        Đã có tài khoản? <a href="#" id="btnSwitchToLogin">Đăng nhập</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- ===== Hero Header ===== -->
     <header class="hero">
         <div class="hero-inner">
@@ -146,6 +208,14 @@
                     <div class="form-group">
                         <label for="description">Ghi chú (tùy chọn)</label>
                         <textarea id="description" placeholder="Ví dụ: Ít mặn, thêm rau..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="promoCode">Mã khuyến mãi (nếu có)</label>
+                        <div class="promo-input-wrap">
+                            <input type="text" id="promoCode" placeholder="Nhập mã giảm giá..." autocomplete="off">
+                            <button type="button" class="btn-promo-check" id="btnCheckPromo">Kiểm tra</button>
+                        </div>
+                        <div id="promoMessage" class="promo-message"></div>
                     </div>
                     <div class="form-buttons">
                         <button type="submit" class="btn-submit">ĐẶT CƠM</button>

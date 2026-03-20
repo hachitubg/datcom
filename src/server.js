@@ -77,8 +77,26 @@ app.use(express.static('public'));
 // Khởi tạo database
 const db = new Database();
 const payos = new PayOSService();
-const ADMIN_PASSWORD = 'hachitu';
 const adminSessions = new Set();
+const userSessions = new Map(); // token -> { id, name, phone, role }
+
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+  return { hash, salt };
+}
+
+function verifyPassword(password, hash, salt) {
+  const derived = crypto.scryptSync(password, salt, 64).toString('hex');
+  return derived === hash;
+}
+
+function getUserSessionInfo(req) {
+  const cookies = parseCookies(req);
+  const token = cookies.user_session || '';
+  if (!token) return null;
+  return userSessions.get(token) || null;
+}
 
 function parseCookies(req) {
   const cookieHeader = req.headers.cookie || '';
@@ -262,14 +280,15 @@ app.get('/api/orders/today', (req, res) => {
 app.post('/api/orders', (req, res) => {
   const normalizedCustomerName = normalizeName(req.body.name);
   const { quantity, description } = req.body;
+  const promoCode = (req.body.promoCode || '').trim() || null;
 
   if (!normalizedCustomerName || !quantity) {
     return res.status(400).json({ error: 'Thiếu thông tin bắt buộc' });
   }
 
-  db.addOrder(normalizedCustomerName, quantity, description || '', (err, order) => {
+  db.addOrder(normalizedCustomerName, quantity, description || '', promoCode, (err, order) => {
     if (err) {
-      return res.status(500).json({ error: err.message });
+      return res.status(400).json({ error: err.message });
     }
     res.json(order);
   });
@@ -664,14 +683,25 @@ app.get('/admin-login', (req, res) => {
 
 app.post('/api/admin/login', (req, res) => {
   const password = String(req.body.password || '');
-  if (password !== ADMIN_PASSWORD) {
-    return res.status(401).json({ error: 'Mật khẩu không đúng' });
-  }
 
-  const sessionToken = crypto.randomBytes(24).toString('hex');
-  adminSessions.add(sessionToken);
-  res.setHeader('Set-Cookie', `admin_session=${encodeURIComponent(sessionToken)}; HttpOnly; Path=/; Max-Age=28800; SameSite=Lax`);
-  res.json({ success: true });
+  // Kiểm tra tài khoản admin trong database
+  db.getUserByPhone('admin', (err, adminUser) => {
+    if (err || !adminUser) {
+      // Fallback: dùng mật khẩu mặc định nếu DB chưa có admin
+      if (password !== 'hachitu') {
+        return res.status(401).json({ error: 'Mật khẩu không đúng' });
+      }
+    } else {
+      if (!verifyPassword(password, adminUser.password_hash, adminUser.salt)) {
+        return res.status(401).json({ error: 'Mật khẩu không đúng' });
+      }
+    }
+
+    const sessionToken = crypto.randomBytes(24).toString('hex');
+    adminSessions.add(sessionToken);
+    res.setHeader('Set-Cookie', `admin_session=${encodeURIComponent(sessionToken)}; HttpOnly; Path=/; Max-Age=28800; SameSite=Lax`);
+    res.json({ success: true });
+  });
 });
 
 app.post('/api/admin/logout', (req, res) => {
@@ -681,6 +711,170 @@ app.post('/api/admin/logout', (req, res) => {
   }
   res.setHeader('Set-Cookie', 'admin_session=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax');
   res.json({ success: true });
+});
+
+// =============================================
+// Promo Code Validation (public)
+// =============================================
+app.post('/api/promo-codes/validate', (req, res) => {
+  const code = String(req.body.code || '').trim();
+  if (!code) {
+    return res.json({ valid: false });
+  }
+  db.validatePromoCode(code, (err, promo) => {
+    if (err || !promo) {
+      return res.json({ valid: false });
+    }
+    res.json({ valid: true, discountPercent: promo.discount_percent });
+  });
+});
+
+// =============================================
+// Admin: Promo Codes
+// =============================================
+app.get('/api/admin/promo-codes', (req, res) => {
+  db.getPromoCodes((err, codes) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(codes || []);
+  });
+});
+
+app.post('/api/admin/promo-codes', (req, res) => {
+  const code = String(req.body.code || '').trim();
+  const discountPercent = Number(req.body.discountPercent || 0);
+  if (!code || discountPercent <= 0 || discountPercent > 100) {
+    return res.status(400).json({ error: 'Mã và phần trăm giảm giá không hợp lệ (1-100%)' });
+  }
+  db.createPromoCode(code, discountPercent, (err, promo) => {
+    if (err) return res.status(400).json({ error: err.message });
+    res.json(promo);
+  });
+});
+
+app.delete('/api/admin/promo-codes/:id', (req, res) => {
+  const id = Number(req.params.id || 0);
+  if (!id) return res.status(400).json({ error: 'ID không hợp lệ' });
+  db.deletePromoCode(id, (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    res.json({ success: true });
+  });
+});
+
+// =============================================
+// Admin: User Management
+// =============================================
+app.get('/api/admin/users', (req, res) => {
+  db.getUsers((err, users) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(users || []);
+  });
+});
+
+app.post('/api/admin/users', (req, res) => {
+  const phone = String(req.body.phone || '').trim();
+  const name = normalizeName(req.body.name);
+  const password = String(req.body.password || '');
+  const role = String(req.body.role || 'user');
+
+  if (!phone || !name || !password) {
+    return res.status(400).json({ error: 'Vui lòng nhập đầy đủ số điện thoại, tên và mật khẩu' });
+  }
+  if (password.length < 6) {
+    return res.status(400).json({ error: 'Mật khẩu phải có ít nhất 6 ký tự' });
+  }
+  if (!['user', 'admin'].includes(role)) {
+    return res.status(400).json({ error: 'Vai trò không hợp lệ' });
+  }
+
+  const { hash, salt } = hashPassword(password);
+  db.createUser(phone, name, hash, salt, role, (err, user) => {
+    if (err) return res.status(400).json({ error: err.message });
+    res.json(user);
+  });
+});
+
+app.delete('/api/admin/users/:id', (req, res) => {
+  const id = Number(req.params.id || 0);
+  if (!id) return res.status(400).json({ error: 'ID không hợp lệ' });
+  db.deleteUser(id, (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    res.json({ success: true });
+  });
+});
+
+app.put('/api/admin/users/:id/password', (req, res) => {
+  const id = Number(req.params.id || 0);
+  const password = String(req.body.password || '');
+  if (!id || password.length < 6) {
+    return res.status(400).json({ error: 'Mật khẩu phải có ít nhất 6 ký tự' });
+  }
+  const { hash, salt } = hashPassword(password);
+  db.updateUserPassword(id, hash, salt, (err) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ success: true });
+  });
+});
+
+// =============================================
+// User Auth (Public - Optional login)
+// =============================================
+app.post('/api/auth/register', (req, res) => {
+  const phone = String(req.body.phone || '').trim();
+  const name = normalizeName(req.body.name);
+  const password = String(req.body.password || '');
+
+  if (!phone || !name || !password) {
+    return res.status(400).json({ error: 'Vui lòng nhập đầy đủ thông tin' });
+  }
+  if (password.length < 6) {
+    return res.status(400).json({ error: 'Mật khẩu phải có ít nhất 6 ký tự' });
+  }
+
+  const { hash, salt } = hashPassword(password);
+  db.createUser(phone, name, hash, salt, 'user', (err, user) => {
+    if (err) return res.status(400).json({ error: err.message });
+
+    const sessionToken = crypto.randomBytes(24).toString('hex');
+    userSessions.set(sessionToken, { id: user.id, name: user.name, phone: user.phone, role: 'user' });
+    res.setHeader('Set-Cookie', `user_session=${encodeURIComponent(sessionToken)}; HttpOnly; Path=/; Max-Age=604800; SameSite=Lax`);
+    res.json({ success: true, user: { id: user.id, name: user.name, phone: user.phone } });
+  });
+});
+
+app.post('/api/auth/login', (req, res) => {
+  const phone = String(req.body.phone || '').trim();
+  const password = String(req.body.password || '');
+
+  if (!phone || !password) {
+    return res.status(400).json({ error: 'Vui lòng nhập số điện thoại và mật khẩu' });
+  }
+
+  db.getUserByPhone(phone, (err, user) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!user) return res.status(401).json({ error: 'Số điện thoại hoặc mật khẩu không đúng' });
+    if (!verifyPassword(password, user.password_hash, user.salt)) {
+      return res.status(401).json({ error: 'Số điện thoại hoặc mật khẩu không đúng' });
+    }
+
+    const sessionToken = crypto.randomBytes(24).toString('hex');
+    userSessions.set(sessionToken, { id: user.id, name: user.name, phone: user.phone, role: user.role });
+    res.setHeader('Set-Cookie', `user_session=${encodeURIComponent(sessionToken)}; HttpOnly; Path=/; Max-Age=604800; SameSite=Lax`);
+    res.json({ success: true, user: { id: user.id, name: user.name, phone: user.phone, role: user.role } });
+  });
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  const cookies = parseCookies(req);
+  const token = cookies.user_session || '';
+  if (token) userSessions.delete(token);
+  res.setHeader('Set-Cookie', 'user_session=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax');
+  res.json({ success: true });
+});
+
+app.get('/api/auth/me', (req, res) => {
+  const user = getUserSessionInfo(req);
+  if (!user) return res.json({ loggedIn: false });
+  res.json({ loggedIn: true, user });
 });
 
 const payosAutoSyncMs = Number(process.env.PAYOS_AUTO_SYNC_MS || 30000);

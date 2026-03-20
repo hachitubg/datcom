@@ -1032,6 +1032,168 @@ textarea {
 }
 
 /* ========================================
+   USER AUTH BAR
+   ======================================== */
+.user-auth-bar {
+    max-width: 800px;
+    margin: 0 auto 12px;
+    display: flex;
+    justify-content: flex-end;
+    padding: 0 8px;
+}
+
+.user-auth-state {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.user-auth-name {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--primary);
+}
+
+.user-auth-btn {
+    padding: 6px 16px;
+    border: none;
+    border-radius: var(--radius-full);
+    background: var(--secondary-container);
+    color: var(--on-secondary-container);
+    font-family: 'Be Vietnam Pro', sans-serif;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.user-auth-btn:hover {
+    background: var(--primary-fixed-dim);
+}
+
+.user-auth-btn-logout {
+    background: transparent;
+    color: var(--on-surface-variant);
+    font-size: 0.7rem;
+}
+
+/* Auth Modal extra */
+.auth-switch {
+    text-align: center;
+    margin-top: 16px;
+    font-size: 0.8rem;
+    color: var(--on-surface-variant);
+}
+
+.auth-switch a {
+    color: var(--tertiary);
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.auth-switch a:hover {
+    text-decoration: underline;
+}
+
+/* ========================================
+   PROMO CODE INPUT
+   ======================================== */
+.promo-input-wrap {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+}
+
+.promo-input-wrap input {
+    flex: 1;
+    text-transform: uppercase;
+}
+
+.btn-promo-check {
+    padding: 10px 16px;
+    border: none;
+    border-radius: var(--radius-md);
+    background: var(--secondary-container);
+    color: var(--on-secondary-container);
+    font-family: 'Be Vietnam Pro', sans-serif;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+
+.btn-promo-check:hover {
+    background: var(--primary-fixed-dim);
+}
+
+.promo-message {
+    min-height: 20px;
+    margin-top: 4px;
+    font-size: 0.75rem;
+}
+
+.promo-valid {
+    color: #2d7a2d;
+    font-weight: 600;
+}
+
+.promo-invalid {
+    color: var(--tertiary);
+    font-weight: 500;
+}
+
+/* ========================================
+   DISCOUNT BADGE
+   ======================================== */
+.discount-badge {
+    display: inline-block;
+    background: linear-gradient(135deg, #e65100, #ff8f00);
+    color: #fff;
+    font-size: 0.6rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: var(--radius-full);
+    vertical-align: middle;
+    margin-left: 4px;
+    letter-spacing: 0.3px;
+}
+
+.order-item-discounted {
+    border-left: 4px solid #ff8f00;
+    background: linear-gradient(90deg, rgba(255,143,0,0.04), transparent);
+}
+
+.promo-info-text {
+    color: #e65100;
+    font-size: 0.7rem;
+    font-weight: 500;
+    margin-top: 2px;
+}
+
+/* Error/Success messages for modals */
+.error-message {
+    background: rgba(138, 74, 54, 0.08);
+    color: var(--tertiary);
+    padding: 10px 14px;
+    border-radius: var(--radius-md);
+    font-size: 0.8rem;
+    margin-bottom: 12px;
+    border-left: 3px solid var(--tertiary);
+}
+
+.success-message {
+    background: rgba(45, 122, 45, 0.08);
+    color: #2d7a2d;
+    padding: 10px 14px;
+    border-radius: var(--radius-md);
+    font-size: 0.8rem;
+    margin-bottom: 12px;
+    border-left: 3px solid #2d7a2d;
+}
+
+/* ========================================
    RESPONSIVE: TABLET (max-width: 768px)
    ======================================== */
 @media (max-width: 768px) {

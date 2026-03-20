@@ -1,5 +1,114 @@
 const API_BASE = window.location.origin;
 
+// =============================================
+// User Auth
+// =============================================
+let currentUser = null;
+
+function checkUserAuth() {
+    fetch(`${API_BASE}/api/auth/me`)
+        .then(res => res.json())
+        .then(data => {
+            if (data.loggedIn && data.user) {
+                currentUser = data.user;
+                document.getElementById('userAuthLoggedOut').style.display = 'none';
+                document.getElementById('userAuthLoggedIn').style.display = 'flex';
+                document.getElementById('userAuthName').textContent = data.user.name;
+            } else {
+                currentUser = null;
+                document.getElementById('userAuthLoggedOut').style.display = 'flex';
+                document.getElementById('userAuthLoggedIn').style.display = 'none';
+            }
+        })
+        .catch(() => { currentUser = null; });
+}
+
+const authModal = document.getElementById('authModal');
+
+document.getElementById('btnShowLogin').addEventListener('click', () => {
+    document.getElementById('authMessage').innerHTML = '';
+    document.getElementById('loginForm').style.display = 'block';
+    document.getElementById('registerForm').style.display = 'none';
+    document.getElementById('authModalTitle').textContent = 'Đăng nhập';
+    authModal.style.display = 'block';
+});
+
+document.getElementById('closeAuth').addEventListener('click', () => {
+    authModal.style.display = 'none';
+});
+
+document.getElementById('btnSwitchToRegister').addEventListener('click', (e) => {
+    e.preventDefault();
+    document.getElementById('authMessage').innerHTML = '';
+    document.getElementById('loginForm').style.display = 'none';
+    document.getElementById('registerForm').style.display = 'block';
+    document.getElementById('authModalTitle').textContent = 'Đăng ký';
+});
+
+document.getElementById('btnSwitchToLogin').addEventListener('click', (e) => {
+    e.preventDefault();
+    document.getElementById('authMessage').innerHTML = '';
+    document.getElementById('loginForm').style.display = 'block';
+    document.getElementById('registerForm').style.display = 'none';
+    document.getElementById('authModalTitle').textContent = 'Đăng nhập';
+});
+
+document.getElementById('btnLogin').addEventListener('click', () => {
+    const phone = document.getElementById('loginPhone').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    if (!phone || !password) {
+        document.getElementById('authMessage').innerHTML = '<div class="error-message">Vui lòng nhập đầy đủ thông tin</div>';
+        return;
+    }
+    fetch(`${API_BASE}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, password })
+    })
+    .then(res => res.json().then(data => ({ ok: res.ok, data })))
+    .then(({ ok, data }) => {
+        if (!ok) throw new Error(data.error || 'Đăng nhập thất bại');
+        authModal.style.display = 'none';
+        checkUserAuth();
+    })
+    .catch(err => {
+        document.getElementById('authMessage').innerHTML = `<div class="error-message">${err.message}</div>`;
+    });
+});
+
+document.getElementById('btnRegister').addEventListener('click', () => {
+    const phone = document.getElementById('regPhone').value.trim();
+    const name = document.getElementById('regName').value.trim();
+    const password = document.getElementById('regPassword').value;
+    if (!phone || !name || !password) {
+        document.getElementById('authMessage').innerHTML = '<div class="error-message">Vui lòng nhập đầy đủ thông tin</div>';
+        return;
+    }
+    fetch(`${API_BASE}/api/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, name, password })
+    })
+    .then(res => res.json().then(data => ({ ok: res.ok, data })))
+    .then(({ ok, data }) => {
+        if (!ok) throw new Error(data.error || 'Đăng ký thất bại');
+        authModal.style.display = 'none';
+        checkUserAuth();
+    })
+    .catch(err => {
+        document.getElementById('authMessage').innerHTML = `<div class="error-message">${err.message}</div>`;
+    });
+});
+
+document.getElementById('btnUserLogout').addEventListener('click', () => {
+    fetch(`${API_BASE}/api/auth/logout`, { method: 'POST' })
+        .finally(() => {
+            currentUser = null;
+            document.getElementById('userAuthLoggedOut').style.display = 'flex';
+            document.getElementById('userAuthLoggedIn').style.display = 'none';
+        });
+});
+
 // Modal controls
 const orderModal = document.getElementById('orderModal');
 const listModal = document.getElementById('listModal');
@@ -409,10 +518,41 @@ function loadPaymentHistory() {
         });
 }
 
+// =============================================
+// Promo Code Check
+// =============================================
+document.getElementById('btnCheckPromo').addEventListener('click', () => {
+    const code = document.getElementById('promoCode').value.trim();
+    const msg = document.getElementById('promoMessage');
+    if (!code) { msg.innerHTML = ''; return; }
+
+    fetch(`${API_BASE}/api/promo-codes/validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.valid) {
+            msg.innerHTML = `<span class="promo-valid">Mã hợp lệ — Giảm ${data.discountPercent}%</span>`;
+        } else {
+            msg.innerHTML = `<span class="promo-invalid">Mã không hợp lệ hoặc đã được sử dụng</span>`;
+        }
+    })
+    .catch(() => {
+        msg.innerHTML = `<span class="promo-invalid">Lỗi kiểm tra mã</span>`;
+    });
+});
+
 document.getElementById('btnOrder').addEventListener('click', () => {
     document.getElementById('orderMessage').innerHTML = '';
     document.getElementById('orderForm').reset();
+    document.getElementById('promoMessage').innerHTML = '';
     loadCustomerNameSuggestions();
+    // Auto-fill name if logged in
+    if (currentUser && currentUser.name) {
+        document.getElementById('customerName').value = currentUser.name;
+    }
     orderModal.style.display = 'block';
 });
 
@@ -448,6 +588,9 @@ window.addEventListener('click', (e) => {
     }
     if (e.target === paymentHistoryModal) {
         paymentHistoryModal.style.display = 'none';
+    }
+    if (e.target === authModal) {
+        authModal.style.display = 'none';
     }
 });
 
@@ -574,11 +717,14 @@ function loadOrders() {
                 ordersList.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">Chưa có đơn hàng</div>';
             } else {
                 ordersList.innerHTML = orders.map((order, index) => {
+                    const disc = Number(order.discount_percent || 0);
+                    const discBadge = disc > 0 ? `<span class="discount-badge">-${disc}%</span>` : '';
                     return `
-                        <div class="order-item">
+                        <div class="order-item ${disc > 0 ? 'order-item-discounted' : ''}">
                             <div class="order-info">
-                                <h4>${orders.length - index}. ${order.name} đã đặt ${order.quantity} xuất</h4>
+                                <h4>${orders.length - index}. ${order.name} đã đặt ${order.quantity} xuất ${discBadge}</h4>
                                 ${order.description ? `<p><strong>Ghi chú:</strong> ${order.description}</p>` : ''}
+                                ${disc > 0 ? `<p class="promo-info-text">Mã KM: ${order.promo_code} — Giảm ${disc}%</p>` : ''}
                                 <p class="order-time">${AppUtils.formatDateTime(order.created_at)}</p>
                             </div>
                         </div>
@@ -597,6 +743,7 @@ document.getElementById('orderForm').addEventListener('submit', (e) => {
     const name = AppUtils.normalizeName(document.getElementById('customerName').value);
     const quantity = parseInt(document.getElementById('quantity').value);
     const description = document.getElementById('description').value.trim();
+    const promoCode = document.getElementById('promoCode').value.trim() || null;
 
     if (!name) {
         showOrderMessage('Vui lòng nhập tên', 'error');
@@ -606,7 +753,7 @@ document.getElementById('orderForm').addEventListener('submit', (e) => {
     AppUtils.fetchJson(`${API_BASE}/api/orders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, quantity, description })
+        body: JSON.stringify({ name, quantity, description, promoCode })
     })
     .then(data => {
         if (data.error) {
@@ -629,6 +776,7 @@ function showOrderMessage(message, type) {
 }
 
 // Load on page load
+checkUserAuth();
 handlePaymentReturn();
 loadTodayInfo();
 togglePaymentHistoryInputs();

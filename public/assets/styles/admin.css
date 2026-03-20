@@ -211,6 +211,19 @@ h1 {
     font-family: 'Be Vietnam Pro', sans-serif;
     color: var(--on-surface-variant);
     box-shadow: 0 2px 8px var(--shadow-warm);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    justify-content: center;
+}
+
+.tab-icon {
+    font-size: 1.1rem;
+    line-height: 1;
+}
+
+.tab-label {
+    white-space: nowrap;
 }
 
 .tab-btn:hover {
@@ -1101,16 +1114,37 @@ tr:hover {
     }
 
     .tab-buttons {
-        flex-direction: column;
-        gap: 8px;
-        margin-bottom: 20px;
+        flex-direction: row;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        gap: 6px;
+        margin-bottom: 16px;
+        padding-bottom: 4px;
+        scrollbar-width: none;
+    }
+
+    .tab-buttons::-webkit-scrollbar {
+        display: none;
     }
 
     .tab-btn {
-        width: 100%;
-        text-align: center;
-        padding: 10px 16px;
-        font-size: 0.875rem;
+        flex: 0 0 auto;
+        padding: 8px 14px;
+        font-size: 0.75rem;
+        min-width: 0;
+    }
+
+    .tab-label {
+        display: none;
+    }
+
+    .tab-icon {
+        font-size: 1.2rem;
+    }
+
+    .tab-btn.active .tab-label {
+        display: inline;
     }
 
     .tab-content {
@@ -1272,13 +1306,13 @@ tr:hover {
     }
 
     .tab-buttons {
-        gap: 6px;
-        margin-bottom: 16px;
+        gap: 4px;
+        margin-bottom: 12px;
     }
 
     .tab-btn {
-        padding: 10px 12px;
-        font-size: 0.75rem;
+        padding: 8px 10px;
+        font-size: 0.7rem;
     }
 
     .tab-content {
@@ -1402,4 +1436,32 @@ tr:hover {
         font-size: 0.75rem;
         margin-bottom: 10px;
     }
+}
+
+/* ===== Discount Badge ===== */
+.discount-badge {
+    display: inline-block;
+    background: linear-gradient(135deg, #e65100, #ff8f00);
+    color: #fff;
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: var(--radius-full);
+    vertical-align: middle;
+    margin-left: 6px;
+    letter-spacing: 0.3px;
+}
+
+.order-row-discounted {
+    border-left: 4px solid #ff8f00;
+}
+
+.promo-info-text {
+    color: #e65100;
+    font-size: 0.7rem;
+    font-weight: 500;
+}
+
+.promo-used {
+    opacity: 0.7;
 }

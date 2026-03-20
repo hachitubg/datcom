@@ -174,6 +174,10 @@ function switchTab(tab, event) {
         loadHistory();
     } else if (tab === 'payments') {
         switchPaymentView(currentPaymentView);
+    } else if (tab === 'promos') {
+        loadPromoCodes();
+    } else if (tab === 'users') {
+        loadUsers();
     }
 }
 
@@ -365,18 +369,24 @@ function renderHistoryOrders() {
     const startIndex = (historyCurrentPage - 1) * PAGE_SIZE;
     const pageRows = historyOrders.slice(startIndex, startIndex + PAGE_SIZE);
 
-    const rowsHtml = pageRows.map((order) => `
-        <div class="order-row">
+    const rowsHtml = pageRows.map((order) => {
+        const disc = Number(order.discount_percent || 0);
+        const discBadge = disc > 0 ? `<span class="discount-badge">-${disc}%</span>` : '';
+        const promoInfo = disc > 0 ? `<div class="admin-payment-meta promo-info-text">Mã KM: ${order.promo_code} — Giảm ${disc}%</div>` : '';
+        return `
+        <div class="order-row ${disc > 0 ? 'order-row-discounted' : ''}">
             <div class="order-info">
-                <div class="order-name">${order.name}</div>
+                <div class="order-name">${order.name} ${discBadge}</div>
                 <div class="order-details">Số lượng: ${order.quantity} xuất ${order.description ? '</br> Ghi chú: ' + order.description : ''}</div>
+                ${promoInfo}
                 <div class="admin-payment-meta">Thời gian đặt: ${AppUtils.formatDateTime(order.created_at)}</div>
             </div>
             <div class="admin-payment-actions">
                 <button class="edit-icon-btn" title="Chỉnh sửa đơn" onclick="openOrderEditModal(${order.id}, '${encodeURIComponent(order.name)}', ${order.quantity}, '${encodeURIComponent(order.description || '')}', '${currentHistoryDetailDate}')">✏️</button>
             </div>
         </div>
-    `).join('');
+        `;
+    }).join('');
 
     list.innerHTML = rowsHtml + renderPaginationControls('historyCurrentPage', historyCurrentPage, totalPages, 'renderHistoryOrders');
 }
@@ -915,6 +925,185 @@ window.addEventListener('click', (e) => {
         searchDropdown.style.display = 'none';
     }
 });
+
+// =============================================
+// Promo Code Management
+// =============================================
+function loadPromoCodes() {
+    const container = document.getElementById('promoCodeList');
+    container.innerHTML = '<div class="loading">Đang tải...</div>';
+
+    fetch(`${API_BASE}/api/admin/promo-codes`)
+        .then(res => res.json())
+        .then(codes => {
+            if (!codes || !codes.length) {
+                container.innerHTML = '<div style="padding:14px; color:#999; text-align:center;">Chưa có mã khuyến mãi nào.</div>';
+                return;
+            }
+
+            container.innerHTML = codes.map(c => {
+                const isUsed = !!c.used_by;
+                const statusCls = isUsed ? 'psb-paid' : 'psb-pending';
+                const statusLabel = isUsed ? `Đã dùng bởi ${c.used_by}` : 'Chưa sử dụng';
+                return `
+                    <div class="admin-payment-row ${isUsed ? 'promo-used' : ''}">
+                        <div>
+                            <div class="order-name" style="font-family:monospace; letter-spacing:1px;">${c.code}</div>
+                            <div class="admin-payment-meta">Giảm <strong>${c.discount_percent}%</strong> · Tạo: ${AppUtils.formatDateTime(c.created_at)}</div>
+                            <span class="payment-status-badge ${statusCls}">${statusLabel}</span>
+                            ${isUsed ? `<div class="admin-payment-meta">Dùng lúc: ${AppUtils.formatDateTime(c.used_at)}</div>` : ''}
+                        </div>
+                        <div class="admin-payment-actions">
+                            ${!isUsed ? `<button class="btn-danger btn-small" onclick="deletePromoCode(${c.id})">Xóa</button>` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        })
+        .catch(err => {
+            container.innerHTML = `<div style="padding:14px; color:red; text-align:center;">Lỗi: ${err.message}</div>`;
+        });
+}
+
+function createPromoCode() {
+    const code = document.getElementById('newPromoCode').value.trim().toUpperCase();
+    const discount = Number(document.getElementById('newPromoDiscount').value || 0);
+    const msgEl = document.getElementById('promoAdminMessage');
+
+    if (!code || discount <= 0 || discount > 100) {
+        msgEl.innerHTML = '<div class="error-message">Vui lòng nhập mã và phần trăm giảm giá hợp lệ (1-100%)</div>';
+        return;
+    }
+
+    fetch(`${API_BASE}/api/admin/promo-codes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, discountPercent: discount })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.error) throw new Error(data.error);
+        msgEl.innerHTML = '<div class="success-message">Tạo mã khuyến mãi thành công!</div>';
+        document.getElementById('newPromoCode').value = '';
+        document.getElementById('newPromoDiscount').value = '';
+        loadPromoCodes();
+    })
+    .catch(err => {
+        msgEl.innerHTML = `<div class="error-message">${err.message}</div>`;
+    });
+}
+
+function deletePromoCode(id) {
+    if (!confirm('Xóa mã khuyến mãi này?')) return;
+    fetch(`${API_BASE}/api/admin/promo-codes/${id}`, { method: 'DELETE' })
+        .then(res => res.json())
+        .then(data => {
+            if (data.error) throw new Error(data.error);
+            loadPromoCodes();
+        })
+        .catch(err => alert('Lỗi xóa: ' + err.message));
+}
+
+// =============================================
+// User Management
+// =============================================
+function loadUsers() {
+    const container = document.getElementById('userList');
+    container.innerHTML = '<div class="loading">Đang tải...</div>';
+
+    fetch(`${API_BASE}/api/admin/users`)
+        .then(res => res.json())
+        .then(users => {
+            if (!users || !users.length) {
+                container.innerHTML = '<div style="padding:14px; color:#999; text-align:center;">Chưa có người dùng nào.</div>';
+                return;
+            }
+
+            container.innerHTML = users.map(u => {
+                const roleBadge = u.role === 'admin'
+                    ? '<span class="payment-status-badge psb-paid">Admin</span>'
+                    : '<span class="payment-status-badge psb-pending">User</span>';
+                return `
+                    <div class="admin-payment-row">
+                        <div>
+                            <div class="order-name">${u.name} ${roleBadge}</div>
+                            <div class="admin-payment-meta">SĐT: ${u.phone} · Tạo: ${AppUtils.formatDateTime(u.created_at)}</div>
+                        </div>
+                        <div class="admin-payment-actions">
+                            <button class="btn-warning btn-small" onclick="resetUserPassword(${u.id}, '${encodeURIComponent(u.name)}')">Đổi MK</button>
+                            <button class="btn-danger btn-small" onclick="deleteUser(${u.id}, '${encodeURIComponent(u.name)}')">Xóa</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        })
+        .catch(err => {
+            container.innerHTML = `<div style="padding:14px; color:red; text-align:center;">Lỗi: ${err.message}</div>`;
+        });
+}
+
+function createUser() {
+    const phone = document.getElementById('newUserPhone').value.trim();
+    const name = document.getElementById('newUserName').value.trim();
+    const password = document.getElementById('newUserPassword').value;
+    const role = document.getElementById('newUserRole').value;
+    const msgEl = document.getElementById('userAdminMessage');
+
+    if (!phone || !name || !password) {
+        msgEl.innerHTML = '<div class="error-message">Vui lòng nhập đầy đủ thông tin</div>';
+        return;
+    }
+
+    fetch(`${API_BASE}/api/admin/users`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, name, password, role })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.error) throw new Error(data.error);
+        msgEl.innerHTML = '<div class="success-message">Tạo tài khoản thành công!</div>';
+        document.getElementById('newUserPhone').value = '';
+        document.getElementById('newUserName').value = '';
+        document.getElementById('newUserPassword').value = '';
+        loadUsers();
+    })
+    .catch(err => {
+        msgEl.innerHTML = `<div class="error-message">${err.message}</div>`;
+    });
+}
+
+function deleteUser(id, encodedName) {
+    const name = decodeURIComponent(encodedName || '');
+    if (!confirm(`Xóa tài khoản "${name}"?`)) return;
+    fetch(`${API_BASE}/api/admin/users/${id}`, { method: 'DELETE' })
+        .then(res => res.json())
+        .then(data => {
+            if (data.error) throw new Error(data.error);
+            loadUsers();
+        })
+        .catch(err => alert('Lỗi xóa: ' + err.message));
+}
+
+function resetUserPassword(id, encodedName) {
+    const name = decodeURIComponent(encodedName || '');
+    const newPass = prompt(`Nhập mật khẩu mới cho "${name}" (tối thiểu 6 ký tự):`);
+    if (!newPass || newPass.length < 6) {
+        if (newPass !== null) alert('Mật khẩu phải có ít nhất 6 ký tự');
+        return;
+    }
+    fetch(`${API_BASE}/api/admin/users/${id}/password`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: newPass })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.error) throw new Error(data.error);
+        alert('Đổi mật khẩu thành công!');
+    })
+    .catch(err => alert('Lỗi: ' + err.message));
+}
 
 // Load today info on page load
 loadTodayInfo();

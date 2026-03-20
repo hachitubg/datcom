@@ -74,8 +74,40 @@ class Database {
         )
       `);
 
+      // Bảng mã khuyến mãi
+      this.db.run(`
+        CREATE TABLE IF NOT EXISTS promo_codes (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          code TEXT UNIQUE NOT NULL,
+          discount_percent INTEGER NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          used_by TEXT,
+          used_at DATETIME,
+          order_id INTEGER,
+          FOREIGN KEY (order_id) REFERENCES orders(id)
+        )
+      `);
+
+      // Bảng người dùng
+      this.db.run(`
+        CREATE TABLE IF NOT EXISTS users (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          phone TEXT UNIQUE NOT NULL,
+          name TEXT NOT NULL,
+          password_hash TEXT NOT NULL,
+          salt TEXT NOT NULL,
+          role TEXT DEFAULT 'user',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      // Thêm cột discount vào orders (bỏ qua lỗi nếu đã tồn tại)
+      this.db.run("ALTER TABLE orders ADD COLUMN discount_percent INTEGER DEFAULT 0", () => {});
+      this.db.run("ALTER TABLE orders ADD COLUMN promo_code TEXT", () => {});
+
       // Tạo record cho hôm nay nếu chưa có
       this.ensureTodayRecord();
+      this.seedAdminUser();
     });
   }
 
@@ -151,7 +183,9 @@ class Database {
   getTodayOrders(callback) {
     const today = this.getDateString();
     this.db.all(
-      `SELECT o.id, o.name, o.quantity, o.description, o.created_at 
+      `SELECT o.id, o.name, o.quantity, o.description, o.created_at,
+              COALESCE(o.discount_percent, 0) AS discount_percent,
+              o.promo_code
        FROM orders o
        JOIN days d ON o.day_id = d.id
        WHERE d.date = ?
@@ -161,7 +195,13 @@ class Database {
     );
   }
 
-  addOrder(name, quantity, description, callback) {
+  addOrder(name, quantity, description, promoCode, callback) {
+    // Hỗ trợ gọi kiểu cũ: addOrder(name, qty, desc, callback)
+    if (typeof promoCode === 'function') {
+      callback = promoCode;
+      promoCode = null;
+    }
+
     this.getTodayInfo((err, dayInfo) => {
       if (err) {
         callback(err);
@@ -173,22 +213,76 @@ class Database {
         return;
       }
 
-      this.db.run(
-        `INSERT INTO orders (day_id, name, quantity, description) VALUES (?, ?, ?, ?)`,
-        [dayInfo.id, name, quantity, description],
-        function(err) {
-          if (err) {
-            callback(err);
-          } else {
+      const insertOrder = (discountPercent, codeUsed) => {
+        this.db.run(
+          `INSERT INTO orders (day_id, name, quantity, description, discount_percent, promo_code) VALUES (?, ?, ?, ?, ?, ?)`,
+          [dayInfo.id, name, quantity, description, discountPercent || 0, codeUsed || null],
+          function(insertErr) {
+            if (insertErr) {
+              callback(insertErr);
+              return;
+            }
+            const orderId = this.lastID;
+
+            // Đánh dấu mã đã dùng
+            if (codeUsed && orderId) {
+              // Không cần callback vì order đã tạo thành công
+              // nếu update promo fail thì order vẫn OK
+            }
+
             callback(null, {
-              id: this.lastID,
+              id: orderId,
               name,
               quantity,
-              description
+              description,
+              discount_percent: discountPercent || 0,
+              promo_code: codeUsed || null
             });
           }
-        }
-      );
+        );
+      };
+
+      if (promoCode) {
+        const code = String(promoCode).trim().toUpperCase();
+        this.db.get(
+          `SELECT id, discount_percent FROM promo_codes WHERE UPPER(code) = ? AND used_by IS NULL`,
+          [code],
+          (promoErr, promo) => {
+            if (promoErr) { callback(promoErr); return; }
+            if (!promo) {
+              callback(new Error('Mã khuyến mãi không hợp lệ hoặc đã được sử dụng'));
+              return;
+            }
+            // Insert order rồi mark promo
+            this.db.run(
+              `INSERT INTO orders (day_id, name, quantity, description, discount_percent, promo_code) VALUES (?, ?, ?, ?, ?, ?)`,
+              [dayInfo.id, name, quantity, description, promo.discount_percent, code],
+              function(insertErr) {
+                if (insertErr) { callback(insertErr); return; }
+                const orderId = this.lastID;
+                // Mark promo as used - dùng this của outer scope
+                // nhưng this ở đây là Statement, dùng biến bên ngoài
+                callback(null, {
+                  id: orderId,
+                  name,
+                  quantity,
+                  description,
+                  discount_percent: promo.discount_percent,
+                  promo_code: code
+                });
+              }
+            );
+            // Mark promo used sau khi insert thành công
+            // Dùng serialize để đảm bảo thứ tự
+            this.db.run(
+              `UPDATE promo_codes SET used_by = ?, used_at = CURRENT_TIMESTAMP, order_id = (SELECT MAX(id) FROM orders WHERE promo_code = ? AND name = ?) WHERE id = ?`,
+              [name, code, name, promo.id]
+            );
+          }
+        );
+      } else {
+        insertOrder(0, null);
+      }
     });
   }
 
@@ -242,7 +336,7 @@ class Database {
         } else {
           console.log('📦 Tìm thấy ngày:', date);
           this.db.all(
-            `SELECT id, name, quantity, description, created_at FROM orders WHERE day_id = ? ORDER BY created_at DESC, id DESC`,
+            `SELECT id, name, quantity, description, created_at, COALESCE(discount_percent, 0) AS discount_percent, promo_code FROM orders WHERE day_id = ? ORDER BY created_at DESC, id DESC`,
             [dayRow.id],
             (err, orders) => {
               if (err) {
@@ -289,7 +383,7 @@ class Database {
 
     // Lấy tất cả ngày đặt, sắp xếp cũ nhất trước để áp dụng FIFO
     this.db.all(
-      `SELECT d.date, SUM(o.quantity) AS quantity, SUM(o.quantity * d.price) AS day_amount
+      `SELECT d.date, SUM(o.quantity) AS quantity, SUM(o.quantity * d.price * (100 - COALESCE(o.discount_percent, 0)) / 100) AS day_amount
        FROM orders o JOIN days d ON d.id = o.day_id
        WHERE LOWER(o.name) = LOWER(?)
        GROUP BY d.date ORDER BY d.date ASC`,
@@ -495,7 +589,7 @@ class Database {
           MIN(o.name)                      AS display_name,
           d.date,
           SUM(o.quantity)                  AS quantity,
-          SUM(o.quantity * d.price)        AS day_amount,
+          SUM(o.quantity * d.price * (100 - COALESCE(o.discount_percent, 0)) / 100) AS day_amount,
           SUM(SUM(o.quantity * d.price)) OVER (
             PARTITION BY LOWER(o.name)
             ORDER BY d.date ASC
@@ -580,7 +674,7 @@ class Database {
 
     // Bước 1: lấy tổng tiền mỗi ngày (cũ nhất trước) để tính FIFO
     this.db.all(
-      `SELECT d.date, SUM(o.quantity * d.price) AS day_amount
+      `SELECT d.date, SUM(o.quantity * d.price * (100 - COALESCE(o.discount_percent, 0)) / 100) AS day_amount
        FROM orders o JOIN days d ON d.id = o.day_id
        WHERE LOWER(o.name) = LOWER(?)
        GROUP BY d.date ORDER BY d.date ASC`,
@@ -620,7 +714,8 @@ class Database {
             // Bước 4: lấy từng đơn lẻ thuộc các ngày còn nợ
             const placeholders = Array.from(unpaidDates).map(() => '?').join(', ');
             this.db.all(
-              `SELECT o.id, o.quantity, o.description, o.created_at, d.price, d.date
+              `SELECT o.id, o.quantity, o.description, o.created_at, d.price, d.date,
+                      COALESCE(o.discount_percent, 0) AS discount_percent, o.promo_code
                FROM orders o JOIN days d ON d.id = o.day_id
                WHERE LOWER(o.name) = LOWER(?) AND d.date IN (${placeholders})
                ORDER BY d.date ASC, o.created_at ASC, o.id ASC`,
@@ -628,13 +723,19 @@ class Database {
               (err3, orderRows = []) => {
                 if (err3) { callback(err3); return; }
 
-                const mappedRows = orderRows.map((row) => ({
-                  id: Number(row.id),
-                  quantity: Number(row.quantity || 0),
-                  description: row.description || '',
-                  createdAt: row.created_at || '',
-                  amount: Number(row.quantity || 0) * Number(row.price || 0)
-                }));
+                const mappedRows = orderRows.map((row) => {
+                  const disc = Number(row.discount_percent || 0);
+                  const rawAmount = Number(row.quantity || 0) * Number(row.price || 0);
+                  return {
+                    id: Number(row.id),
+                    quantity: Number(row.quantity || 0),
+                    description: row.description || '',
+                    createdAt: row.created_at || '',
+                    amount: Math.round(rawAmount * (100 - disc) / 100),
+                    discount_percent: disc,
+                    promo_code: row.promo_code || null
+                  };
+                });
 
                 const totalQuantity = mappedRows.reduce((sum, r) => sum + r.quantity, 0);
 
@@ -672,7 +773,7 @@ class Database {
 
         // Bước 2: Tính tổng tiền và số lượng trên TẤT CẢ các ngày (không chỉ hôm nay)
         this.db.get(
-          `SELECT SUM(o.quantity) AS quantity, SUM(o.quantity * d.price) AS total_amount
+          `SELECT SUM(o.quantity) AS quantity, SUM(o.quantity * d.price * (100 - COALESCE(o.discount_percent, 0)) / 100) AS total_amount
            FROM orders o
            JOIN days d ON o.day_id = d.id
            WHERE LOWER(o.name) = LOWER(?)`,
@@ -784,7 +885,7 @@ class Database {
     }
 
     this.db.get(
-      `SELECT COALESCE(SUM(o.quantity * d.price), 0) AS total_amount
+      `SELECT COALESCE(SUM(o.quantity * d.price * (100 - COALESCE(o.discount_percent, 0)) / 100), 0) AS total_amount
        FROM orders o
        JOIN days d ON o.day_id = d.id
        WHERE LOWER(o.name) = LOWER(?)`,
@@ -972,7 +1073,7 @@ class Database {
     }
 
     this.db.all(
-      `SELECT d.date, SUM(o.quantity) AS quantity, SUM(o.quantity * d.price) AS day_amount, d.price
+      `SELECT d.date, SUM(o.quantity) AS quantity, SUM(o.quantity * d.price * (100 - COALESCE(o.discount_percent, 0)) / 100) AS day_amount, d.price
        FROM orders o JOIN days d ON d.id = o.day_id
        WHERE LOWER(o.name) = LOWER(?)
        GROUP BY d.date ORDER BY d.date ASC`,
@@ -1101,6 +1202,136 @@ class Database {
     `;
 
     this.db.all(query, params, callback);
+  }
+  // =============================================
+  // Promo Codes
+  // =============================================
+  createPromoCode(code, discountPercent, callback) {
+    const normalizedCode = String(code || '').trim().toUpperCase();
+    const disc = Number(discountPercent || 0);
+    if (!normalizedCode || disc <= 0 || disc > 100) {
+      callback(new Error('Mã hoặc phần trăm giảm giá không hợp lệ'));
+      return;
+    }
+    this.db.run(
+      `INSERT INTO promo_codes (code, discount_percent) VALUES (?, ?)`,
+      [normalizedCode, disc],
+      function(err) {
+        if (err) {
+          if (err.message && err.message.includes('UNIQUE')) {
+            callback(new Error('Mã khuyến mãi đã tồn tại'));
+          } else {
+            callback(err);
+          }
+          return;
+        }
+        callback(null, { id: this.lastID, code: normalizedCode, discount_percent: disc });
+      }
+    );
+  }
+
+  getPromoCodes(callback) {
+    this.db.all(
+      `SELECT id, code, discount_percent, created_at, used_by, used_at, order_id FROM promo_codes ORDER BY created_at DESC`,
+      callback
+    );
+  }
+
+  deletePromoCode(id, callback) {
+    this.db.get(`SELECT used_by FROM promo_codes WHERE id = ?`, [id], (err, row) => {
+      if (err) { callback(err); return; }
+      if (!row) { callback(new Error('Mã không tồn tại')); return; }
+      if (row.used_by) { callback(new Error('Không thể xóa mã đã được sử dụng')); return; }
+      this.db.run(`DELETE FROM promo_codes WHERE id = ?`, [id], callback);
+    });
+  }
+
+  validatePromoCode(code, callback) {
+    const normalizedCode = String(code || '').trim().toUpperCase();
+    if (!normalizedCode) { callback(null, null); return; }
+    this.db.get(
+      `SELECT id, code, discount_percent FROM promo_codes WHERE UPPER(code) = ? AND used_by IS NULL`,
+      [normalizedCode],
+      callback
+    );
+  }
+
+  // =============================================
+  // Users
+  // =============================================
+  seedAdminUser() {
+    const crypto = require('crypto');
+    // Chỉ tạo nếu chưa có admin nào
+    this.db.get(`SELECT id FROM users WHERE role = 'admin' LIMIT 1`, (err, row) => {
+      if (err || row) return; // Đã có admin hoặc lỗi
+      const salt = crypto.randomBytes(16).toString('hex');
+      const hash = crypto.scryptSync('hachitu', salt, 64).toString('hex');
+      this.db.run(
+        `INSERT OR IGNORE INTO users (phone, name, password_hash, salt, role) VALUES (?, ?, ?, ?, ?)`,
+        ['admin', 'Admin', hash, salt, 'admin']
+      );
+    });
+  }
+
+  createUser(phone, name, passwordHash, salt, role, callback) {
+    this.db.run(
+      `INSERT INTO users (phone, name, password_hash, salt, role) VALUES (?, ?, ?, ?, ?)`,
+      [phone, name, passwordHash, salt, role || 'user'],
+      function(err) {
+        if (err) {
+          if (err.message && err.message.includes('UNIQUE')) {
+            callback(new Error('Số điện thoại đã được đăng ký'));
+          } else {
+            callback(err);
+          }
+          return;
+        }
+        callback(null, { id: this.lastID, phone, name, role: role || 'user' });
+      }
+    );
+  }
+
+  getUserByPhone(phone, callback) {
+    this.db.get(
+      `SELECT id, phone, name, password_hash, salt, role, created_at FROM users WHERE phone = ?`,
+      [phone],
+      callback
+    );
+  }
+
+  getUsers(callback) {
+    this.db.all(
+      `SELECT id, phone, name, role, created_at FROM users ORDER BY created_at DESC`,
+      callback
+    );
+  }
+
+  deleteUser(id, callback) {
+    this.db.get(`SELECT role FROM users WHERE id = ?`, [id], (err, row) => {
+      if (err) { callback(err); return; }
+      if (!row) { callback(new Error('Người dùng không tồn tại')); return; }
+      // Không cho xóa admin duy nhất
+      if (row.role === 'admin') {
+        this.db.get(`SELECT COUNT(*) AS cnt FROM users WHERE role = 'admin'`, (err2, cntRow) => {
+          if (err2) { callback(err2); return; }
+          if ((cntRow?.cnt || 0) <= 1) {
+            callback(new Error('Không thể xóa tài khoản admin duy nhất'));
+            return;
+          }
+          this.db.run(`DELETE FROM users WHERE id = ?`, [id], callback);
+        });
+        return;
+      }
+      this.db.run(`DELETE FROM users WHERE id = ?`, [id], callback);
+    });
+  }
+
+  updateUserPassword(id, passwordHash, salt, callback) {
+    this.db.run(
+      `UPDATE users SET password_hash = ?, salt = ? WHERE id = ?`,
+      [passwordHash, salt, id],
+      callback
+    );
   }
 }
 
