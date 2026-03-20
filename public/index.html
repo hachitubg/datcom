@@ -306,21 +306,29 @@
 
         // =============================================
         // 3. Keyboard-aware modal resize (mobile)
+        //    On iOS/Android, position:fixed bottom:0 references the
+        //    layout viewport which does NOT shrink when the keyboard
+        //    opens. We must manually reposition the modal to fit
+        //    inside the visual viewport.
         // =============================================
         if (window.visualViewport) {
             var vv = window.visualViewport;
 
-            vv.addEventListener('resize', function() {
+            function updateModalForKeyboard() {
                 var keyboardOpen = vv.height < window.innerHeight * 0.75;
                 var els = document.querySelectorAll('.modal-content');
 
                 for (var i = 0; i < els.length; i++) {
                     if (keyboardOpen) {
+                        // vv.offsetTop = how far the visual viewport top is from layout viewport top
+                        // vv.height   = visible area height (excludes keyboard)
                         els[i].style.setProperty('--viewport-height', vv.height + 'px');
+                        els[i].style.setProperty('--viewport-top', vv.offsetTop + 'px');
                         els[i].classList.add('keyboard-open');
                     } else {
                         els[i].classList.remove('keyboard-open');
                         els[i].style.removeProperty('--viewport-height');
+                        els[i].style.removeProperty('--viewport-top');
                     }
                 }
 
@@ -334,7 +342,10 @@
                         }
                     }
                 }
-            });
+            }
+
+            vv.addEventListener('resize', updateModalForKeyboard);
+            vv.addEventListener('scroll', updateModalForKeyboard);
         }
 
         // Scroll focused input into view inside modal

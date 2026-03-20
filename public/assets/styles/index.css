@@ -1169,9 +1169,12 @@ textarea {
         transition: max-height 0.2s ease;
     }
 
-    /* When keyboard is open, JS adds this class */
+    /* When keyboard is open, JS adds this class and sets position/size */
     .modal-content.keyboard-open {
-        max-height: calc(var(--viewport-height, 92vh));
+        bottom: auto;
+        top: var(--viewport-top, 0px);
+        max-height: var(--viewport-height, 92vh);
+        transition: none; /* avoid lag when keyboard animates */
     }
 
     .modal-wide { max-width: 100%; }
