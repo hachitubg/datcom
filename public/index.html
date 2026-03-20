@@ -251,102 +251,54 @@
     (function() {
         // =============================================
         // 1. Body scroll lock when modal is open
+        //    NO position:fixed on body — that blocks
+        //    interactive-widget=resizes-content on Android
         // =============================================
         var scrollY = 0;
 
         function lockBody() {
             scrollY = window.scrollY;
             document.body.classList.add('modal-open');
-            document.body.style.top = -scrollY + 'px';
+            document.documentElement.classList.add('modal-open');
         }
 
         function unlockBody() {
             document.body.classList.remove('modal-open');
-            document.body.style.top = '';
+            document.documentElement.classList.remove('modal-open');
             window.scrollTo(0, scrollY);
         }
 
-        // Watch all modals for display changes
         var observer = new MutationObserver(function() {
             var anyOpen = false;
             var allModals = document.querySelectorAll('.modal');
             for (var i = 0; i < allModals.length; i++) {
-                if (allModals[i].style.display === 'block') {
+                if (allModals[i].style.display === 'block' || allModals[i].style.display === 'flex') {
                     anyOpen = true;
                     break;
                 }
             }
-            if (anyOpen) {
-                lockBody();
-            } else {
-                unlockBody();
-            }
+            if (anyOpen) lockBody(); else unlockBody();
         });
 
-        // Observe style changes on all modals
         document.querySelectorAll('.modal').forEach(function(modal) {
             observer.observe(modal, { attributes: true, attributeFilter: ['style'] });
         });
 
         // =============================================
-        // 2. Block touch on modal backdrop (overlay)
-        //    but allow scroll inside .modal-body
+        // 2. Block touch on modal backdrop
         // =============================================
         document.addEventListener('touchmove', function(e) {
-            // If a modal is open, only allow scroll inside .modal-body
             if (!document.body.classList.contains('modal-open')) return;
-
-            var target = e.target;
-            // Walk up to check if inside a scrollable modal-body
-            var scrollable = target.closest('.modal-body');
-            if (!scrollable) {
-                e.preventDefault();
-            }
+            var scrollable = e.target.closest('.modal-body');
+            if (!scrollable) e.preventDefault();
         }, { passive: false });
 
         // =============================================
-        // 3. Keyboard-aware modal positioning (mobile)
-        //    Uses interactive-widget=resizes-content in viewport meta
-        //    to make Android Chrome resize layout viewport automatically.
-        //    For iOS and fallback, we use visualViewport API.
+        // 3. Scroll focused input into view inside modal
+        //    With interactive-widget=resizes-content, the
+        //    viewport resizes automatically. We just need
+        //    to scroll the input into the visible area.
         // =============================================
-        if (window.visualViewport) {
-            var vv = window.visualViewport;
-            var initialHeight = vv.height;
-            var isKeyboardOpen = false;
-
-            function updateModalForKeyboard() {
-                var keyboardVisible = vv.height < initialHeight * 0.75;
-
-                if (keyboardVisible !== isKeyboardOpen) {
-                    isKeyboardOpen = keyboardVisible;
-                    var els = document.querySelectorAll('.modal-content');
-                    for (var i = 0; i < els.length; i++) {
-                        if (keyboardVisible) {
-                            els[i].classList.add('keyboard-open');
-                        } else {
-                            els[i].classList.remove('keyboard-open');
-                        }
-                    }
-                }
-
-                if (keyboardVisible) {
-                    // Update CSS custom properties for positioning
-                    var h = vv.height;
-                    var top = vv.offsetTop;
-                    document.documentElement.style.setProperty('--vv-height', h + 'px');
-                    document.documentElement.style.setProperty('--vv-top', top + 'px');
-                } else {
-                    document.documentElement.style.removeProperty('--vv-height');
-                    document.documentElement.style.removeProperty('--vv-top');
-                }
-            }
-
-            vv.addEventListener('resize', updateModalForKeyboard);
-            vv.addEventListener('scroll', updateModalForKeyboard);
-        }
-
-        // Scroll focused input into view inside modal
         document.addEventListener('focusin', function(e) {
             var el = e.target;
             if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') {
@@ -354,16 +306,12 @@
                 if (scrollParent) {
                     setTimeout(function() {
                         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    }, 350);
-                    // On Android, also try after keyboard animation completes
-                    setTimeout(function() {
-                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    }, 600);
+                    }, 300);
                 }
             }
         });
     })();
     </script>
-    <div style="text-align:center;padding:8px;font-size:11px;color:#999;">v1.1</div>
+    <div style="text-align:center;padding:8px;font-size:11px;color:#999;">v1.2</div>
 </body>
 </html>

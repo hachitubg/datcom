@@ -413,11 +413,9 @@ body {
    MODALS
    ======================================== */
 /* Lock body scroll when any modal is visible */
+html.modal-open,
 body.modal-open {
     overflow: hidden;
-    position: fixed;
-    width: 100%;
-    height: 100%;
     touch-action: none;
 }
 
@@ -1152,9 +1150,10 @@ textarea {
         letter-spacing: 0.3px;
     }
 
-    /* Modal mobile */
+    /* Modal mobile - position modal-content at bottom of viewport
+       without using position:fixed, so keyboard resize works */
     .modal-content {
-        position: fixed;
+        position: absolute;
         top: auto;
         left: 0;
         right: 0;
@@ -1163,21 +1162,9 @@ textarea {
         width: 100%;
         max-width: 100%;
         max-height: 92vh;
-        max-height: 92dvh; /* dynamic viewport: shrinks when keyboard opens */
+        max-height: 92dvh;
         border-radius: var(--radius-xl) var(--radius-xl) 0 0;
         animation: modalSlideUp 0.3s ease-out;
-        transition: max-height 0.2s ease;
-    }
-
-    /* When keyboard is open on mobile */
-    .modal-content.keyboard-open {
-        /* interactive-widget=resizes-content makes dvh shrink on Android Chrome.
-           For iOS/fallback, use visualViewport CSS vars set by JS. */
-        max-height: 100dvh;
-        max-height: var(--vv-height, 100dvh);
-        bottom: 0;
-        top: auto;
-        transition: none;
     }
 
     .modal-wide { max-width: 100%; }
