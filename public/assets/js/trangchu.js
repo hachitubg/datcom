@@ -12,7 +12,7 @@ const paymentHistoryModal = document.getElementById('paymentHistoryModal');
 const customerNameInput = document.getElementById('customerName');
 
 document.getElementById('btnPayment').addEventListener('click', () => {
-    paymentModal.style.display = 'block';
+    paymentModal.style.display = 'flex';
     loadPaymentList();
 });
 
@@ -169,7 +169,7 @@ function formatDateTime(value) {
 function openPaymentDetail(name) {
     const container = document.getElementById('paymentDetailContent');
     container.innerHTML = '<div style="padding: 16px">Đang tải chi tiết...</div>';
-    paymentDetailModal.style.display = 'block';
+    paymentDetailModal.style.display = 'flex';
 
     AppUtils.fetchJson(`${API_BASE}/api/payments/today/${encodeURIComponent(name)}/details`)
         .then((data) => {
@@ -332,7 +332,7 @@ function loadPaymentHistory() {
     if (period === 'date') {
         if (!selectedDate) {
             historyBox.innerHTML = '<div style="padding:16px">Vui lòng chọn ngày cần lọc.</div>';
-            paymentHistoryModal.style.display = 'block';
+            paymentHistoryModal.style.display = 'flex';
             return;
         }
         params.set('period', 'date');
@@ -340,7 +340,7 @@ function loadPaymentHistory() {
     } else if (period === 'month') {
         if (!selectedMonth) {
             historyBox.innerHTML = '<div style="padding:16px">Vui lòng chọn tháng cần lọc.</div>';
-            paymentHistoryModal.style.display = 'block';
+            paymentHistoryModal.style.display = 'flex';
             return;
         }
         params.set('period', 'month');
@@ -349,7 +349,7 @@ function loadPaymentHistory() {
         const weekRange = getWeekDateRange(selectedWeek);
         if (!weekRange) {
             historyBox.innerHTML = '<div style="padding:16px">Vui lòng chọn tuần cần lọc.</div>';
-            paymentHistoryModal.style.display = 'block';
+            paymentHistoryModal.style.display = 'flex';
             return;
         }
         params.set('period', 'all');
@@ -361,7 +361,7 @@ function loadPaymentHistory() {
 
     const url = `${API_BASE}/api/payments/history?${params.toString()}`;
     historyBox.innerHTML = '<div style="padding: 16px">Đang tải...</div>';
-    paymentHistoryModal.style.display = 'block';
+    paymentHistoryModal.style.display = 'flex';
 
     fetch(url)
         .then(res => res.json())
@@ -413,7 +413,7 @@ document.getElementById('btnOrder').addEventListener('click', () => {
     document.getElementById('orderMessage').innerHTML = '';
     document.getElementById('orderForm').reset();
     loadCustomerNameSuggestions();
-    orderModal.style.display = 'block';
+    orderModal.style.display = 'flex';
 });
 
 document.getElementById('btnList').addEventListener('click', loadOrders);
@@ -585,7 +585,7 @@ function loadOrders() {
                     `;
                 }).join('');
             }
-            listModal.style.display = 'block';
+            listModal.style.display = 'flex';
         })
         .catch(err => console.error('Lỗi:', err));
 }

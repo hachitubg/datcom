@@ -246,7 +246,7 @@
     <script src="/assets/js/common.js"></script>
     <script src="/assets/js/trangchu.js"></script>
 
-    <!-- Modal scroll-lock + keyboard-aware fix -->
+    <!-- Modal scroll-lock -->
     <script>
     (function() {
         // =============================================
@@ -258,13 +258,11 @@
             scrollY = window.scrollY;
             document.body.classList.add('modal-open');
             document.documentElement.classList.add('modal-open');
-            document.body.style.top = -scrollY + 'px';
         }
 
         function unlockBody() {
             document.body.classList.remove('modal-open');
             document.documentElement.classList.remove('modal-open');
-            document.body.style.top = '';
             window.scrollTo(0, scrollY);
         }
 
@@ -272,10 +270,8 @@
             var anyOpen = false;
             var allModals = document.querySelectorAll('.modal');
             for (var i = 0; i < allModals.length; i++) {
-                if (allModals[i].style.display === 'block' || allModals[i].style.display === 'flex') {
-                    anyOpen = true;
-                    break;
-                }
+                var d = allModals[i].style.display;
+                if (d && d !== 'none') { anyOpen = true; break; }
             }
             if (anyOpen) lockBody(); else unlockBody();
         });
@@ -285,64 +281,15 @@
         });
 
         // =============================================
-        // 2. Block touch on modal backdrop
+        // 2. Block touch on modal backdrop only
         // =============================================
         document.addEventListener('touchmove', function(e) {
             if (!document.body.classList.contains('modal-open')) return;
             var scrollable = e.target.closest('.modal-body');
             if (!scrollable) e.preventDefault();
         }, { passive: false });
-
-        // =============================================
-        // 3. Keyboard detection + modal resize
-        //    For in-app browsers (Messenger, Zalo, etc.) and
-        //    iOS Safari where interactive-widget doesn't work.
-        //    ONLY adjusts when keyboard is actually open.
-        // =============================================
-        if (window.visualViewport) {
-            var vv = window.visualViewport;
-            var baseHeight = window.innerHeight;
-
-            function handleViewportResize() {
-                var keyboardOpen = vv.height < baseHeight * 0.7;
-                var openModals = document.querySelectorAll('.modal');
-
-                for (var i = 0; i < openModals.length; i++) {
-                    var m = openModals[i];
-                    if (m.style.display === 'none' || m.style.display === '') continue;
-
-                    if (keyboardOpen) {
-                        // Keyboard is open: resize modal to visible area
-                        m.style.height = vv.height + 'px';
-                        m.style.top = vv.offsetTop + 'px';
-                    } else {
-                        // Keyboard closed: reset to full screen
-                        m.style.height = '';
-                        m.style.top = '';
-                    }
-                }
-            }
-
-            vv.addEventListener('resize', handleViewportResize);
-            vv.addEventListener('scroll', handleViewportResize);
-        }
-
-        // =============================================
-        // 4. Scroll focused input into view inside modal
-        // =============================================
-        document.addEventListener('focusin', function(e) {
-            var el = e.target;
-            if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') {
-                var scrollParent = el.closest('.modal-body');
-                if (scrollParent) {
-                    setTimeout(function() {
-                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    }, 300);
-                }
-            }
-        });
     })();
     </script>
-    <div style="text-align:center;padding:8px;font-size:11px;color:#999;">v1.4</div>
+    <div style="text-align:center;padding:8px;font-size:11px;color:#999;">v2.0</div>
 </body>
 </html>
