@@ -1169,12 +1169,15 @@ textarea {
         transition: max-height 0.2s ease;
     }
 
-    /* When keyboard is open, JS adds this class and sets position/size */
+    /* When keyboard is open on mobile */
     .modal-content.keyboard-open {
-        bottom: auto;
-        top: var(--viewport-top, 0px);
-        max-height: var(--viewport-height, 92vh);
-        transition: none; /* avoid lag when keyboard animates */
+        /* interactive-widget=resizes-content makes dvh shrink on Android Chrome.
+           For iOS/fallback, use visualViewport CSS vars set by JS. */
+        max-height: 100dvh;
+        max-height: var(--vv-height, 100dvh);
+        bottom: 0;
+        top: auto;
+        transition: none;
     }
 
     .modal-wide { max-width: 100%; }

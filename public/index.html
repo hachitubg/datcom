@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
     <title>Cơm Cô Giang</title>
     <link rel="stylesheet" href="/assets/styles/index.css">
 </head>
@@ -305,42 +305,40 @@
         }, { passive: false });
 
         // =============================================
-        // 3. Keyboard-aware modal resize (mobile)
-        //    On iOS/Android, position:fixed bottom:0 references the
-        //    layout viewport which does NOT shrink when the keyboard
-        //    opens. We must manually reposition the modal to fit
-        //    inside the visual viewport.
+        // 3. Keyboard-aware modal positioning (mobile)
+        //    Uses interactive-widget=resizes-content in viewport meta
+        //    to make Android Chrome resize layout viewport automatically.
+        //    For iOS and fallback, we use visualViewport API.
         // =============================================
         if (window.visualViewport) {
             var vv = window.visualViewport;
+            var initialHeight = vv.height;
+            var isKeyboardOpen = false;
 
             function updateModalForKeyboard() {
-                var keyboardOpen = vv.height < window.innerHeight * 0.75;
-                var els = document.querySelectorAll('.modal-content');
+                var keyboardVisible = vv.height < initialHeight * 0.75;
 
-                for (var i = 0; i < els.length; i++) {
-                    if (keyboardOpen) {
-                        // vv.offsetTop = how far the visual viewport top is from layout viewport top
-                        // vv.height   = visible area height (excludes keyboard)
-                        els[i].style.setProperty('--viewport-height', vv.height + 'px');
-                        els[i].style.setProperty('--viewport-top', vv.offsetTop + 'px');
-                        els[i].classList.add('keyboard-open');
-                    } else {
-                        els[i].classList.remove('keyboard-open');
-                        els[i].style.removeProperty('--viewport-height');
-                        els[i].style.removeProperty('--viewport-top');
+                if (keyboardVisible !== isKeyboardOpen) {
+                    isKeyboardOpen = keyboardVisible;
+                    var els = document.querySelectorAll('.modal-content');
+                    for (var i = 0; i < els.length; i++) {
+                        if (keyboardVisible) {
+                            els[i].classList.add('keyboard-open');
+                        } else {
+                            els[i].classList.remove('keyboard-open');
+                        }
                     }
                 }
 
-                if (keyboardOpen) {
-                    var focused = document.activeElement;
-                    if (focused && (focused.tagName === 'INPUT' || focused.tagName === 'TEXTAREA' || focused.tagName === 'SELECT')) {
-                        if (focused.closest('.modal-body')) {
-                            setTimeout(function() {
-                                focused.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                            }, 100);
-                        }
-                    }
+                if (keyboardVisible) {
+                    // Update CSS custom properties for positioning
+                    var h = vv.height;
+                    var top = vv.offsetTop;
+                    document.documentElement.style.setProperty('--vv-height', h + 'px');
+                    document.documentElement.style.setProperty('--vv-top', top + 'px');
+                } else {
+                    document.documentElement.style.removeProperty('--vv-height');
+                    document.documentElement.style.removeProperty('--vv-top');
                 }
             }
 
@@ -356,7 +354,11 @@
                 if (scrollParent) {
                     setTimeout(function() {
                         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    }, 300);
+                    }, 350);
+                    // On Android, also try after keyboard animation completes
+                    setTimeout(function() {
+                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }, 600);
                 }
             }
         });
