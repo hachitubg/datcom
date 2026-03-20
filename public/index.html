@@ -251,8 +251,6 @@
     (function() {
         // =============================================
         // 1. Body scroll lock when modal is open
-        //    NO position:fixed on body — that blocks
-        //    interactive-widget=resizes-content on Android
         // =============================================
         var scrollY = 0;
 
@@ -260,11 +258,13 @@
             scrollY = window.scrollY;
             document.body.classList.add('modal-open');
             document.documentElement.classList.add('modal-open');
+            document.body.style.top = -scrollY + 'px';
         }
 
         function unlockBody() {
             document.body.classList.remove('modal-open');
             document.documentElement.classList.remove('modal-open');
+            document.body.style.top = '';
             window.scrollTo(0, scrollY);
         }
 
@@ -294,21 +294,31 @@
         }, { passive: false });
 
         // =============================================
-        // 3. Fallback for in-app browsers (Messenger, Zalo, etc.)
-        //    that don't support interactive-widget=resizes-content.
-        //    Uses visualViewport API to resize modal when keyboard opens.
+        // 3. Keyboard detection + modal resize
+        //    For in-app browsers (Messenger, Zalo, etc.) and
+        //    iOS Safari where interactive-widget doesn't work.
+        //    ONLY adjusts when keyboard is actually open.
         // =============================================
         if (window.visualViewport) {
             var vv = window.visualViewport;
+            var baseHeight = window.innerHeight;
 
             function handleViewportResize() {
-                // On in-app browsers, the .modal (position:fixed, height:100%)
-                // won't shrink with keyboard. We manually set its height.
-                var allModals = document.querySelectorAll('.modal');
-                for (var i = 0; i < allModals.length; i++) {
-                    if (allModals[i].style.display !== 'none' && allModals[i].style.display !== '') {
-                        allModals[i].style.height = vv.height + 'px';
-                        allModals[i].style.top = vv.offsetTop + 'px';
+                var keyboardOpen = vv.height < baseHeight * 0.7;
+                var openModals = document.querySelectorAll('.modal');
+
+                for (var i = 0; i < openModals.length; i++) {
+                    var m = openModals[i];
+                    if (m.style.display === 'none' || m.style.display === '') continue;
+
+                    if (keyboardOpen) {
+                        // Keyboard is open: resize modal to visible area
+                        m.style.height = vv.height + 'px';
+                        m.style.top = vv.offsetTop + 'px';
+                    } else {
+                        // Keyboard closed: reset to full screen
+                        m.style.height = '';
+                        m.style.top = '';
                     }
                 }
             }
@@ -333,6 +343,6 @@
         });
     })();
     </script>
-    <div style="text-align:center;padding:8px;font-size:11px;color:#999;">v1.3</div>
+    <div style="text-align:center;padding:8px;font-size:11px;color:#999;">v1.4</div>
 </body>
 </html>
