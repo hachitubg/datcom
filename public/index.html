@@ -288,8 +288,55 @@
             var scrollable = e.target.closest('.modal-body');
             if (!scrollable) e.preventDefault();
         }, { passive: false });
+
+        // =============================================
+        // 3. WebView keyboard fallback (Messenger Android, etc.)
+        //    WebViews that don't resize viewport when keyboard opens.
+        //    Only activates when an input inside a modal is focused.
+        // =============================================
+        if (window.visualViewport) {
+            var vv = window.visualViewport;
+            var inputFocusedInModal = false;
+
+            document.addEventListener('focusin', function(e) {
+                var el = e.target;
+                if ((el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') && el.closest('.modal')) {
+                    inputFocusedInModal = true;
+                }
+            });
+
+            document.addEventListener('focusout', function() {
+                inputFocusedInModal = false;
+                // Reset all open modals to full size
+                setTimeout(function() {
+                    if (inputFocusedInModal) return; // another input got focus
+                    var modals = document.querySelectorAll('.modal');
+                    for (var i = 0; i < modals.length; i++) {
+                        modals[i].style.height = '';
+                        modals[i].style.top = '';
+                    }
+                }, 100);
+            });
+
+            vv.addEventListener('resize', function() {
+                if (!inputFocusedInModal) return;
+                var modal = document.activeElement && document.activeElement.closest('.modal');
+                if (!modal) return;
+
+                // Keyboard is open: fit modal to visible area
+                modal.style.height = vv.height + 'px';
+                modal.style.top = vv.offsetTop + 'px';
+
+                // Scroll focused input into view
+                setTimeout(function() {
+                    if (document.activeElement && document.activeElement.closest('.modal-body')) {
+                        document.activeElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                }, 50);
+            });
+        }
     })();
     </script>
-    <div style="text-align:center;padding:8px;font-size:11px;color:#999;">v2.0</div>
+    <div style="text-align:center;padding:8px;font-size:11px;color:#999;">v2.1</div>
 </body>
 </html>
