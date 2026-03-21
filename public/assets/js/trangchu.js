@@ -19,8 +19,27 @@ function checkUserAuth() {
                 document.getElementById('userAuthLoggedOut').style.display = 'flex';
                 document.getElementById('userAuthLoggedIn').style.display = 'none';
             }
+            updatePromoAccess();
         })
-        .catch(() => { currentUser = null; });
+        .catch(() => { currentUser = null; updatePromoAccess(); });
+}
+
+function updatePromoAccess() {
+    const promoGroup = document.getElementById('promoGroup');
+    if (!promoGroup) return;
+    if (currentUser) {
+        promoGroup.classList.remove('promo-group-disabled');
+        const hint = promoGroup.querySelector('.promo-login-hint');
+        if (hint) hint.remove();
+    } else {
+        promoGroup.classList.add('promo-group-disabled');
+        if (!promoGroup.querySelector('.promo-login-hint')) {
+            const hint = document.createElement('div');
+            hint.className = 'promo-login-hint';
+            hint.textContent = 'Đăng nhập để sử dụng mã khuyến mãi';
+            promoGroup.appendChild(hint);
+        }
+    }
 }
 
 const authModal = document.getElementById('authModal');
@@ -30,7 +49,7 @@ document.getElementById('btnShowLogin').addEventListener('click', () => {
     document.getElementById('loginForm').style.display = 'block';
     document.getElementById('registerForm').style.display = 'none';
     document.getElementById('authModalTitle').textContent = 'Đăng nhập';
-    authModal.style.display = 'block';
+    authModal.style.display = 'flex';
 });
 
 document.getElementById('closeAuth').addEventListener('click', () => {
@@ -106,7 +125,17 @@ document.getElementById('btnUserLogout').addEventListener('click', () => {
             currentUser = null;
             document.getElementById('userAuthLoggedOut').style.display = 'flex';
             document.getElementById('userAuthLoggedIn').style.display = 'none';
+            updatePromoAccess();
         });
+});
+
+// Auth help tooltip
+document.getElementById('btnAuthHelp').addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.getElementById('authHelpTooltip').classList.toggle('show');
+});
+document.addEventListener('click', () => {
+    document.getElementById('authHelpTooltip').classList.remove('show');
 });
 
 // Modal controls
@@ -121,6 +150,9 @@ const paymentHistoryModal = document.getElementById('paymentHistoryModal');
 const customerNameInput = document.getElementById('customerName');
 
 document.getElementById('btnPayment').addEventListener('click', () => {
+    if (currentUser && currentUser.name) {
+        document.getElementById('paymentSearch').value = currentUser.name;
+    }
     paymentModal.style.display = 'flex';
     loadPaymentList();
 });
@@ -161,7 +193,12 @@ document.getElementById('paymentSearch').addEventListener('keydown', (e) => {
     }
 });
 
-document.getElementById('btnPaymentHistory').addEventListener('click', loadPaymentHistory);
+document.getElementById('btnPaymentHistory').addEventListener('click', () => {
+    if (currentUser && currentUser.name && !document.getElementById('historyNameSearch').value.trim()) {
+        document.getElementById('historyNameSearch').value = currentUser.name;
+    }
+    loadPaymentHistory();
+});
 document.getElementById('historyPeriodFilter').addEventListener('change', togglePaymentHistoryInputs);
 document.getElementById('btnApplyHistoryFilter').addEventListener('click', loadPaymentHistory);
 document.getElementById('btnResetHistoryFilter').addEventListener('click', resetPaymentHistoryFilter);
@@ -524,6 +561,10 @@ function loadPaymentHistory() {
 document.getElementById('btnCheckPromo').addEventListener('click', () => {
     const code = document.getElementById('promoCode').value.trim();
     const msg = document.getElementById('promoMessage');
+    if (!currentUser) {
+        msg.innerHTML = '<span class="promo-invalid">Vui lòng đăng nhập để sử dụng mã khuyến mãi</span>';
+        return;
+    }
     if (!code) { msg.innerHTML = ''; return; }
 
     fetch(`${API_BASE}/api/promo-codes/validate`, {
@@ -549,6 +590,7 @@ document.getElementById('btnOrder').addEventListener('click', () => {
     document.getElementById('orderForm').reset();
     document.getElementById('promoMessage').innerHTML = '';
     loadCustomerNameSuggestions();
+    updatePromoAccess();
     // Auto-fill name if logged in
     if (currentUser && currentUser.name) {
         document.getElementById('customerName').value = currentUser.name;
@@ -719,13 +761,25 @@ function loadOrders() {
                 ordersList.innerHTML = orders.map((order, index) => {
                     const disc = Number(order.discount_percent || 0);
                     const discBadge = disc > 0 ? `<span class="discount-badge">-${disc}%</span>` : '';
+                    const isOwner = currentUser && order.user_id === currentUser.id;
+                    const createdAt = new Date(order.created_at + 'Z');
+                    const diffMin = (Date.now() - createdAt.getTime()) / 60000;
+                    const canDelete = isOwner && diffMin <= 30;
                     return `
                         <div class="order-item ${disc > 0 ? 'order-item-discounted' : ''}">
                             <div class="order-info">
                                 <h4>${orders.length - index}. ${order.name} đã đặt ${order.quantity} xuất ${discBadge}</h4>
                                 ${order.description ? `<p><strong>Ghi chú:</strong> ${order.description}</p>` : ''}
-                                ${disc > 0 ? `<p class="promo-info-text">Mã KM: ${order.promo_code} — Giảm ${disc}%</p>` : ''}
                                 <p class="order-time">${AppUtils.formatDateTime(order.created_at)}</p>
+                                ${isOwner ? `
+                                    <div class="order-actions">
+                                        <button class="btn-edit-order" data-id="${order.id}" data-quantity="${order.quantity}" data-description="${(order.description || '').replace(/"/g, '&quot;')}">Sửa</button>
+                                        ${canDelete
+                                            ? `<button class="btn-delete-order" data-id="${order.id}">Xóa</button>`
+                                            : `<button class="btn-delete-order" disabled title="Quá 30 phút, nhắn admin để xóa">Xóa</button>`
+                                        }
+                                    </div>
+                                ` : ''}
                             </div>
                         </div>
                     `;
@@ -774,6 +828,55 @@ function showOrderMessage(message, type) {
     const className = type === 'error' ? 'error-message' : 'success-message';
     messageDiv.innerHTML = `<div class="${className}">${message}</div>`;
 }
+
+// Edit/Delete order handlers
+document.getElementById('ordersList').addEventListener('click', (e) => {
+    const deleteBtn = e.target.closest('.btn-delete-order');
+    if (deleteBtn && !deleteBtn.disabled) {
+        const orderId = deleteBtn.dataset.id;
+        if (!confirm('Bạn có chắc muốn xóa đơn này?')) return;
+        fetch(`${API_BASE}/api/orders/${orderId}`, { method: 'DELETE' })
+            .then(res => res.json())
+            .then(data => {
+                if (data.error) {
+                    alert(data.error);
+                } else {
+                    loadOrders();
+                    loadTodayInfo();
+                }
+            })
+            .catch(err => alert('Lỗi: ' + err.message));
+        return;
+    }
+
+    const editBtn = e.target.closest('.btn-edit-order');
+    if (editBtn) {
+        const orderId = editBtn.dataset.id;
+        const oldQty = editBtn.dataset.quantity;
+        const oldDesc = editBtn.dataset.description;
+        const newQty = prompt('Số lượng xuất:', oldQty);
+        if (newQty === null) return;
+        const qty = parseInt(newQty);
+        if (!qty || qty <= 0) { alert('Số lượng không hợp lệ'); return; }
+        const newDesc = prompt('Ghi chú:', oldDesc);
+        if (newDesc === null) return;
+        fetch(`${API_BASE}/api/orders/${orderId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ quantity: qty, description: newDesc })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.error) {
+                alert(data.error);
+            } else {
+                loadOrders();
+                loadTodayInfo();
+            }
+        })
+        .catch(err => alert('Lỗi: ' + err.message));
+    }
+});
 
 // Load on page load
 checkUserAuth();

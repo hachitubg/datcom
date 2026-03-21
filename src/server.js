@@ -286,11 +286,64 @@ app.post('/api/orders', (req, res) => {
     return res.status(400).json({ error: 'Thiếu thông tin bắt buộc' });
   }
 
-  db.addOrder(normalizedCustomerName, quantity, description || '', promoCode, (err, order) => {
+  const user = getUserSessionInfo(req);
+  const userId = user ? user.id : null;
+
+  db.addOrder(normalizedCustomerName, quantity, description || '', promoCode, userId, (err, order) => {
     if (err) {
       return res.status(400).json({ error: err.message });
     }
     res.json(order);
+  });
+});
+
+// Xóa đơn hàng (user tự xóa đơn của mình, trong 30 phút)
+app.delete('/api/orders/:orderId', (req, res) => {
+  const user = getUserSessionInfo(req);
+  if (!user) return res.status(401).json({ error: 'Vui lòng đăng nhập' });
+
+  const { orderId } = req.params;
+  db.getOrderById(orderId, (err, order) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!order) return res.status(404).json({ error: 'Không tìm thấy đơn hàng' });
+    if (order.user_id !== user.id) return res.status(403).json({ error: 'Bạn không có quyền xóa đơn này' });
+
+    const createdAt = new Date(order.created_at + 'Z');
+    const now = new Date();
+    const diffMinutes = (now - createdAt) / 60000;
+    if (diffMinutes > 30) {
+      return res.status(400).json({ error: 'Đã quá 30 phút, vui lòng nhắn tin cho admin để xóa đơn.' });
+    }
+
+    db.deleteOrder(orderId, (delErr) => {
+      if (delErr) return res.status(500).json({ error: delErr.message });
+      res.json({ success: true });
+    });
+  });
+});
+
+// Sửa đơn hàng (user tự sửa đơn của mình)
+app.put('/api/orders/:orderId', (req, res) => {
+  const user = getUserSessionInfo(req);
+  if (!user) return res.status(401).json({ error: 'Vui lòng đăng nhập' });
+
+  const { orderId } = req.params;
+  db.getOrderById(orderId, (err, order) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!order) return res.status(404).json({ error: 'Không tìm thấy đơn hàng' });
+    if (order.user_id !== user.id) return res.status(403).json({ error: 'Bạn không có quyền sửa đơn này' });
+
+    const quantity = Number(req.body.quantity || 0);
+    const description = (req.body.description || '').toString();
+
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      return res.status(400).json({ error: 'Số lượng không hợp lệ' });
+    }
+
+    db.updateOrder(orderId, { name: order.name, quantity, description }, (updErr) => {
+      if (updErr) return res.status(500).json({ error: updErr.message });
+      res.json({ success: true });
+    });
   });
 });
 

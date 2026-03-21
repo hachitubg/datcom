@@ -104,6 +104,7 @@ class Database {
       // Thêm cột discount vào orders (bỏ qua lỗi nếu đã tồn tại)
       this.db.run("ALTER TABLE orders ADD COLUMN discount_percent INTEGER DEFAULT 0", () => {});
       this.db.run("ALTER TABLE orders ADD COLUMN promo_code TEXT", () => {});
+      this.db.run("ALTER TABLE orders ADD COLUMN user_id INTEGER", () => {});
 
       // Tạo record cho hôm nay nếu chưa có
       this.ensureTodayRecord();
@@ -185,7 +186,7 @@ class Database {
     this.db.all(
       `SELECT o.id, o.name, o.quantity, o.description, o.created_at,
               COALESCE(o.discount_percent, 0) AS discount_percent,
-              o.promo_code
+              o.promo_code, o.user_id
        FROM orders o
        JOIN days d ON o.day_id = d.id
        WHERE d.date = ?
@@ -195,11 +196,15 @@ class Database {
     );
   }
 
-  addOrder(name, quantity, description, promoCode, callback) {
+  addOrder(name, quantity, description, promoCode, userId, callback) {
     // Hỗ trợ gọi kiểu cũ: addOrder(name, qty, desc, callback)
     if (typeof promoCode === 'function') {
       callback = promoCode;
       promoCode = null;
+      userId = null;
+    } else if (typeof userId === 'function') {
+      callback = userId;
+      userId = null;
     }
 
     this.getTodayInfo((err, dayInfo) => {
@@ -215,8 +220,8 @@ class Database {
 
       const insertOrder = (discountPercent, codeUsed) => {
         this.db.run(
-          `INSERT INTO orders (day_id, name, quantity, description, discount_percent, promo_code) VALUES (?, ?, ?, ?, ?, ?)`,
-          [dayInfo.id, name, quantity, description, discountPercent || 0, codeUsed || null],
+          `INSERT INTO orders (day_id, name, quantity, description, discount_percent, promo_code, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [dayInfo.id, name, quantity, description, discountPercent || 0, codeUsed || null, userId || null],
           function(insertErr) {
             if (insertErr) {
               callback(insertErr);
@@ -255,8 +260,8 @@ class Database {
             }
             // Insert order rồi mark promo
             this.db.run(
-              `INSERT INTO orders (day_id, name, quantity, description, discount_percent, promo_code) VALUES (?, ?, ?, ?, ?, ?)`,
-              [dayInfo.id, name, quantity, description, promo.discount_percent, code],
+              `INSERT INTO orders (day_id, name, quantity, description, discount_percent, promo_code, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+              [dayInfo.id, name, quantity, description, promo.discount_percent, code, userId || null],
               function(insertErr) {
                 if (insertErr) { callback(insertErr); return; }
                 const orderId = this.lastID;
@@ -452,6 +457,14 @@ class Database {
     this.db.run(
       `UPDATE days SET quantity = ? WHERE date = ?`,
       [quantity, today],
+      callback
+    );
+  }
+
+  getOrderById(orderId, callback) {
+    this.db.get(
+      `SELECT id, name, quantity, description, created_at, user_id FROM orders WHERE id = ?`,
+      [orderId],
       callback
     );
   }

@@ -10,6 +10,19 @@
     <!-- ===== User Auth Bar ===== -->
     <div class="user-auth-bar" id="userAuthBar">
         <div id="userAuthLoggedOut" class="user-auth-state">
+            <div class="auth-help-wrap">
+                <button type="button" class="auth-help-btn" id="btnAuthHelp">?</button>
+                <div class="auth-help-tooltip" id="authHelpTooltip">
+                    <p>Khi đăng ký &amp; đăng nhập, bạn có thể:</p>
+                    <ul>
+                        <li>Sửa hoặc xóa xuất cơm đã đặt</li>
+                        <li>Nhập mã khuyến mãi khi đặt cơm</li>
+                        <li>Xem lịch sử đặt cơm của mình</li>
+                        <li>Thanh toán dễ dàng hơn</li>
+                        <li>Và nhiều tính năng khác...</li>
+                    </ul>
+                </div>
+            </div>
             <button class="user-auth-btn" id="btnShowLogin">Đăng nhập</button>
         </div>
         <div id="userAuthLoggedIn" class="user-auth-state" style="display:none;">
@@ -209,7 +222,7 @@
                         <label for="description">Ghi chú (tùy chọn)</label>
                         <textarea id="description" placeholder="Ví dụ: Ít mặn, thêm rau..."></textarea>
                     </div>
-                    <div class="form-group">
+                    <div class="form-group" id="promoGroup">
                         <label for="promoCode">Mã khuyến mãi (nếu có)</label>
                         <div class="promo-input-wrap">
                             <input type="text" id="promoCode" placeholder="Nhập mã giảm giá..." autocomplete="off">

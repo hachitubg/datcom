@@ -1340,6 +1340,7 @@ tr:hover {
 
     input[type="text"],
     input[type="number"],
+    input[type="password"],
     textarea,
     select {
         padding: 8px;
@@ -1453,7 +1454,7 @@ tr:hover {
 }
 
 .order-row-discounted {
-    border-left: 4px solid #ff8f00;
+    /* border-left: 4px solid #ff8f00; */
 }
 
 .promo-info-text {

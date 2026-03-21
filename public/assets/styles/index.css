@@ -546,6 +546,7 @@ label {
 
 input[type="text"],
 input[type="number"],
+input[type="password"],
 textarea,
 select {
     width: 100%;
@@ -1037,7 +1038,7 @@ textarea {
    ======================================== */
 .user-auth-bar {
     max-width: 800px;
-    margin: 0 auto 12px;
+    margin: 12px auto 12px;
     display: flex;
     justify-content: flex-end;
     padding: 0 8px;
@@ -1076,6 +1077,76 @@ textarea {
     background: transparent;
     color: var(--on-surface-variant);
     font-size: 0.7rem;
+}
+
+/* Auth Help Tooltip */
+.auth-help-wrap {
+    position: relative;
+}
+
+.auth-help-btn {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 1.5px solid var(--outline-variant);
+    background: transparent;
+    color: var(--on-surface-variant);
+    font-size: 0.7rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.auth-help-btn:hover {
+    background: var(--secondary-container);
+}
+
+.auth-help-tooltip {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: calc(100% + 8px);
+    background: var(--surface-container-lowest);
+    border: 1px solid var(--outline-variant);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+    width: 260px;
+    box-shadow: 0 8px 24px var(--shadow-warm-md);
+    z-index: 100;
+    font-size: 0.78rem;
+    color: var(--on-surface);
+    line-height: 1.5;
+}
+
+.auth-help-tooltip.show {
+    display: block;
+}
+
+.auth-help-tooltip p {
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.auth-help-tooltip ul {
+    list-style: none;
+    padding: 0;
+}
+
+.auth-help-tooltip ul li {
+    padding: 2px 0;
+    padding-left: 14px;
+    position: relative;
+}
+
+.auth-help-tooltip ul li::before {
+    content: '•';
+    position: absolute;
+    left: 0;
+    color: var(--primary);
+    font-weight: 700;
 }
 
 /* Auth Modal extra */
@@ -1162,8 +1233,7 @@ textarea {
 }
 
 .order-item-discounted {
-    border-left: 4px solid #ff8f00;
-    background: linear-gradient(90deg, rgba(255,143,0,0.04), transparent);
+    /* background-color: rgba(111, 90, 82, 0.06); */
 }
 
 .promo-info-text {
@@ -1171,6 +1241,60 @@ textarea {
     font-size: 0.7rem;
     font-weight: 500;
     margin-top: 2px;
+}
+
+/* Order action buttons (edit/delete) */
+.order-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+.order-actions button {
+    padding: 4px 12px;
+    border: none;
+    border-radius: var(--radius-md);
+    font-family: 'Be Vietnam Pro', sans-serif;
+    font-size: 0.7rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-edit-order {
+    background: var(--secondary-container);
+    color: var(--on-secondary-container);
+}
+
+.btn-edit-order:hover {
+    background: var(--primary-fixed-dim);
+}
+
+.btn-delete-order {
+    background: rgba(138, 74, 54, 0.08);
+    color: var(--tertiary);
+}
+
+.btn-delete-order:hover:not(:disabled) {
+    background: rgba(138, 74, 54, 0.15);
+}
+
+.btn-delete-order:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* Promo disabled state */
+.promo-group-disabled {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.promo-login-hint {
+    font-size: 0.75rem;
+    color: var(--on-surface-variant);
+    margin-top: 4px;
+    font-style: italic;
 }
 
 /* Error/Success messages for modals */
