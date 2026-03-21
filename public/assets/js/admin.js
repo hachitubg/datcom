@@ -82,7 +82,7 @@ function openCustomerFullHistoryModal(customerName) {
     document.getElementById('customerFullHistoryTitle').textContent = `LỊCH SỬ ĐẶT CƠM — ${customerName}`;
     const content = document.getElementById('customerFullHistoryContent');
     content.innerHTML = '<div class="loading">Đang tải...</div>';
-    document.getElementById('customerFullHistoryModal').style.display = 'block';
+    document.getElementById('customerFullHistoryModal').style.display = 'flex';
 
     fetch(`${API_BASE}/api/admin/customers/${encodeURIComponent(customerName)}/full-history`)
         .then(res => res.json())
@@ -396,7 +396,7 @@ function openOrderEditModal(orderId, encodedName, quantity, encodedDescription, 
     document.getElementById('editOrderName').value = decodeURIComponent(encodedName || '');
     document.getElementById('editOrderQuantity').value = Number(quantity || 1);
     document.getElementById('editOrderDescription').value = decodeURIComponent(encodedDescription || '');
-    document.getElementById('orderEditModal').style.display = 'block';
+    document.getElementById('orderEditModal').style.display = 'flex';
 }
 
 function closeOrderEditModal() {
@@ -686,7 +686,7 @@ function openCustomerOrderModal(encodedName) {
     document.getElementById('customerOrderModalTitle').textContent = `CÔNG NỢ CHƯA THANH TOÁN - ${customerName}`;
     const content = document.getElementById('customerOrderModalContent');
     content.innerHTML = '<div class="loading">Đang tải...</div>';
-    document.getElementById('customerOrderModal').style.display = 'block';
+    document.getElementById('customerOrderModal').style.display = 'flex';
 
     fetch(`${API_BASE}/api/admin/customers/${encodeURIComponent(customerName)}/orders`)
         .then(res => res.json())
@@ -791,7 +791,7 @@ function openConfirmModal({ title, message, onConfirm }) {
                 confirmModalYesBtn.disabled = false;
             });
     };
-    confirmModal.style.display = 'block';
+    confirmModal.style.display = 'flex';
 }
 
 let cashPaymentTargetName = '';
@@ -808,7 +808,7 @@ function markCashPaid(encodedName, remainingAmount) {
     const amtInput = document.getElementById('cashPaymentAmount');
     amtInput.value = remainingAmount || '';
     amtInput.max = remainingAmount || '';
-    document.getElementById('cashPaymentModal').style.display = 'block';
+    document.getElementById('cashPaymentModal').style.display = 'flex';
     amtInput.focus();
     amtInput.select();
 }

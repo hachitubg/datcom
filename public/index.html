@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content">
     <title>Cơm Cô Giang</title>
     <link rel="stylesheet" href="/assets/styles/index.css">
 </head>
@@ -316,7 +316,7 @@
     <script src="/assets/js/common.js"></script>
     <script src="/assets/js/trangchu.js"></script>
 
-    <!-- Modal scroll-lock + keyboard-aware fix -->
+    <!-- Modal scroll-lock -->
     <script>
     (function() {
         // =============================================
@@ -327,110 +327,86 @@
         function lockBody() {
             scrollY = window.scrollY;
             document.body.classList.add('modal-open');
-            document.body.style.top = -scrollY + 'px';
+            document.documentElement.classList.add('modal-open');
         }
 
         function unlockBody() {
             document.body.classList.remove('modal-open');
-            document.body.style.top = '';
+            document.documentElement.classList.remove('modal-open');
             window.scrollTo(0, scrollY);
         }
 
-        // Watch all modals for display changes
         var observer = new MutationObserver(function() {
             var anyOpen = false;
             var allModals = document.querySelectorAll('.modal');
             for (var i = 0; i < allModals.length; i++) {
-                if (allModals[i].style.display === 'block') {
-                    anyOpen = true;
-                    break;
-                }
+                var d = allModals[i].style.display;
+                if (d && d !== 'none') { anyOpen = true; break; }
             }
-            if (anyOpen) {
-                lockBody();
-            } else {
-                unlockBody();
-            }
+            if (anyOpen) lockBody(); else unlockBody();
         });
 
-        // Observe style changes on all modals
         document.querySelectorAll('.modal').forEach(function(modal) {
             observer.observe(modal, { attributes: true, attributeFilter: ['style'] });
         });
 
         // =============================================
-        // 2. Block touch on modal backdrop (overlay)
-        //    but allow scroll inside .modal-body
+        // 2. Block touch on modal backdrop only
         // =============================================
         document.addEventListener('touchmove', function(e) {
-            // If a modal is open, only allow scroll inside .modal-body
             if (!document.body.classList.contains('modal-open')) return;
-
-            var target = e.target;
-            // Walk up to check if inside a scrollable modal-body
-            var scrollable = target.closest('.modal-body');
-            if (!scrollable) {
-                e.preventDefault();
-            }
+            var scrollable = e.target.closest('.modal-body');
+            if (!scrollable) e.preventDefault();
         }, { passive: false });
 
         // =============================================
-        // 3. Keyboard-aware modal resize (mobile)
-        //    On iOS/Android, position:fixed bottom:0 references the
-        //    layout viewport which does NOT shrink when the keyboard
-        //    opens. We must manually reposition the modal to fit
-        //    inside the visual viewport.
+        // 3. WebView keyboard fallback (Messenger Android, etc.)
+        //    WebViews that don't resize viewport when keyboard opens.
+        //    Only activates when an input inside a modal is focused.
         // =============================================
         if (window.visualViewport) {
             var vv = window.visualViewport;
+            var inputFocusedInModal = false;
 
-            function updateModalForKeyboard() {
-                var keyboardOpen = vv.height < window.innerHeight * 0.75;
-                var els = document.querySelectorAll('.modal-content');
-
-                for (var i = 0; i < els.length; i++) {
-                    if (keyboardOpen) {
-                        // vv.offsetTop = how far the visual viewport top is from layout viewport top
-                        // vv.height   = visible area height (excludes keyboard)
-                        els[i].style.setProperty('--viewport-height', vv.height + 'px');
-                        els[i].style.setProperty('--viewport-top', vv.offsetTop + 'px');
-                        els[i].classList.add('keyboard-open');
-                    } else {
-                        els[i].classList.remove('keyboard-open');
-                        els[i].style.removeProperty('--viewport-height');
-                        els[i].style.removeProperty('--viewport-top');
-                    }
+            document.addEventListener('focusin', function(e) {
+                var el = e.target;
+                if ((el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') && el.closest('.modal')) {
+                    inputFocusedInModal = true;
                 }
+            });
 
-                if (keyboardOpen) {
-                    var focused = document.activeElement;
-                    if (focused && (focused.tagName === 'INPUT' || focused.tagName === 'TEXTAREA' || focused.tagName === 'SELECT')) {
-                        if (focused.closest('.modal-body')) {
-                            setTimeout(function() {
-                                focused.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                            }, 100);
-                        }
+            document.addEventListener('focusout', function() {
+                inputFocusedInModal = false;
+                // Reset all open modals to full size
+                setTimeout(function() {
+                    if (inputFocusedInModal) return; // another input got focus
+                    var modals = document.querySelectorAll('.modal');
+                    for (var i = 0; i < modals.length; i++) {
+                        modals[i].style.height = '';
+                        modals[i].style.top = '';
                     }
-                }
-            }
+                }, 100);
+            });
 
-            vv.addEventListener('resize', updateModalForKeyboard);
-            vv.addEventListener('scroll', updateModalForKeyboard);
+            vv.addEventListener('resize', function() {
+                if (!inputFocusedInModal) return;
+                var modal = document.activeElement && document.activeElement.closest('.modal');
+                if (!modal) return;
+
+                // Keyboard is open: fit modal to visible area
+                modal.style.height = vv.height + 'px';
+                modal.style.top = vv.offsetTop + 'px';
+
+                // Scroll focused input into view
+                setTimeout(function() {
+                    if (document.activeElement && document.activeElement.closest('.modal-body')) {
+                        document.activeElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                }, 50);
+            });
         }
-
-        // Scroll focused input into view inside modal
-        document.addEventListener('focusin', function(e) {
-            var el = e.target;
-            if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') {
-                var scrollParent = el.closest('.modal-body');
-                if (scrollParent) {
-                    setTimeout(function() {
-                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    }, 300);
-                }
-            }
-        });
     })();
     </script>
+    <div style="text-align:center;padding:8px;font-size:11px;color:#999;">v2.1</div>
 </body>
 </html>
