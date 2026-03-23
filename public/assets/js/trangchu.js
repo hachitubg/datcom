@@ -225,7 +225,7 @@ async function handlePaymentReturn() {
     }
 
     if (payment === 'cancel') {
-        alert('Bạn đã hủy thanh toán. Nếu cần, vui lòng quét lại mã QR để thanh toán.');
+        showPopup('Bạn đã hủy thanh toán. Nếu cần, vui lòng quét lại mã QR để thanh toán.');
         cleanPaymentQueryParams();
         return;
     }
@@ -239,12 +239,12 @@ async function handlePaymentReturn() {
         const data = await AppUtils.fetchJson(`${API_BASE}/api/payments/verify-return?orderCode=${encodeURIComponent(orderCode)}`);
 
         if (data.updated) {
-            alert('Thanh toán thành công! Hệ thống đã cập nhật trạng thái đơn hàng.');
+            showPopup('Thanh toán thành công! Hệ thống đã cập nhật trạng thái đơn hàng.');
         } else {
-            alert('Đã nhận trạng thái thanh toán, hệ thống đang chờ xác nhận cuối cùng từ PayOS.');
+            showPopup('Đã nhận trạng thái thanh toán, hệ thống đang chờ xác nhận cuối cùng từ PayOS.');
         }
     } catch (error) {
-        alert(`Thanh toán đã hoàn tất nhưng chưa cập nhật tự động: ${error.message}. Vui lòng liên hệ quản trị để kiểm tra.`);
+        showPopup(`Thanh toán đã hoàn tất nhưng chưa cập nhật tự động: ${error.message}. Vui lòng liên hệ quản trị để kiểm tra.`);
     } finally {
         cleanPaymentQueryParams();
         loadTodayInfo();
@@ -334,14 +334,19 @@ function openPaymentDetail(name) {
             `;
 
             rows.forEach((row, index) => {
+                const disc = Number(row.discount_percent || 0);
+                const discBadge = disc > 0 ? `<span class="discount-badge">-${disc}%</span>` : '';
+                const promoInfo = row.promo_code ? `<p class="promo-info-text">Mã KM: ${row.promo_code} (giảm ${disc}%)</p>` : '';
                 html += `
-                    <div class="order-item payment-detail-item">
+                    <div class="order-item payment-detail-item ${disc > 0 ? 'order-item-discounted' : ''}">
                         <div class="order-info">
-                            <h4>Đã đặt ${row.quantity} xuất vào ngày ${formatDateTime(row.createdAt)}</h4>
+                            <h4>Đã đặt ${row.quantity} xuất vào ngày ${formatDateTime(row.createdAt)} ${discBadge}</h4>
                             <h4>Tổng tiền ${AppUtils.formatCurrency(row.amount)}</h4>
+                            ${row.description ? `<p><strong>Ghi chú:</strong> ${row.description}</p>` : ''}
+                            ${promoInfo}
                         </div>
                     </div>
-                `; 
+                `;
             });
 
             html += '</div>';
@@ -358,7 +363,7 @@ document.getElementById('paymentList').addEventListener('click', (event) => {
         const encodedName = detailBtn.getAttribute('data-customer-name') || '';
         const name = decodeURIComponent(encodedName);
         if (!name) {
-            alert('Không xác định được tên người đặt cơm. Vui lòng tải lại danh sách.');
+            showPopup('Không xác định được tên người đặt cơm. Vui lòng tải lại danh sách.');
             return;
         }
         openPaymentDetail(name);
@@ -373,7 +378,7 @@ document.getElementById('paymentList').addEventListener('click', (event) => {
     const encodedName = payBtn.getAttribute('data-customer-name') || '';
     const name = decodeURIComponent(encodedName);
     if (!name) {
-        alert('Không xác định được tên người đặt cơm. Vui lòng tải lại danh sách.');
+        showPopup('Không xác định được tên người đặt cơm. Vui lòng tải lại danh sách.');
         return;
     }
 
@@ -400,7 +405,7 @@ window.openPayQr = function(name) {
         window.location.href = data.payos.checkoutUrl;
     })
     .catch(err => {
-        alert(`Lỗi tạo thanh toán: ${err.message}`);
+        showPopup(`Lỗi tạo thanh toán: ${err.message}`);
     });
 }
 
@@ -764,7 +769,7 @@ function loadOrders() {
                     const isOwner = currentUser && order.user_id === currentUser.id;
                     const createdAt = new Date(order.created_at + 'Z');
                     const diffMin = (Date.now() - createdAt.getTime()) / 60000;
-                    const canDelete = isOwner && diffMin <= 30;
+                    const canModify = isOwner && diffMin <= 30;
                     return `
                         <div class="order-item ${disc > 0 ? 'order-item-discounted' : ''}">
                             <div class="order-info">
@@ -773,10 +778,13 @@ function loadOrders() {
                                 <p class="order-time">${AppUtils.formatDateTime(order.created_at)}</p>
                                 ${isOwner ? `
                                     <div class="order-actions">
-                                        <button class="btn-edit-order" data-id="${order.id}" data-quantity="${order.quantity}" data-description="${(order.description || '').replace(/"/g, '&quot;')}">Sửa</button>
-                                        ${canDelete
+                                        ${canModify
+                                            ? `<button class="btn-edit-order" data-id="${order.id}" data-quantity="${order.quantity}" data-description="${(order.description || '').replace(/"/g, '&quot;')}">Sửa</button>`
+                                            : `<button class="btn-edit-order" disabled title="Quá 30 phút, liên hệ admin để sửa">Sửa</button>`
+                                        }
+                                        ${canModify
                                             ? `<button class="btn-delete-order" data-id="${order.id}">Xóa</button>`
-                                            : `<button class="btn-delete-order" disabled title="Quá 30 phút, nhắn admin để xóa">Xóa</button>`
+                                            : `<button class="btn-delete-order" disabled title="Quá 30 phút, liên hệ admin để xóa">Xóa</button>`
                                         }
                                     </div>
                                 ` : ''}
@@ -830,51 +838,72 @@ function showOrderMessage(message, type) {
 }
 
 // Edit/Delete order handlers
-document.getElementById('ordersList').addEventListener('click', (e) => {
+document.getElementById('ordersList').addEventListener('click', async (e) => {
     const deleteBtn = e.target.closest('.btn-delete-order');
     if (deleteBtn && !deleteBtn.disabled) {
         const orderId = deleteBtn.dataset.id;
-        if (!confirm('Bạn có chắc muốn xóa đơn này?')) return;
-        fetch(`${API_BASE}/api/orders/${orderId}`, { method: 'DELETE' })
-            .then(res => res.json())
-            .then(data => {
-                if (data.error) {
-                    alert(data.error);
-                } else {
-                    loadOrders();
-                    loadTodayInfo();
-                }
-            })
-            .catch(err => alert('Lỗi: ' + err.message));
-        return;
-    }
-
-    const editBtn = e.target.closest('.btn-edit-order');
-    if (editBtn) {
-        const orderId = editBtn.dataset.id;
-        const oldQty = editBtn.dataset.quantity;
-        const oldDesc = editBtn.dataset.description;
-        const newQty = prompt('Số lượng xuất:', oldQty);
-        if (newQty === null) return;
-        const qty = parseInt(newQty);
-        if (!qty || qty <= 0) { alert('Số lượng không hợp lệ'); return; }
-        const newDesc = prompt('Ghi chú:', oldDesc);
-        if (newDesc === null) return;
-        fetch(`${API_BASE}/api/orders/${orderId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ quantity: qty, description: newDesc })
-        })
-        .then(res => res.json())
-        .then(data => {
+        const confirmed = await showPopup('Bạn có chắc muốn xóa đơn này?', { type: 'confirm', confirmLabel: 'Xóa', danger: true });
+        if (!confirmed) return;
+        try {
+            const res = await fetch(`${API_BASE}/api/orders/${orderId}`, { method: 'DELETE' });
+            const data = await res.json();
             if (data.error) {
-                alert(data.error);
+                showPopup(data.error);
             } else {
                 loadOrders();
                 loadTodayInfo();
             }
-        })
-        .catch(err => alert('Lỗi: ' + err.message));
+        } catch (err) {
+            showPopup('Lỗi: ' + err.message);
+        }
+        return;
+    }
+
+    if (deleteBtn && deleteBtn.disabled) {
+        showPopup('Đã quá 30 phút, vui lòng liên hệ admin để xóa đơn này.');
+        return;
+    }
+
+    const editBtn = e.target.closest('.btn-edit-order');
+    if (editBtn && editBtn.disabled) {
+        showPopup('Đã quá 30 phút, vui lòng liên hệ admin để chỉnh sửa đơn này.');
+        return;
+    }
+
+    if (editBtn && !editBtn.disabled) {
+        const orderId = editBtn.dataset.id;
+        const oldQty = editBtn.dataset.quantity;
+        const oldDesc = editBtn.dataset.description;
+
+        const result = await showPopup('Chỉnh sửa đơn hàng', {
+            type: 'prompt',
+            confirmLabel: 'Lưu',
+            fields: [
+                { name: 'quantity', label: 'Số lượng xuất', value: oldQty, inputType: 'number', placeholder: 'Nhập số lượng' },
+                { name: 'description', label: 'Ghi chú', value: oldDesc, type: 'textarea', placeholder: 'Ví dụ: Ít mặn, thêm rau...' }
+            ]
+        });
+
+        if (!result) return;
+        const qty = parseInt(result.quantity);
+        if (!qty || qty <= 0) { showPopup('Số lượng không hợp lệ'); return; }
+
+        try {
+            const res = await fetch(`${API_BASE}/api/orders/${orderId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ quantity: qty, description: result.description })
+            });
+            const data = await res.json();
+            if (data.error) {
+                showPopup(data.error);
+            } else {
+                loadOrders();
+                loadTodayInfo();
+            }
+        } catch (err) {
+            showPopup('Lỗi: ' + err.message);
+        }
     }
 });
 

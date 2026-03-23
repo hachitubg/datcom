@@ -38,10 +38,91 @@
     return date.toLocaleDateString('vi-VN') + ' ' + date.toLocaleTimeString('vi-VN');
   }
 
+  // Custom Popup System (replaces alert/confirm/prompt)
+  function showPopup(message, { type = 'alert', defaultValue = '', fields = null, confirmLabel = 'OK', cancelLabel = 'Hủy', danger = false } = {}) {
+    return new Promise((resolve) => {
+      const overlay = document.createElement('div');
+      overlay.className = 'popup-overlay';
+
+      let inputsHtml = '';
+      if (type === 'prompt') {
+        if (fields) {
+          inputsHtml = fields.map((f, i) => {
+            const tag = f.type === 'textarea'
+              ? `<textarea class="popup-textarea" id="popupField${i}" placeholder="${f.placeholder || ''}">${f.value || ''}</textarea>`
+              : `<input class="popup-input" id="popupField${i}" type="${f.inputType || 'text'}" value="${(f.value || '').replace(/"/g, '&quot;')}" placeholder="${f.placeholder || ''}">`;
+            return `<label class="popup-input-label">${f.label}</label>${tag}`;
+          }).join('');
+        } else {
+          inputsHtml = `<input class="popup-input" id="popupField0" type="text" value="${String(defaultValue).replace(/"/g, '&quot;')}">`;
+        }
+      }
+
+      overlay.innerHTML = `
+        <div class="popup-box">
+          <div class="popup-body">
+            <div class="popup-message">${message}</div>
+            ${inputsHtml}
+          </div>
+          <div class="popup-actions">
+            ${type !== 'alert' ? `<button class="popup-btn popup-btn-cancel" id="popupCancel">${cancelLabel}</button>` : ''}
+            <button class="popup-btn ${danger ? 'popup-btn-danger' : 'popup-btn-ok'}" id="popupOk">${confirmLabel}</button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(overlay);
+
+      const firstInput = overlay.querySelector('.popup-input, .popup-textarea');
+      if (firstInput) {
+        firstInput.focus();
+        if (firstInput.tagName === 'INPUT') firstInput.select();
+      }
+
+      function getResult() {
+        if (type === 'prompt') {
+          if (fields) {
+            const result = {};
+            fields.forEach((f, i) => {
+              result[f.name] = overlay.querySelector(`#popupField${i}`).value;
+            });
+            return result;
+          }
+          return overlay.querySelector('#popupField0').value;
+        }
+        return true;
+      }
+
+      function close(value) {
+        overlay.remove();
+        resolve(value);
+      }
+
+      overlay.querySelector('#popupOk').addEventListener('click', () => close(getResult()));
+      const cancelBtn = overlay.querySelector('#popupCancel');
+      if (cancelBtn) cancelBtn.addEventListener('click', () => close(null));
+
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) close(type === 'alert' ? undefined : null);
+      });
+
+      overlay.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') {
+          e.preventDefault();
+          close(getResult());
+        }
+        if (e.key === 'Escape') close(type === 'alert' ? undefined : null);
+      });
+    });
+  }
+
+  global.showPopup = showPopup;
+
   global.AppUtils = {
     normalizeName,
     fetchJson,
     formatCurrency,
-    formatDateTime
+    formatDateTime,
+    showPopup
   };
 }(window));

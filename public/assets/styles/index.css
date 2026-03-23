@@ -563,6 +563,7 @@ select {
 
 input[type="text"]:focus,
 input[type="number"]:focus,
+input[type="password"]:focus,
 textarea:focus {
     outline: none;
     border-color: var(--primary);
@@ -572,6 +573,7 @@ textarea:focus {
 
 input[type="text"]::placeholder,
 input[type="number"]::placeholder,
+input[type="password"]::placeholder,
 textarea::placeholder {
     color: var(--outline-variant);
 }
@@ -1319,6 +1321,147 @@ textarea {
 }
 
 /* ========================================
+   CUSTOM POPUP (replace alert/confirm/prompt)
+   ======================================== */
+.popup-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    animation: popupFadeIn 0.2s ease-out;
+    padding: 16px;
+}
+
+@keyframes popupFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes popupSlideIn {
+    from { opacity: 0; transform: translateY(20px) scale(0.97); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.popup-box {
+    background: var(--surface-container-lowest);
+    border-radius: var(--radius-xl);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+    width: 100%;
+    max-width: 380px;
+    animation: popupSlideIn 0.25s ease-out;
+    overflow: hidden;
+}
+
+.popup-body {
+    padding: 28px 24px 16px;
+}
+
+.popup-message {
+    font-size: 0.9rem;
+    line-height: 1.6;
+    color: var(--on-surface);
+    word-break: break-word;
+}
+
+.popup-input {
+    width: 100%;
+    margin-top: 14px;
+    padding: 12px 14px;
+    border: 1.5px solid var(--outline-variant);
+    border-radius: var(--radius-md);
+    font-family: 'Be Vietnam Pro', sans-serif;
+    font-size: 0.9rem;
+    color: var(--on-surface);
+    background: var(--surface-container-low);
+    transition: border-color 0.2s;
+    box-sizing: border-box;
+}
+
+.popup-input:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+.popup-textarea {
+    width: 100%;
+    margin-top: 10px;
+    padding: 12px 14px;
+    border: 1.5px solid var(--outline-variant);
+    border-radius: var(--radius-md);
+    font-family: 'Be Vietnam Pro', sans-serif;
+    font-size: 0.9rem;
+    color: var(--on-surface);
+    background: var(--surface-container-low);
+    transition: border-color 0.2s;
+    resize: vertical;
+    min-height: 60px;
+    box-sizing: border-box;
+}
+
+.popup-textarea:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+.popup-input-label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--on-surface-variant);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 14px;
+    margin-bottom: 4px;
+}
+
+.popup-input-label:first-of-type {
+    margin-top: 16px;
+}
+
+.popup-actions {
+    display: flex;
+    gap: 0;
+    border-top: 1px solid var(--outline-variant);
+}
+
+.popup-btn {
+    flex: 1;
+    padding: 14px 16px;
+    border: none;
+    background: transparent;
+    font-family: 'Be Vietnam Pro', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.popup-btn:hover {
+    background: var(--surface-container);
+}
+
+.popup-btn-cancel {
+    color: var(--on-surface-variant);
+}
+
+.popup-btn-ok {
+    color: var(--primary);
+}
+
+.popup-btn-danger {
+    color: var(--tertiary);
+}
+
+.popup-btn + .popup-btn {
+    border-left: 1px solid var(--outline-variant);
+}
+
+/* ========================================
    RESPONSIVE: TABLET (max-width: 768px)
    ======================================== */
 @media (max-width: 768px) {
@@ -1543,6 +1686,7 @@ textarea {
 
     input[type="text"],
     input[type="number"],
+    input[type="password"],
     textarea {
         padding: 12px;
         font-size: 0.95rem;
@@ -1669,6 +1813,7 @@ textarea {
 
     input[type="text"],
     input[type="number"],
+    input[type="password"],
     textarea {
         padding: 10px 12px;
         font-size: 0.9rem;

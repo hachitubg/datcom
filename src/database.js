@@ -707,6 +707,7 @@ class Database {
             // Bước 3: FIFO waterfall - xác định ngày nào còn nợ và còn bao nhiêu
             let pool = Number(payRow?.total_paid || 0);
             const unpaidDates = new Set();
+            const promoDates = new Set();
             let totalRemaining = 0;
 
             for (const day of dayRows) {
@@ -720,19 +721,31 @@ class Database {
               }
             }
 
-            if (unpaidDates.size === 0) {
-              return callback(null, { name: normalizedName, totalQuantity: 0, totalAmount: 0, rows: [] });
-            }
+            // Bước 3b: Tìm ngày có đơn dùng mã khuyến mãi (bao gồm 100%)
+            this.db.all(
+              `SELECT DISTINCT d.date FROM orders o JOIN days d ON d.id = o.day_id
+               WHERE LOWER(o.name) = LOWER(?) AND o.promo_code IS NOT NULL AND o.promo_code != ''`,
+              [normalizedName],
+              (errPromo, promoRows = []) => {
+                if (errPromo) { callback(errPromo); return; }
+                for (const pr of promoRows) {
+                  if (!unpaidDates.has(pr.date)) promoDates.add(pr.date);
+                }
 
-            // Bước 4: lấy từng đơn lẻ thuộc các ngày còn nợ
-            const placeholders = Array.from(unpaidDates).map(() => '?').join(', ');
+                const allDates = new Set([...unpaidDates, ...promoDates]);
+                if (allDates.size === 0) {
+                  return callback(null, { name: normalizedName, totalQuantity: 0, totalAmount: 0, rows: [] });
+                }
+
+            // Bước 4: lấy từng đơn lẻ thuộc các ngày còn nợ + ngày có promo
+            const placeholders = Array.from(allDates).map(() => '?').join(', ');
             this.db.all(
               `SELECT o.id, o.quantity, o.description, o.created_at, d.price, d.date,
                       COALESCE(o.discount_percent, 0) AS discount_percent, o.promo_code
                FROM orders o JOIN days d ON d.id = o.day_id
                WHERE LOWER(o.name) = LOWER(?) AND d.date IN (${placeholders})
                ORDER BY d.date ASC, o.created_at ASC, o.id ASC`,
-              [normalizedName, ...Array.from(unpaidDates)],
+              [normalizedName, ...Array.from(allDates)],
               (err3, orderRows = []) => {
                 if (err3) { callback(err3); return; }
 
@@ -759,6 +772,8 @@ class Database {
                   rows: mappedRows
                 });
               }
+            );
+              } // close promo dates callback
             );
           }
         );

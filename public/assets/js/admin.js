@@ -72,7 +72,7 @@ function onHistoryNameSearchKeyDown(event) {
 
 function searchHistoryByName() {
     const name = (document.getElementById('historyNameSearch')?.value || '').trim();
-    if (!name) { alert('Vui lòng nhập tên cần tìm kiếm.'); return; }
+    if (!name) { showPopup('Vui lòng nhập tên cần tìm kiếm.'); return; }
     document.getElementById('historyNameSuggestions').style.display = 'none';
     openCustomerFullHistoryModal(name);
 }
@@ -411,7 +411,7 @@ function saveOrderEdit() {
     const description = document.getElementById('editOrderDescription').value || '';
 
     if (!name || !Number.isFinite(quantity) || quantity <= 0) {
-        alert('Vui lòng nhập tên và số lượng hợp lệ.');
+        showPopup('Vui lòng nhập tên và số lượng hợp lệ.');
         return;
     }
 
@@ -426,7 +426,7 @@ function saveOrderEdit() {
             closeOrderEditModal();
             loadHistory();
         })
-        .catch(err => alert('Lỗi sửa đơn: ' + err.message));
+        .catch(err => showPopup('Lỗi sửa đơn: ' + err.message));
 }
 
 function deleteOrderFromModal() {
@@ -581,22 +581,22 @@ function loadAdminPayments() {
     container.style.display = 'block';
 
     if (period === 'date' && !date) {
-        alert('Vui lòng chọn ngày cần lọc');
+        showPopup('Vui lòng chọn ngày cần lọc');
         return;
     }
 
     if (period === 'month' && !month) {
-        alert('Vui lòng chọn tháng cần lọc');
+        showPopup('Vui lòng chọn tháng cần lọc');
         return;
     }
 
     if (period === 'range' && (!fromDate || !toDate)) {
-        alert('Vui lòng chọn đủ Từ ngày và Tới ngày');
+        showPopup('Vui lòng chọn đủ Từ ngày và Tới ngày');
         return;
     }
 
     if (period === 'range' && fromDate > toDate) {
-        alert('Khoảng ngày không hợp lệ (Từ ngày phải nhỏ hơn hoặc bằng Tới ngày)');
+        showPopup('Khoảng ngày không hợp lệ (Từ ngày phải nhỏ hơn hoặc bằng Tới ngày)');
         return;
     }
 
@@ -715,16 +715,15 @@ function closeCustomerOrderModal() {
     document.getElementById('customerOrderModal').style.display = 'none';
 }
 
-function markPaidManual(orderCode, encodedName) {
+async function markPaidManual(orderCode, encodedName) {
     const name = decodeURIComponent(encodedName || '');
     if (!orderCode) {
-        alert(`Không tìm thấy mã đơn cần chuyển trạng thái cho ${name}.`);
+        showPopup(`Không tìm thấy mã đơn cần chuyển trạng thái cho ${name}.`);
         return;
     }
 
-    if (!confirm(`Xác nhận chuyển trạng thái đã thanh toán cho ${name} (orderCode: ${orderCode})?`)) {
-        return;
-    }
+    const confirmed = await showPopup(`Xác nhận chuyển trạng thái đã thanh toán cho ${name} (orderCode: ${orderCode})?`, { type: 'confirm', confirmLabel: 'Xác nhận' });
+    if (!confirmed) return;
 
     fetch(`${API_BASE}/api/admin/payments/manual-paid`, {
         method: 'POST',
@@ -737,17 +736,17 @@ function markPaidManual(orderCode, encodedName) {
                 throw new Error(data.error);
             }
 
-            alert('Đã chuyển trạng thái thanh toán thành công.');
+            showPopup('Đã chuyển trạng thái thanh toán thành công.');
             loadDebtSummary();
             loadAdminPayments();
         })
-        .catch(err => alert('Lỗi chuyển trạng thái: ' + err.message));
+        .catch(err => showPopup('Lỗi chuyển trạng thái: ' + err.message));
 }
 
 function deletePaymentRecord(orderCode, encodedName) {
     const name = decodeURIComponent(encodedName || '');
     if (!orderCode) {
-        alert('Không tìm thấy mã đơn cần xóa.');
+        showPopup('Không tìm thấy mã đơn cần xóa.');
         return;
     }
 
@@ -765,7 +764,7 @@ function deletePaymentRecord(orderCode, encodedName) {
                     loadDebtSummary();
                     loadAdminPayments();
                 })
-                .catch(err => alert('Lỗi xóa: ' + err.message));
+                .catch(err => showPopup('Lỗi xóa: ' + err.message));
         }
     });
 }
@@ -799,7 +798,7 @@ let cashPaymentTargetName = '';
 function markCashPaid(encodedName, remainingAmount) {
     const name = decodeURIComponent(encodedName || '');
     if (!name) {
-        alert('Không xác định được người dùng cần cập nhật.');
+        showPopup('Không xác định được người dùng cần cập nhật.');
         return;
     }
     cashPaymentTargetName = name;
@@ -823,7 +822,7 @@ function confirmCashPayment() {
     if (!name) return;
     const amount = Number(document.getElementById('cashPaymentAmount').value || 0);
     if (!amount || amount <= 0) {
-        alert('Vui lòng nhập số tiền hợp lệ.');
+        showPopup('Vui lòng nhập số tiền hợp lệ.');
         return;
     }
     const btn = document.getElementById('cashPaymentConfirmBtn');
@@ -839,7 +838,7 @@ function confirmCashPayment() {
             closeCashPaymentModal();
             loadDebtSummary();
         })
-        .catch(err => alert('Lỗi cập nhật tiền mặt: ' + err.message))
+        .catch(err => showPopup('Lỗi cập nhật tiền mặt: ' + err.message))
         .finally(() => { btn.disabled = false; });
 }
 
@@ -874,16 +873,17 @@ function showMessage(elementId, message, type) {
     element.innerHTML = `<div class="${className}">${message}</div>`;
 }
 
-function deleteOrder(orderId, date, skipConfirm = false) {
-    if (!skipConfirm && !confirm('Bạn có chắc chắn muốn xóa đơn hàng này?')) {
-        return;
+async function deleteOrder(orderId, date, skipConfirm = false) {
+    if (!skipConfirm) {
+        const confirmed = await showPopup('Bạn có chắc chắn muốn xóa đơn hàng này?', { type: 'confirm', confirmLabel: 'Xóa', danger: true });
+        if (!confirmed) return;
     }
 
     fetch(`${API_BASE}/api/admin/orders/${orderId}`, { method: 'DELETE' })
         .then(res => res.json())
         .then(data => {
             if (data.error) {
-                alert('Lỗi: ' + data.error);
+                showPopup('Lỗi: ' + data.error);
             } else {
                 if (date) {
                     selectedOrderDate = date;
@@ -891,7 +891,7 @@ function deleteOrder(orderId, date, skipConfirm = false) {
                 loadHistory();
             }
         })
-        .catch(err => alert('Lỗi: ' + err.message));
+        .catch(err => showPopup('Lỗi: ' + err.message));
 }
 
 window.addEventListener('click', (e) => {
@@ -993,15 +993,16 @@ function createPromoCode() {
     });
 }
 
-function deletePromoCode(id) {
-    if (!confirm('Xóa mã khuyến mãi này?')) return;
+async function deletePromoCode(id) {
+    const confirmed = await showPopup('Xóa mã khuyến mãi này?', { type: 'confirm', confirmLabel: 'Xóa', danger: true });
+    if (!confirmed) return;
     fetch(`${API_BASE}/api/admin/promo-codes/${id}`, { method: 'DELETE' })
         .then(res => res.json())
         .then(data => {
             if (data.error) throw new Error(data.error);
             loadPromoCodes();
         })
-        .catch(err => alert('Lỗi xóa: ' + err.message));
+        .catch(err => showPopup('Lỗi xóa: ' + err.message));
 }
 
 // =============================================
@@ -1073,23 +1074,24 @@ function createUser() {
     });
 }
 
-function deleteUser(id, encodedName) {
+async function deleteUser(id, encodedName) {
     const name = decodeURIComponent(encodedName || '');
-    if (!confirm(`Xóa tài khoản "${name}"?`)) return;
+    const confirmed = await showPopup(`Xóa tài khoản "${name}"?`, { type: 'confirm', confirmLabel: 'Xóa', danger: true });
+    if (!confirmed) return;
     fetch(`${API_BASE}/api/admin/users/${id}`, { method: 'DELETE' })
         .then(res => res.json())
         .then(data => {
             if (data.error) throw new Error(data.error);
             loadUsers();
         })
-        .catch(err => alert('Lỗi xóa: ' + err.message));
+        .catch(err => showPopup('Lỗi xóa: ' + err.message));
 }
 
-function resetUserPassword(id, encodedName) {
+async function resetUserPassword(id, encodedName) {
     const name = decodeURIComponent(encodedName || '');
-    const newPass = prompt(`Nhập mật khẩu mới cho "${name}" (tối thiểu 6 ký tự):`);
+    const newPass = await showPopup(`Nhập mật khẩu mới cho "${name}" (tối thiểu 6 ký tự):`, { type: 'prompt', defaultValue: '' });
     if (!newPass || newPass.length < 6) {
-        if (newPass !== null) alert('Mật khẩu phải có ít nhất 6 ký tự');
+        if (newPass !== null) showPopup('Mật khẩu phải có ít nhất 6 ký tự');
         return;
     }
     fetch(`${API_BASE}/api/admin/users/${id}/password`, {
@@ -1100,9 +1102,9 @@ function resetUserPassword(id, encodedName) {
     .then(res => res.json())
     .then(data => {
         if (data.error) throw new Error(data.error);
-        alert('Đổi mật khẩu thành công!');
+        showPopup('Đổi mật khẩu thành công!');
     })
-    .catch(err => alert('Lỗi: ' + err.message));
+    .catch(err => showPopup('Lỗi: ' + err.message));
 }
 
 // Load today info on page load
