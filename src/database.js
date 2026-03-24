@@ -101,6 +101,16 @@ class Database {
         )
       `);
 
+      // Bảng cấu hình hệ thống (key-value)
+      this.db.run(`
+        CREATE TABLE IF NOT EXISTS app_settings (
+          key TEXT PRIMARY KEY NOT NULL,
+          value TEXT NOT NULL,
+          description TEXT,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
       // Thêm cột discount vào orders (bỏ qua lỗi nếu đã tồn tại)
       this.db.run("ALTER TABLE orders ADD COLUMN discount_percent INTEGER DEFAULT 0", () => {});
       this.db.run("ALTER TABLE orders ADD COLUMN promo_code TEXT", () => {});
@@ -109,6 +119,7 @@ class Database {
       // Tạo record cho hôm nay nếu chưa có
       this.ensureTodayRecord();
       this.seedAdminUser();
+      this.seedDefaultSettings();
     });
   }
 
@@ -388,7 +399,8 @@ class Database {
 
     // Lấy tất cả ngày đặt, sắp xếp cũ nhất trước để áp dụng FIFO
     this.db.all(
-      `SELECT d.date, SUM(o.quantity) AS quantity, SUM(o.quantity * d.price * (100 - COALESCE(o.discount_percent, 0)) / 100) AS day_amount
+      `SELECT d.date, SUM(o.quantity) AS quantity, SUM(o.quantity * d.price * (100 - COALESCE(o.discount_percent, 0)) / 100) AS day_amount,
+              MAX(CASE WHEN o.promo_code IS NOT NULL AND o.promo_code != '' THEN 1 ELSE 0 END) AS has_promo
        FROM orders o JOIN days d ON d.id = o.day_id
        WHERE LOWER(o.name) = LOWER(?)
        GROUP BY d.date ORDER BY d.date ASC`,
@@ -415,7 +427,8 @@ class Database {
               pool -= applied;
               const dayRemaining = dayAmount - applied;
 
-              if (dayRemaining > 0) {
+              // Hiển thị cả đơn còn nợ lẫn đơn dùng mã KM 100% (amount=0)
+              if (dayRemaining > 0 || (dayAmount === 0 && Number(row.has_promo))) {
                 unpaidRows.push({
                   date: row.date,
                   quantity: Number(row.quantity || 0),
@@ -426,9 +439,49 @@ class Database {
               }
             }
 
-            // Hiển thị ngày gần nhất lên trên
-            unpaidRows.reverse();
-            callback(null, unpaidRows);
+            // Lấy thêm chi tiết promo cho các ngày hiển thị
+            const displayDates = unpaidRows.map(r => r.date);
+            if (displayDates.length === 0) {
+              callback(null, []);
+              return;
+            }
+            const placeholders = displayDates.map(() => '?').join(', ');
+            this.db.all(
+              `SELECT d.date, o.quantity, o.promo_code, COALESCE(o.discount_percent, 0) AS discount_percent, d.price
+               FROM orders o JOIN days d ON d.id = o.day_id
+               WHERE LOWER(o.name) = LOWER(?) AND d.date IN (${placeholders})
+               ORDER BY d.date ASC, o.created_at ASC`,
+              [normalizedName, ...displayDates],
+              (err3, detailRows = []) => {
+                if (err3) { callback(err3); return; }
+
+                // Nhóm chi tiết promo theo ngày
+                const promoByDate = {};
+                for (const d of detailRows) {
+                  if (d.promo_code) {
+                    if (!promoByDate[d.date]) promoByDate[d.date] = [];
+                    const disc = Number(d.discount_percent || 0);
+                    const unitPrice = Number(d.price || 0);
+                    const finalPrice = Math.round(unitPrice * (100 - disc) / 100);
+                    promoByDate[d.date].push({
+                      promo_code: d.promo_code,
+                      discount_percent: disc,
+                      quantity: Number(d.quantity || 0),
+                      unitPrice,
+                      finalPrice
+                    });
+                  }
+                }
+
+                for (const row of unpaidRows) {
+                  row.promos = promoByDate[row.date] || [];
+                }
+
+                // Hiển thị ngày gần nhất lên trên
+                unpaidRows.reverse();
+                callback(null, unpaidRows);
+              }
+            );
           }
         );
       }
@@ -1117,35 +1170,63 @@ class Database {
           (err2, payRow) => {
             if (err2) { callback(err2); return; }
 
-            let pool = Number(payRow?.total_paid || 0);
-            const result = orderRows.map((row) => {
-              const dayAmount = Number(row.day_amount || 0);
-              const applied = Math.min(pool, dayAmount);
-              pool -= applied;
-              const remaining = dayAmount - applied;
-              let paymentStatus;
-              if (remaining <= 0) paymentStatus = 'PAID';
-              else if (applied > 0) paymentStatus = 'PARTIAL';
-              else paymentStatus = 'UNPAID';
-              return {
-                date: row.date,
-                quantity: Number(row.quantity || 0),
-                unitPrice: Number(row.price || 0),
-                totalAmount: dayAmount,
-                paidAmount: applied,
-                remainingAmount: remaining,
-                paymentStatus
-              };
-            });
+            // Lấy chi tiết promo theo ngày
+            this.db.all(
+              `SELECT d.date, o.quantity, o.promo_code, COALESCE(o.discount_percent, 0) AS discount_percent, d.price
+               FROM orders o JOIN days d ON d.id = o.day_id
+               WHERE LOWER(o.name) = LOWER(?) AND o.promo_code IS NOT NULL AND o.promo_code != ''
+               ORDER BY d.date ASC, o.created_at ASC`,
+              [normalizedName],
+              (err3, promoDetailRows = []) => {
+                if (err3) { callback(err3); return; }
 
-            result.reverse(); // newest first
+                const promoByDate = {};
+                for (const d of promoDetailRows) {
+                  if (!promoByDate[d.date]) promoByDate[d.date] = [];
+                  const disc = Number(d.discount_percent || 0);
+                  const unitPrice = Number(d.price || 0);
+                  const finalPrice = Math.round(unitPrice * (100 - disc) / 100);
+                  promoByDate[d.date].push({
+                    promo_code: d.promo_code,
+                    discount_percent: disc,
+                    quantity: Number(d.quantity || 0),
+                    unitPrice,
+                    finalPrice
+                  });
+                }
 
-            const totalOrders = result.reduce((sum, r) => sum + r.quantity, 0);
-            const totalAmount = result.reduce((sum, r) => sum + r.totalAmount, 0);
-            const totalPaidAmount = result.reduce((sum, r) => sum + r.paidAmount, 0);
-            const totalRemaining = result.reduce((sum, r) => sum + r.remainingAmount, 0);
+                let pool = Number(payRow?.total_paid || 0);
+                const result = orderRows.map((row) => {
+                  const dayAmount = Number(row.day_amount || 0);
+                  const applied = Math.min(pool, dayAmount);
+                  pool -= applied;
+                  const remaining = dayAmount - applied;
+                  let paymentStatus;
+                  if (remaining <= 0) paymentStatus = 'PAID';
+                  else if (applied > 0) paymentStatus = 'PARTIAL';
+                  else paymentStatus = 'UNPAID';
+                  return {
+                    date: row.date,
+                    quantity: Number(row.quantity || 0),
+                    unitPrice: Number(row.price || 0),
+                    totalAmount: dayAmount,
+                    paidAmount: applied,
+                    remainingAmount: remaining,
+                    paymentStatus,
+                    promos: promoByDate[row.date] || []
+                  };
+                });
 
-            callback(null, { rows: result, totalOrders, totalAmount, totalPaidAmount, totalRemaining });
+                result.reverse(); // newest first
+
+                const totalOrders = result.reduce((sum, r) => sum + r.quantity, 0);
+                const totalAmount = result.reduce((sum, r) => sum + r.totalAmount, 0);
+                const totalPaidAmount = result.reduce((sum, r) => sum + r.paidAmount, 0);
+                const totalRemaining = result.reduce((sum, r) => sum + r.remainingAmount, 0);
+
+                callback(null, { rows: result, totalOrders, totalAmount, totalPaidAmount, totalRemaining });
+              }
+            );
           }
         );
       }
@@ -1359,6 +1440,140 @@ class Database {
       `UPDATE users SET password_hash = ?, salt = ? WHERE id = ?`,
       [passwordHash, salt, id],
       callback
+    );
+  }
+  // =============================================
+  // App Settings
+  // =============================================
+  seedDefaultSettings() {
+    const defaults = [
+      { key: 'debt_limit_enabled', value: '0', description: 'Bật/tắt giới hạn nợ khi đặt cơm' },
+      { key: 'debt_limit_servings', value: '2', description: 'Số xuất nợ tối đa trước khi bị chặn' },
+      { key: 'debt_limit_message', value: 'Bạn thông cảm nhé, mình cần xoay vốn nên vui lòng thanh toán để tiếp tục đặt cơm.', description: 'Thông báo khi vượt giới hạn nợ' },
+      { key: 'consecutive_promo_enabled', value: '0', description: 'Bật/tắt tặng mã KM khi đặt liên tục' },
+      { key: 'consecutive_promo_days', value: '5', description: 'Số ngày đặt liên tục để được tặng mã' },
+      { key: 'consecutive_promo_discount', value: '50', description: 'Phần trăm giảm giá của mã tặng' }
+    ];
+    const stmt = this.db.prepare(`INSERT OR IGNORE INTO app_settings (key, value, description) VALUES (?, ?, ?)`);
+    for (const d of defaults) {
+      stmt.run([d.key, d.value, d.description]);
+    }
+    stmt.finalize();
+  }
+
+  getAllSettings(callback) {
+    this.db.all(`SELECT key, value, description, updated_at FROM app_settings ORDER BY key`, callback);
+  }
+
+  getSetting(key, callback) {
+    this.db.get(`SELECT value FROM app_settings WHERE key = ?`, [key], (err, row) => {
+      callback(err, row ? row.value : null);
+    });
+  }
+
+  getSettings(keys, callback) {
+    const placeholders = keys.map(() => '?').join(', ');
+    this.db.all(`SELECT key, value FROM app_settings WHERE key IN (${placeholders})`, keys, (err, rows = []) => {
+      if (err) { callback(err); return; }
+      const map = {};
+      for (const r of rows) map[r.key] = r.value;
+      callback(null, map);
+    });
+  }
+
+  updateSetting(key, value, callback) {
+    this.db.run(
+      `UPDATE app_settings SET value = ?, updated_at = CURRENT_TIMESTAMP WHERE key = ?`,
+      [String(value), key],
+      function(err) {
+        if (err) { callback(err); return; }
+        if (this.changes === 0) {
+          callback(new Error('Không tìm thấy cài đặt: ' + key));
+          return;
+        }
+        callback(null);
+      }
+    );
+  }
+
+  bulkUpdateSettings(settings, callback) {
+    const stmt = this.db.prepare(`UPDATE app_settings SET value = ?, updated_at = CURRENT_TIMESTAMP WHERE key = ?`);
+    for (const [key, value] of Object.entries(settings)) {
+      stmt.run([String(value), key]);
+    }
+    stmt.finalize(callback);
+  }
+
+  // Kiểm tra nợ xuất cơm của khách hàng (trả về số xuất chưa thanh toán)
+  getCustomerUnpaidServings(name, callback) {
+    const normalizedName = String(name || '').trim();
+    this.db.get(
+      `SELECT COALESCE(SUM(o.quantity), 0) AS total_servings,
+              COALESCE(SUM(o.quantity * d.price * (100 - COALESCE(o.discount_percent, 0)) / 100), 0) AS total_amount
+       FROM orders o JOIN days d ON d.id = o.day_id
+       WHERE LOWER(o.name) = LOWER(?)`,
+      [normalizedName],
+      (err, orderRow) => {
+        if (err) { callback(err); return; }
+        this.db.get(
+          `SELECT COALESCE(SUM(amount), 0) AS total_paid
+           FROM payment_transactions
+           WHERE status = 'PAID' AND LOWER(customer_name) = LOWER(?)`,
+          [normalizedName],
+          (err2, payRow) => {
+            if (err2) { callback(err2); return; }
+            const totalAmount = Number(orderRow?.total_amount || 0);
+            const totalPaid = Number(payRow?.total_paid || 0);
+            const remaining = Math.max(0, totalAmount - totalPaid);
+            // Tính số xuất nợ = remaining / giá trung bình 1 xuất
+            const totalServings = Number(orderRow?.total_servings || 0);
+            const avgPrice = totalServings > 0 ? totalAmount / totalServings : 0;
+            const unpaidServings = avgPrice > 0 ? Math.ceil(remaining / avgPrice) : 0;
+            callback(null, { unpaidServings, remainingAmount: remaining });
+          }
+        );
+      }
+    );
+  }
+
+  // Đếm số ngày đặt liên tục gần nhất của khách hàng
+  getConsecutiveOrderDays(name, callback) {
+    const normalizedName = String(name || '').trim();
+    this.db.all(
+      `SELECT DISTINCT d.date FROM orders o JOIN days d ON d.id = o.day_id
+       WHERE LOWER(o.name) = LOWER(?)
+       ORDER BY d.date DESC`,
+      [normalizedName],
+      (err, rows = []) => {
+        if (err) { callback(err); return; }
+        if (!rows.length) { callback(null, 0); return; }
+
+        let consecutive = 1;
+        for (let i = 1; i < rows.length; i++) {
+          const prev = new Date(rows[i - 1].date + 'T00:00:00Z');
+          const curr = new Date(rows[i].date + 'T00:00:00Z');
+          const diffDays = (prev - curr) / 86400000;
+          if (diffDays === 1) {
+            consecutive++;
+          } else {
+            break;
+          }
+        }
+        callback(null, consecutive);
+      }
+    );
+  }
+
+  // Tạo mã KM tự động cho khách (consecutive promo)
+  createAutoPromoCode(name, discountPercent, callback) {
+    const code = 'AUTO' + Date.now().toString(36).toUpperCase();
+    this.db.run(
+      `INSERT INTO promo_codes (code, discount_percent) VALUES (?, ?)`,
+      [code, discountPercent],
+      function(err) {
+        if (err) { callback(err); return; }
+        callback(null, { id: this.lastID, code, discountPercent });
+      }
     );
   }
 }

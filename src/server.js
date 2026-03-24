@@ -289,11 +289,74 @@ app.post('/api/orders', (req, res) => {
   const user = getUserSessionInfo(req);
   const userId = user ? user.id : null;
 
-  db.addOrder(normalizedCustomerName, quantity, description || '', promoCode, userId, (err, order) => {
-    if (err) {
-      return res.status(400).json({ error: err.message });
+  // Kiểm tra giới hạn nợ trước khi cho đặt
+  db.getSettings(['debt_limit_enabled', 'debt_limit_servings', 'debt_limit_message'], (settingsErr, settings) => {
+    if (settingsErr) {
+      return res.status(500).json({ error: settingsErr.message });
     }
-    res.json(order);
+
+    const debtEnabled = settings.debt_limit_enabled === '1';
+    const debtLimit = Number(settings.debt_limit_servings || 2);
+    const debtMessage = settings.debt_limit_message || 'Vui lòng thanh toán nợ cũ trước khi đặt cơm.';
+
+    const proceedWithOrder = () => {
+      db.addOrder(normalizedCustomerName, quantity, description || '', promoCode, userId, (err, order) => {
+        if (err) {
+          return res.status(400).json({ error: err.message });
+        }
+
+        // Sau khi đặt thành công, kiểm tra tặng mã KM liên tục
+        db.getSettings(['consecutive_promo_enabled', 'consecutive_promo_days', 'consecutive_promo_discount'], (cpErr, cpSettings) => {
+          if (cpErr || cpSettings.consecutive_promo_enabled !== '1') {
+            return res.json(order);
+          }
+
+          const requiredDays = Number(cpSettings.consecutive_promo_days || 5);
+          const discount = Number(cpSettings.consecutive_promo_discount || 50);
+
+          db.getConsecutiveOrderDays(normalizedCustomerName, (daysErr, consecutiveDays) => {
+            if (daysErr || consecutiveDays < requiredDays) {
+              return res.json(order);
+            }
+
+            // Chỉ tặng nếu đúng mốc (chia hết cho requiredDays)
+            if (consecutiveDays % requiredDays !== 0) {
+              return res.json(order);
+            }
+
+            db.createAutoPromoCode(normalizedCustomerName, discount, (promoErr, promoInfo) => {
+              if (promoErr) {
+                return res.json(order);
+              }
+              res.json({
+                ...order,
+                bonus_promo: {
+                  code: promoInfo.code,
+                  discount: promoInfo.discountPercent,
+                  message: `Chúc mừng! Bạn đã đặt cơm ${consecutiveDays} ngày liên tục và được tặng mã giảm ${discount}%: ${promoInfo.code}`
+                }
+              });
+            });
+          });
+        });
+      });
+    };
+
+    if (!debtEnabled) {
+      return proceedWithOrder();
+    }
+
+    db.getCustomerUnpaidServings(normalizedCustomerName, (debtErr, debtInfo) => {
+      if (debtErr) {
+        return res.status(500).json({ error: debtErr.message });
+      }
+
+      if (debtInfo.unpaidServings >= debtLimit) {
+        return res.status(400).json({ error: debtMessage });
+      }
+
+      proceedWithOrder();
+    });
   });
 });
 
@@ -863,6 +926,29 @@ app.put('/api/admin/users/:id/password', (req, res) => {
   }
   const { hash, salt } = hashPassword(password);
   db.updateUserPassword(id, hash, salt, (err) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ success: true });
+  });
+});
+
+// =============================================
+// Admin Settings
+// =============================================
+app.get('/api/admin/settings', (req, res) => {
+  db.getAllSettings((err, settings) => {
+    if (err) return res.status(500).json({ error: err.message });
+    const map = {};
+    for (const s of settings) map[s.key] = s.value;
+    res.json(map);
+  });
+});
+
+app.put('/api/admin/settings', (req, res) => {
+  const settings = req.body;
+  if (!settings || typeof settings !== 'object') {
+    return res.status(400).json({ error: 'Dữ liệu không hợp lệ' });
+  }
+  db.bulkUpdateSettings(settings, (err) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ success: true });
   });

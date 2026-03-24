@@ -825,6 +825,10 @@ document.getElementById('orderForm').addEventListener('submit', (e) => {
             setTimeout(() => {
                 orderModal.style.display = 'none';
                 loadTodayInfo();
+                // Hiển thị thông báo tặng mã KM nếu có
+                if (data.bonus_promo) {
+                    showPopup(data.bonus_promo.message);
+                }
             }, 1500);
         }
     })

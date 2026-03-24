@@ -34,6 +34,10 @@
                 <span class="tab-icon">👥</span>
                 <span class="tab-label">NGƯỜI DÙNG</span>
             </button>
+            <button class="tab-btn" onclick="switchTab('settings', event)">
+                <span class="tab-icon">⚙️</span>
+                <span class="tab-label">CÀI ĐẶT</span>
+            </button>
         </div>
 
         <!-- Tab Quản lý hôm nay -->
@@ -281,6 +285,72 @@
 
                 <h3 class="section-subtitle" style="margin-top:20px;">DANH SÁCH NGƯỜI DÙNG</h3>
                 <div id="userList" class="loading">Đang tải...</div>
+            </div>
+        </div>
+        <!-- =============================================
+             Tab Cài đặt hệ thống
+             ============================================= -->
+        <div id="settings" class="tab-content">
+            <div class="section">
+                <div id="settingsMessage" style="margin-bottom:12px;"></div>
+
+                <!-- Giới hạn nợ -->
+                <div class="settings-card">
+                    <div class="settings-card-header">
+                        <div>
+                            <h3 class="settings-card-title">Giới hạn nợ khi đặt cơm</h3>
+                            <p class="settings-card-desc">Chặn đặt cơm khi khách hàng có dư nợ vượt số xuất cho phép</p>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="settingDebtLimitEnabled">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="settings-card-body" id="debtLimitFields">
+                        <div class="filter-row">
+                            <div class="filter-field filter-field--grow">
+                                <label for="settingDebtLimitServings">Số xuất nợ tối đa</label>
+                                <input type="number" id="settingDebtLimitServings" min="1" placeholder="VD: 2">
+                            </div>
+                        </div>
+                        <div class="filter-row">
+                            <div class="filter-field filter-field--grow">
+                                <label for="settingDebtLimitMessage">Thông báo khi bị chặn</label>
+                                <textarea id="settingDebtLimitMessage" rows="2" placeholder="Nội dung thông báo..."></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tặng mã KM đặt liên tục -->
+                <div class="settings-card">
+                    <div class="settings-card-header">
+                        <div>
+                            <h3 class="settings-card-title">Tặng mã khuyến mãi khi đặt liên tục</h3>
+                            <p class="settings-card-desc">Tự động tạo mã giảm giá khi khách đặt cơm liên tục N ngày</p>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="settingConsecutivePromoEnabled">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="settings-card-body" id="consecutivePromoFields">
+                        <div class="filter-row">
+                            <div class="filter-field filter-field--grow">
+                                <label for="settingConsecutivePromoDays">Số ngày đặt liên tục</label>
+                                <input type="number" id="settingConsecutivePromoDays" min="2" placeholder="VD: 5">
+                            </div>
+                            <div class="filter-field filter-field--grow">
+                                <label for="settingConsecutivePromoDiscount">Giảm giá (%)</label>
+                                <input type="number" id="settingConsecutivePromoDiscount" min="1" max="100" placeholder="VD: 50">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="button-group" style="margin-top:20px;">
+                    <button class="btn-primary" onclick="saveSettings()">LƯU CÀI ĐẶT</button>
+                </div>
             </div>
         </div>
     </div>

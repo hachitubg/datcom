@@ -123,6 +123,12 @@ function openCustomerFullHistoryModal(customerName) {
             const rowsHtml = rows.map(row => {
                 const { cls, label } = statusBadgeMap[row.paymentStatus] || statusBadgeMap['UNPAID'];
                 const rowClass = row.paymentStatus === 'PAID' ? 'row-paid' : row.paymentStatus === 'PARTIAL' ? 'row-partial' : 'row-unpaid';
+                let promoHtml = '';
+                if (row.promos && row.promos.length > 0) {
+                    promoHtml = row.promos.map(p =>
+                        `<div class="promo-detail-note">🎫 Mã <strong>${p.promo_code}</strong>: giảm ${p.discount_percent}% · ${p.quantity} xuất × ${AppUtils.formatCurrency(p.finalPrice)}/xuất</div>`
+                    ).join('');
+                }
                 return `
                     <div class="customer-history-order-row ${rowClass}">
                         <div>
@@ -130,6 +136,7 @@ function openCustomerFullHistoryModal(customerName) {
                             <div class="admin-payment-meta">${row.quantity} xuất × ${AppUtils.formatCurrency(row.unitPrice)}</div>
                             ${row.paidAmount > 0 ? `<div class="admin-payment-meta" style="color:#2d7a2d;">Đã trả: ${AppUtils.formatCurrency(row.paidAmount)}</div>` : ''}
                             ${row.remainingAmount > 0 ? `<div class="admin-payment-meta" style="color:#c46060;">Còn nợ: ${AppUtils.formatCurrency(row.remainingAmount)}</div>` : ''}
+                            ${promoHtml}
                         </div>
                         <div style="text-align:right; flex-shrink:0;">
                             <span class="payment-status-badge ${cls}">${label}</span>
@@ -161,8 +168,9 @@ function switchTab(tab, event) {
 
     // Show selected tab
     document.getElementById(tab).classList.add('active');
-    if (event && event.target) {
-        event.target.classList.add('active');
+    const clickedBtn = event && event.target ? event.target.closest('.tab-btn') : null;
+    if (clickedBtn) {
+        clickedBtn.classList.add('active');
     } else {
         const activeBtn = Array.from(document.querySelectorAll('.tab-btn')).find(btn => (btn.getAttribute('onclick') || '').includes(`'${tab}'`));
         if (activeBtn) activeBtn.classList.add('active');
@@ -178,6 +186,8 @@ function switchTab(tab, event) {
         loadPromoCodes();
     } else if (tab === 'users') {
         loadUsers();
+    } else if (tab === 'settings') {
+        loadSettings();
     }
 }
 
@@ -697,14 +707,22 @@ function openCustomerOrderModal(encodedName) {
                 return;
             }
 
-            content.innerHTML = rows.map((row) => `
+            content.innerHTML = rows.map((row) => {
+                let promoHtml = '';
+                if (row.promos && row.promos.length > 0) {
+                    promoHtml = row.promos.map(p =>
+                        `<div class="promo-detail-note">🎫 Mã <strong>${p.promo_code}</strong>: giảm ${p.discount_percent}% · ${p.quantity} xuất × ${AppUtils.formatCurrency(p.finalPrice)}/xuất</div>`
+                    ).join('');
+                }
+                return `
                 <div class="day-modal-order-item">
                     <div><strong>Ngày:</strong> ${row.date}</div>
                     <div><strong>Số xuất:</strong> ${row.quantity}</div>
                     <div><strong>Còn nợ:</strong> ${AppUtils.formatCurrency(row.remainingAmount || 0)}</div>
                     ${row.paidAmount > 0 ? `<div><strong>Đã trả:</strong> ${AppUtils.formatCurrency(row.paidAmount)}</div>` : ''}
+                    ${promoHtml}
                 </div>
-            `).join('');
+            `}).join('');
         })
         .catch(err => {
             content.innerHTML = `<div style="padding: 12px; color:red;">Lỗi tải chi tiết: ${err.message}</div>`;
@@ -1105,6 +1123,62 @@ async function resetUserPassword(id, encodedName) {
         showPopup('Đổi mật khẩu thành công!');
     })
     .catch(err => showPopup('Lỗi: ' + err.message));
+}
+
+// =============================================
+// Settings Management
+// =============================================
+function loadSettings() {
+    fetch(`${API_BASE}/api/admin/settings`)
+        .then(res => res.json())
+        .then(settings => {
+            document.getElementById('settingDebtLimitEnabled').checked = settings.debt_limit_enabled === '1';
+            document.getElementById('settingDebtLimitServings').value = settings.debt_limit_servings || '2';
+            document.getElementById('settingDebtLimitMessage').value = settings.debt_limit_message || '';
+            document.getElementById('settingConsecutivePromoEnabled').checked = settings.consecutive_promo_enabled === '1';
+            document.getElementById('settingConsecutivePromoDays').value = settings.consecutive_promo_days || '5';
+            document.getElementById('settingConsecutivePromoDiscount').value = settings.consecutive_promo_discount || '50';
+            toggleSettingsFields();
+        })
+        .catch(err => {
+            document.getElementById('settingsMessage').innerHTML = `<div class="error-message">Lỗi tải cài đặt: ${err.message}</div>`;
+        });
+}
+
+function toggleSettingsFields() {
+    const debtEnabled = document.getElementById('settingDebtLimitEnabled').checked;
+    document.getElementById('debtLimitFields').style.display = debtEnabled ? 'block' : 'none';
+    const promoEnabled = document.getElementById('settingConsecutivePromoEnabled').checked;
+    document.getElementById('consecutivePromoFields').style.display = promoEnabled ? 'block' : 'none';
+}
+
+document.getElementById('settingDebtLimitEnabled').addEventListener('change', toggleSettingsFields);
+document.getElementById('settingConsecutivePromoEnabled').addEventListener('change', toggleSettingsFields);
+
+function saveSettings() {
+    const settings = {
+        debt_limit_enabled: document.getElementById('settingDebtLimitEnabled').checked ? '1' : '0',
+        debt_limit_servings: document.getElementById('settingDebtLimitServings').value || '2',
+        debt_limit_message: document.getElementById('settingDebtLimitMessage').value || '',
+        consecutive_promo_enabled: document.getElementById('settingConsecutivePromoEnabled').checked ? '1' : '0',
+        consecutive_promo_days: document.getElementById('settingConsecutivePromoDays').value || '5',
+        consecutive_promo_discount: document.getElementById('settingConsecutivePromoDiscount').value || '50'
+    };
+
+    fetch(`${API_BASE}/api/admin/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings)
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.error) throw new Error(data.error);
+        document.getElementById('settingsMessage').innerHTML = '<div class="success-message">Lưu cài đặt thành công! ✅</div>';
+        setTimeout(() => { document.getElementById('settingsMessage').innerHTML = ''; }, 3000);
+    })
+    .catch(err => {
+        document.getElementById('settingsMessage').innerHTML = `<div class="error-message">Lỗi: ${err.message}</div>`;
+    });
 }
 
 // Load today info on page load

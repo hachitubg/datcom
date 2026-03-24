@@ -28,6 +28,30 @@
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
+/* ===== Custom Scrollbar ===== */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--outline-variant) transparent;
+}
+
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--outline-variant);
+    border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--primary-container);
+}
+
 body {
     font-family: 'Be Vietnam Pro', sans-serif;
     background: var(--surface-container-low);
@@ -516,12 +540,6 @@ body.modal-open {
     overscroll-behavior: contain; /* prevent scroll chaining to body */
 }
 
-.modal-body::-webkit-scrollbar { width: 4px; }
-.modal-body::-webkit-scrollbar-track { background: transparent; }
-.modal-body::-webkit-scrollbar-thumb {
-    background: var(--outline-variant);
-    border-radius: 4px;
-}
 
 .modal-wide {
     max-width: 720px;
