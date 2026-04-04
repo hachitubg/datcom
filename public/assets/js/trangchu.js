@@ -146,8 +146,10 @@ const paymentModal = document.getElementById('paymentModal');
 const paymentDetailModal = document.getElementById('paymentDetailModal');
 const paymentQrModal = document.getElementById('paymentQrModal');
 const paymentHistoryModal = document.getElementById('paymentHistoryModal');
+const feedbackModal = document.getElementById('feedbackModal');
 
 const customerNameInput = document.getElementById('customerName');
+const feedbackContentInput = document.getElementById('feedbackContent');
 
 document.getElementById('btnPayment').addEventListener('click', () => {
     if (currentUser && currentUser.name) {
@@ -169,6 +171,9 @@ document.getElementById('mobileBtnList').addEventListener('click', () => {
     document.getElementById('btnList').click();
 });
 
+document.getElementById('btnFeedback').addEventListener('click', openFeedbackModal);
+document.getElementById('mobileBtnFeedback').addEventListener('click', openFeedbackModal);
+
 document.getElementById('closePayment').addEventListener('click', () => {
     paymentModal.style.display = 'none';
 });
@@ -184,6 +189,9 @@ document.getElementById('closePaymentQr').addEventListener('click', () => {
 document.getElementById('closePaymentHistory').addEventListener('click', () => {
     paymentHistoryModal.style.display = 'none';
 });
+
+document.getElementById('closeFeedback').addEventListener('click', closeFeedbackModal);
+document.getElementById('cancelFeedback').addEventListener('click', closeFeedbackModal);
 
 document.getElementById('btnSearchPayment').addEventListener('click', loadPaymentList);
 document.getElementById('paymentSearch').addEventListener('keydown', (e) => {
@@ -202,6 +210,8 @@ document.getElementById('btnPaymentHistory').addEventListener('click', () => {
 document.getElementById('historyPeriodFilter').addEventListener('change', togglePaymentHistoryInputs);
 document.getElementById('btnApplyHistoryFilter').addEventListener('click', loadPaymentHistory);
 document.getElementById('btnResetHistoryFilter').addEventListener('click', resetPaymentHistoryFilter);
+
+feedbackContentInput.addEventListener('input', updateFeedbackCounter);
 
 customerNameInput.addEventListener('blur', () => {
     customerNameInput.value = AppUtils.normalizeName(customerNameInput.value);
@@ -268,6 +278,52 @@ function loadCustomerNameSuggestions() {
             // Không block luồng đặt cơm nếu API gợi ý lỗi.
         });
 }
+
+function openFeedbackModal() {
+    document.getElementById('feedbackMessage').innerHTML = '';
+    document.getElementById('feedbackForm').reset();
+    updateFeedbackCounter();
+    feedbackModal.style.display = 'flex';
+    feedbackContentInput.focus();
+}
+
+function closeFeedbackModal() {
+    feedbackModal.style.display = 'none';
+}
+
+function updateFeedbackCounter() {
+    const currentLength = (feedbackContentInput.value || '').length;
+    document.getElementById('feedbackCounter').textContent = `${currentLength} / 2000`;
+}
+
+document.getElementById('feedbackForm').addEventListener('submit', async (event) => {
+    event.preventDefault();
+
+    const message = (feedbackContentInput.value || '').trim();
+    const messageBox = document.getElementById('feedbackMessage');
+
+    if (!message) {
+        messageBox.innerHTML = '<div class="error-message">Vui lòng nhập nội dung góp ý trước khi gửi.</div>';
+        return;
+    }
+
+    try {
+        await AppUtils.fetchJson(`${API_BASE}/api/feedback`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message })
+        });
+
+        messageBox.innerHTML = '<div class="success-message">Cảm ơn bạn. Góp ý đã được gửi ẩn danh thành công.</div>';
+        document.getElementById('feedbackForm').reset();
+        updateFeedbackCounter();
+        setTimeout(() => {
+            closeFeedbackModal();
+        }, 1200);
+    } catch (error) {
+        messageBox.innerHTML = `<div class="error-message">${error.message}</div>`;
+    }
+});
 
 function loadPaymentList() {
     const keyword = document.getElementById('paymentSearch').value.trim();
@@ -636,6 +692,9 @@ window.addEventListener('click', (e) => {
     if (e.target === paymentHistoryModal) {
         paymentHistoryModal.style.display = 'none';
     }
+    if (e.target === feedbackModal) {
+        feedbackModal.style.display = 'none';
+    }
     if (e.target === authModal) {
         authModal.style.display = 'none';
     }
@@ -917,4 +976,5 @@ handlePaymentReturn();
 loadTodayInfo();
 togglePaymentHistoryInputs();
 loadCustomerNameSuggestions();
+updateFeedbackCounter();
 setInterval(loadTodayInfo, 5000); // Refresh every 5 seconds

@@ -366,7 +366,7 @@ body {
    ======================================== */
 .action-buttons {
     display: grid;
-    grid-template-columns: 2fr 1fr 1fr;
+    grid-template-columns: 2fr 1fr 1fr 1fr;
     gap: 12px;
     animation: slideUp 0.7s ease-out 0.2s both;
 }
@@ -815,6 +815,50 @@ textarea {
     font-size: 1rem;
     white-space: nowrap;
     margin-left: 12px;
+}
+
+/* ===== Feedback ===== */
+.feedback-intro-card {
+    background: var(--surface-container-low);
+    border-radius: var(--radius-xl);
+    padding: 16px 18px;
+    margin-bottom: 16px;
+    color: var(--on-surface-variant);
+    line-height: 1.6;
+    box-shadow: 0 6px 18px -8px var(--shadow-warm-md);
+}
+
+.feedback-intro-label {
+    display: inline-block;
+    margin-bottom: 8px;
+    padding: 5px 12px;
+    border-radius: var(--radius-full);
+    background: var(--primary-fixed);
+    color: var(--primary);
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+.feedback-meta-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: -4px;
+    margin-bottom: 8px;
+}
+
+.feedback-anonymous-note,
+.feedback-counter {
+    font-size: 0.75rem;
+    color: var(--on-surface-variant);
+}
+
+.feedback-anonymous-note {
+    color: var(--primary);
+    font-weight: 500;
 }
 
 /* ========================================
@@ -1678,6 +1722,12 @@ textarea {
     .payment-order-item .payment-action-group {
         width: 100%;
         margin-left: 0;
+    }
+
+    .feedback-meta-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
     }
 
     .payment-detail-item {

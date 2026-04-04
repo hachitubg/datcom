@@ -66,7 +66,8 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use((req, res, next) => {
   if (req.path === '/admin.html') {
     const token = getAdminSessionToken(req);
-    if (!token || !adminSessions.has(token)) {
+    const session = parseSessionToken(token);
+    if (!session || session.role !== 'admin') {
       return res.redirect('/admin-login');
     }
   }
@@ -77,8 +78,6 @@ app.use(express.static('public'));
 // Khởi tạo database
 const db = new Database();
 const payos = new PayOSService();
-const adminSessions = new Set();
-const userSessions = new Map(); // token -> { id, name, phone, role }
 
 function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString('hex');
@@ -91,11 +90,80 @@ function verifyPassword(password, hash, salt) {
   return derived === hash;
 }
 
+function getCookieOptions(maxAgeSeconds) {
+  const parts = ['HttpOnly', 'Path=/', `Max-Age=${maxAgeSeconds}`, 'SameSite=Lax'];
+  if (String(process.env.COOKIE_SECURE || '') === '1') {
+    parts.push('Secure');
+  }
+  return parts.join('; ');
+}
+
+function setSessionCookie(res, cookieName, token, maxAgeSeconds) {
+  res.setHeader('Set-Cookie', `${cookieName}=${encodeURIComponent(token)}; ${getCookieOptions(maxAgeSeconds)}`);
+}
+
+function clearSessionCookie(res, cookieName) {
+  const parts = ['HttpOnly', 'Path=/', 'Max-Age=0', 'SameSite=Lax'];
+  if (String(process.env.COOKIE_SECURE || '') === '1') {
+    parts.push('Secure');
+  }
+  res.setHeader('Set-Cookie', `${cookieName}=; ${parts.join('; ')}`);
+}
+
+const SESSION_SECRET = String(
+  process.env.SESSION_SECRET ||
+  process.env.PAYOS_CHECKSUM_KEY ||
+  process.env.ADMIN_INITIAL_PASSWORD ||
+  'datcom-local-session-secret'
+).trim();
+
+function toBase64Url(value) {
+  return Buffer.from(value).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function fromBase64Url(value) {
+  const normalized = String(value || '').replace(/-/g, '+').replace(/_/g, '/');
+  const pad = normalized.length % 4 === 0 ? '' : '='.repeat(4 - (normalized.length % 4));
+  return Buffer.from(normalized + pad, 'base64').toString('utf8');
+}
+
+function signSessionPayload(encodedPayload) {
+  if (!SESSION_SECRET) {
+    return '';
+  }
+  return crypto.createHmac('sha256', SESSION_SECRET).update(encodedPayload).digest('base64url');
+}
+
+function buildSessionToken(payload) {
+  const encodedPayload = toBase64Url(JSON.stringify(payload));
+  const signature = signSessionPayload(encodedPayload);
+  if (!signature) {
+    throw new Error('SESSION_SECRET hoặc PAYOS_CHECKSUM_KEY chưa được cấu hình');
+  }
+  return `${encodedPayload}.${signature}`;
+}
+
+function parseSessionToken(token) {
+  const rawToken = String(token || '').trim();
+  if (!rawToken) return null;
+
+  const [encodedPayload, signature] = rawToken.split('.');
+  if (!encodedPayload || !signature) return null;
+  if (signSessionPayload(encodedPayload) !== signature) return null;
+
+  try {
+    const payload = JSON.parse(fromBase64Url(encodedPayload));
+    if (!payload || typeof payload !== 'object') return null;
+    if (!payload.exp || Number(payload.exp) <= Date.now()) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
 function getUserSessionInfo(req) {
   const cookies = parseCookies(req);
-  const token = cookies.user_session || '';
-  if (!token) return null;
-  return userSessions.get(token) || null;
+  return parseSessionToken(cookies.user_session || '');
 }
 
 function parseCookies(req) {
@@ -116,17 +184,21 @@ function getAdminSessionToken(req) {
 
 function requireAdminApiAuth(req, res, next) {
   const token = getAdminSessionToken(req);
-  if (!token || !adminSessions.has(token)) {
+  const session = parseSessionToken(token);
+  if (!session || session.role !== 'admin') {
     return res.status(401).json({ error: 'UNAUTHORIZED_ADMIN' });
   }
+  req.adminSession = session;
   next();
 }
 
 function requireAdminPageAuth(req, res, next) {
   const token = getAdminSessionToken(req);
-  if (!token || !adminSessions.has(token)) {
+  const session = parseSessionToken(token);
+  if (!session || session.role !== 'admin') {
     return res.redirect('/admin-login');
   }
+  req.adminSession = session;
   next();
 }
 
@@ -516,6 +588,29 @@ app.get('/api/customers/names', (req, res) => {
   });
 });
 
+app.post('/api/feedback', (req, res) => {
+  const message = String(req.body.message || '').trim();
+
+  if (!message) {
+    return res.status(400).json({ error: 'Vui lòng nhập nội dung góp ý' });
+  }
+
+  if (message.length > 2000) {
+    return res.status(400).json({ error: 'Góp ý quá dài, vui lòng rút gọn dưới 2000 ký tự' });
+  }
+
+  db.createFeedback(message, (err, feedback) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+
+    res.json({
+      success: true,
+      feedback
+    });
+  });
+});
+
 app.post('/api/admin/customers/rename', (req, res) => {
   const oldName = normalizeName(req.body.oldName);
   const newName = normalizeName(req.body.newName);
@@ -791,41 +886,43 @@ app.get('/admin', requireAdminPageAuth, (req, res) => {
 
 app.get('/admin-login', (req, res) => {
   const token = getAdminSessionToken(req);
-  if (token && adminSessions.has(token)) {
+  const session = parseSessionToken(token);
+  if (session && session.role === 'admin') {
     return res.redirect('/admin');
   }
   res.sendFile(path.join(__dirname, '../public/admin-login.html'));
 });
-
 app.post('/api/admin/login', (req, res) => {
   const password = String(req.body.password || '');
 
-  // Kiểm tra tài khoản admin trong database
   db.getUserByPhone('admin', (err, adminUser) => {
-    if (err || !adminUser) {
-      // Fallback: dùng mật khẩu mặc định nếu DB chưa có admin
-      if (password !== 'hachitu') {
-        return res.status(401).json({ error: 'Mật khẩu không đúng' });
-      }
-    } else {
-      if (!verifyPassword(password, adminUser.password_hash, adminUser.salt)) {
-        return res.status(401).json({ error: 'Mật khẩu không đúng' });
-      }
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    if (!adminUser) {
+      return res.status(503).json({
+        error: 'Chua co tai khoan admin. Hay set ADMIN_INITIAL_PASSWORD roi restart server hoac tao admin truoc trong DB.'
+      });
+    }
+    if (!verifyPassword(password, adminUser.password_hash, adminUser.salt)) {
+      return res.status(401).json({ error: 'Mat khau khong dung' });
     }
 
-    const sessionToken = crypto.randomBytes(24).toString('hex');
-    adminSessions.add(sessionToken);
-    res.setHeader('Set-Cookie', `admin_session=${encodeURIComponent(sessionToken)}; HttpOnly; Path=/; Max-Age=28800; SameSite=Lax`);
+    const maxAgeSeconds = 28800;
+    const sessionToken = buildSessionToken({
+      id: adminUser.id,
+      phone: adminUser.phone,
+      name: adminUser.name,
+      role: 'admin',
+      exp: Date.now() + maxAgeSeconds * 1000
+    });
+    setSessionCookie(res, 'admin_session', sessionToken, maxAgeSeconds);
     res.json({ success: true });
   });
 });
 
 app.post('/api/admin/logout', (req, res) => {
-  const token = getAdminSessionToken(req);
-  if (token && adminSessions.has(token)) {
-    adminSessions.delete(token);
-  }
-  res.setHeader('Set-Cookie', 'admin_session=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax');
+  clearSessionCookie(res, 'admin_session');
   res.json({ success: true });
 });
 
@@ -943,6 +1040,16 @@ app.get('/api/admin/settings', (req, res) => {
   });
 });
 
+app.get('/api/admin/feedback', (req, res) => {
+  const search = String(req.query.search || '').trim();
+  db.getFeedbacks(search, (err, rows) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(rows || []);
+  });
+});
+
 app.put('/api/admin/settings', (req, res) => {
   const settings = req.body;
   if (!settings || typeof settings !== 'object') {
@@ -961,21 +1068,24 @@ app.post('/api/auth/register', (req, res) => {
   const phone = String(req.body.phone || '').trim();
   const name = normalizeName(req.body.name);
   const password = String(req.body.password || '');
-
   if (!phone || !name || !password) {
-    return res.status(400).json({ error: 'Vui lòng nhập đầy đủ thông tin' });
+    return res.status(400).json({ error: 'Vui long nhap day du thong tin' });
   }
   if (password.length < 6) {
-    return res.status(400).json({ error: 'Mật khẩu phải có ít nhất 6 ký tự' });
+    return res.status(400).json({ error: 'Mat khau phai co it nhat 6 ky tu' });
   }
-
   const { hash, salt } = hashPassword(password);
   db.createUser(phone, name, hash, salt, 'user', (err, user) => {
     if (err) return res.status(400).json({ error: err.message });
-
-    const sessionToken = crypto.randomBytes(24).toString('hex');
-    userSessions.set(sessionToken, { id: user.id, name: user.name, phone: user.phone, role: 'user' });
-    res.setHeader('Set-Cookie', `user_session=${encodeURIComponent(sessionToken)}; HttpOnly; Path=/; Max-Age=604800; SameSite=Lax`);
+    const maxAgeSeconds = 604800;
+    const sessionToken = buildSessionToken({
+      id: user.id,
+      phone: user.phone,
+      name: user.name,
+      role: 'user',
+      exp: Date.now() + maxAgeSeconds * 1000
+    });
+    setSessionCookie(res, 'user_session', sessionToken, maxAgeSeconds);
     res.json({ success: true, user: { id: user.id, name: user.name, phone: user.phone } });
   });
 });
@@ -983,30 +1093,30 @@ app.post('/api/auth/register', (req, res) => {
 app.post('/api/auth/login', (req, res) => {
   const phone = String(req.body.phone || '').trim();
   const password = String(req.body.password || '');
-
   if (!phone || !password) {
-    return res.status(400).json({ error: 'Vui lòng nhập số điện thoại và mật khẩu' });
+    return res.status(400).json({ error: 'Vui long nhap so dien thoai va mat khau' });
   }
-
   db.getUserByPhone(phone, (err, user) => {
     if (err) return res.status(500).json({ error: err.message });
-    if (!user) return res.status(401).json({ error: 'Số điện thoại hoặc mật khẩu không đúng' });
+    if (!user) return res.status(401).json({ error: 'So dien thoai hoac mat khau khong dung' });
     if (!verifyPassword(password, user.password_hash, user.salt)) {
-      return res.status(401).json({ error: 'Số điện thoại hoặc mật khẩu không đúng' });
+      return res.status(401).json({ error: 'So dien thoai hoac mat khau khong dung' });
     }
-
-    const sessionToken = crypto.randomBytes(24).toString('hex');
-    userSessions.set(sessionToken, { id: user.id, name: user.name, phone: user.phone, role: user.role });
-    res.setHeader('Set-Cookie', `user_session=${encodeURIComponent(sessionToken)}; HttpOnly; Path=/; Max-Age=604800; SameSite=Lax`);
+    const maxAgeSeconds = 604800;
+    const sessionToken = buildSessionToken({
+      id: user.id,
+      phone: user.phone,
+      name: user.name,
+      role: user.role,
+      exp: Date.now() + maxAgeSeconds * 1000
+    });
+    setSessionCookie(res, 'user_session', sessionToken, maxAgeSeconds);
     res.json({ success: true, user: { id: user.id, name: user.name, phone: user.phone, role: user.role } });
   });
 });
 
 app.post('/api/auth/logout', (req, res) => {
-  const cookies = parseCookies(req);
-  const token = cookies.user_session || '';
-  if (token) userSessions.delete(token);
-  res.setHeader('Set-Cookie', 'user_session=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax');
+  clearSessionCookie(res, 'user_session');
   res.json({ success: true });
 });
 
@@ -1033,3 +1143,4 @@ app.listen(PORT, () => {
     console.log(`PayOS auto-sync pending payments mỗi ${payosAutoSyncMs}ms`);
   }
 });
+

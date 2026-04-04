@@ -111,6 +111,25 @@ class Database {
         )
       `);
 
+      this.db.run(`
+        CREATE TABLE IF NOT EXISTS feedback_submissions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          message TEXT NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      this.db.run(`
+        CREATE TABLE IF NOT EXISTS user_sessions (
+          token TEXT PRIMARY KEY NOT NULL,
+          user_id INTEGER NOT NULL,
+          role TEXT NOT NULL,
+          expires_at DATETIME NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+      `);
+
       // Thêm cột discount vào orders (bỏ qua lỗi nếu đã tồn tại)
       this.db.run("ALTER TABLE orders ADD COLUMN discount_percent INTEGER DEFAULT 0", () => {});
       this.db.run("ALTER TABLE orders ADD COLUMN promo_code TEXT", () => {});
@@ -120,6 +139,7 @@ class Database {
       this.ensureTodayRecord();
       this.seedAdminUser();
       this.seedDefaultSettings();
+      this.cleanupExpiredSessions(() => {});
     });
   }
 
@@ -658,7 +678,7 @@ class Database {
           d.date,
           SUM(o.quantity)                  AS quantity,
           SUM(o.quantity * d.price * (100 - COALESCE(o.discount_percent, 0)) / 100) AS day_amount,
-          SUM(SUM(o.quantity * d.price)) OVER (
+          SUM(SUM(o.quantity * d.price * (100 - COALESCE(o.discount_percent, 0)) / 100)) OVER (
             PARTITION BY LOWER(o.name)
             ORDER BY d.date ASC
             ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
@@ -1327,6 +1347,140 @@ class Database {
     );
   }
 
+  createFeedback(message, callback) {
+    const normalizedMessage = String(message || '').trim();
+    if (!normalizedMessage) {
+      callback(new Error('Nội dung góp ý không được để trống'));
+      return;
+    }
+
+    this.db.run(
+      `INSERT INTO feedback_submissions (message) VALUES (?)`,
+      [normalizedMessage],
+      function(err) {
+        if (err) {
+          callback(err);
+          return;
+        }
+
+        callback(null, {
+          id: this.lastID,
+          message: normalizedMessage
+        });
+      }
+    );
+  }
+
+  formatUtcDateTime(date = new Date()) {
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    const hours = String(date.getUTCHours()).padStart(2, '0');
+    const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+    const seconds = String(date.getUTCSeconds()).padStart(2, '0');
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+  }
+
+  createSession({ token, userId, role, expiresAt }, callback) {
+    const normalizedToken = String(token || '').trim();
+    const normalizedUserId = Number(userId || 0);
+    const normalizedRole = String(role || '').trim() || 'user';
+    const normalizedExpiresAt = expiresAt instanceof Date ? this.formatUtcDateTime(expiresAt) : String(expiresAt || '').trim();
+
+    if (!normalizedToken || !normalizedUserId || !normalizedExpiresAt) {
+      callback(new Error('Dữ liệu session không hợp lệ'));
+      return;
+    }
+
+    this.db.run(
+      `INSERT OR REPLACE INTO user_sessions (token, user_id, role, expires_at) VALUES (?, ?, ?, ?)`,
+      [normalizedToken, normalizedUserId, normalizedRole, normalizedExpiresAt],
+      callback
+    );
+  }
+
+  getSessionByToken(token, callback) {
+    const normalizedToken = String(token || '').trim();
+    if (!normalizedToken) {
+      callback(null, null);
+      return;
+    }
+
+    this.db.get(
+      `SELECT
+         s.token,
+         s.user_id,
+         s.role AS session_role,
+         s.expires_at,
+         u.id,
+         u.phone,
+         u.name,
+         u.role AS user_role
+       FROM user_sessions s
+       JOIN users u ON u.id = s.user_id
+       WHERE s.token = ? AND s.expires_at > CURRENT_TIMESTAMP`,
+      [normalizedToken],
+      (err, row) => {
+        if (err) {
+          callback(err);
+          return;
+        }
+
+        if (!row) {
+          callback(null, null);
+          return;
+        }
+
+        callback(null, {
+          token: row.token,
+          id: row.id,
+          userId: row.user_id,
+          phone: row.phone,
+          name: row.name,
+          role: row.user_role || row.session_role,
+          expiresAt: row.expires_at
+        });
+      }
+    );
+  }
+
+  deleteSession(token, callback) {
+    const normalizedToken = String(token || '').trim();
+    if (!normalizedToken) {
+      callback(null);
+      return;
+    }
+
+    this.db.run(`DELETE FROM user_sessions WHERE token = ?`, [normalizedToken], callback);
+  }
+
+  cleanupExpiredSessions(callback) {
+    this.db.run(`DELETE FROM user_sessions WHERE expires_at <= CURRENT_TIMESTAMP`, callback);
+  }
+
+  getFeedbacks(searchKeyword, callback) {
+    let keyword = '';
+    let finalCallback = callback;
+
+    if (typeof searchKeyword === 'function') {
+      finalCallback = searchKeyword;
+    } else {
+      keyword = String(searchKeyword || '').trim().toLowerCase();
+    }
+
+    const sql = keyword
+      ? `SELECT id, message, created_at
+         FROM feedback_submissions
+         WHERE LOWER(message) LIKE ?
+         ORDER BY created_at DESC, id DESC`
+      : `SELECT id, message, created_at
+         FROM feedback_submissions
+         ORDER BY created_at DESC, id DESC`;
+
+    const params = keyword ? [`%${keyword}%`] : [];
+    this.db.all(sql, params, finalCallback);
+  }
+
   getPromoCodes(callback) {
     this.db.all(
       `SELECT id, code, discount_percent, created_at, used_by, used_at, order_id FROM promo_codes ORDER BY created_at DESC`,
@@ -1358,11 +1512,16 @@ class Database {
   // =============================================
   seedAdminUser() {
     const crypto = require('crypto');
+    const initialPassword = String(process.env.ADMIN_INITIAL_PASSWORD || '').trim();
     // Chỉ tạo nếu chưa có admin nào
     this.db.get(`SELECT id FROM users WHERE role = 'admin' LIMIT 1`, (err, row) => {
       if (err || row) return; // Đã có admin hoặc lỗi
+      if (!initialPassword) {
+        console.warn('Chưa có admin trong DB và ADMIN_INITIAL_PASSWORD chưa được cấu hình. Bỏ qua seed admin mặc định.');
+        return;
+      }
       const salt = crypto.randomBytes(16).toString('hex');
-      const hash = crypto.scryptSync('hachitu', salt, 64).toString('hex');
+      const hash = crypto.scryptSync(initialPassword, salt, 64).toString('hex');
       this.db.run(
         `INSERT OR IGNORE INTO users (phone, name, password_hash, salt, role) VALUES (?, ?, ?, ?, ?)`,
         ['admin', 'Admin', hash, salt, 'admin']

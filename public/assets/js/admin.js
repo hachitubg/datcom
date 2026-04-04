@@ -10,6 +10,15 @@ let debtRows = [];
 let debtCurrentPage = 1;
 let paymentRows = [];
 let paymentCurrentPage = 1;
+let feedbackRows = [];
+let feedbackCurrentPage = 1;
+
+function getLocalDateInputValue(date = new Date()) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
 
 // ===== Tìm kiếm lịch sử theo tên =====
 let allCustomerNames = [];
@@ -188,6 +197,8 @@ function switchTab(tab, event) {
         loadUsers();
     } else if (tab === 'settings') {
         loadSettings();
+    } else if (tab === 'feedback') {
+        loadFeedbackList();
     }
 }
 
@@ -310,7 +321,7 @@ function loadHistory() {
         .then(res => res.json())
         .then(days => {
             const activeDays = (days || []).filter(day => Number(day.ordered || 0) > 0);
-            const today = new Date().toISOString().slice(0, 10);
+            const today = getLocalDateInputValue();
             const defaultDate = activeDays.find(d => d.date === today)?.date || activeDays[0]?.date || today;
 
             if (!selectedOrderDate) {
@@ -718,6 +729,86 @@ function renderPaginationControls(pageVarName, currentPage, totalPages, renderFn
             <button class="btn-secondary btn-small" ${currentPage >= totalPages ? 'disabled' : ''} onclick="${pageVarName}=${currentPage + 1};${renderFnName}()">Sau</button>
         </div>
     `;
+}
+
+function onFeedbackSearchKeyDown(event) {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        loadFeedbackList();
+    }
+}
+
+function loadFeedbackList() {
+    const search = (document.getElementById('feedbackSearchInput')?.value || '').trim();
+    const summary = document.getElementById('feedbackSummaryInfo');
+    const container = document.getElementById('feedbackList');
+    const params = new URLSearchParams();
+
+    if (search) {
+        params.set('search', search);
+    }
+
+    container.innerHTML = '<div class="loading">Đang tải...</div>';
+    if (summary) {
+        summary.innerHTML = 'Đang tải góp ý...';
+    }
+
+    const query = params.toString();
+    const url = query ? `${API_BASE}/api/admin/feedback?${query}` : `${API_BASE}/api/admin/feedback`;
+
+    fetch(url)
+        .then(res => res.json())
+        .then(rows => {
+            feedbackRows = rows || [];
+            feedbackCurrentPage = 1;
+            renderFeedbackList();
+        })
+        .catch(err => {
+            container.innerHTML = `<div style="padding: 14px; color:red; text-align:center;">Lỗi tải góp ý: ${err.message}</div>`;
+        });
+}
+
+function renderFeedbackList() {
+    const summary = document.getElementById('feedbackSummaryInfo');
+    const container = document.getElementById('feedbackList');
+
+    if (!feedbackRows.length) {
+        if (summary) {
+            summary.innerHTML = 'Không có góp ý nào theo bộ lọc hiện tại.';
+        }
+        container.innerHTML = '<div style="padding: 14px; color:#999; text-align:center;">Chưa có góp ý nào để hiển thị.</div>';
+        return;
+    }
+
+    if (summary) {
+        summary.innerHTML = `Tổng góp ý theo bộ lọc: <strong>${feedbackRows.length}</strong>`;
+    }
+
+    const totalPages = Math.ceil(feedbackRows.length / PAGE_SIZE);
+    if (feedbackCurrentPage > totalPages) feedbackCurrentPage = totalPages;
+    const startIndex = (feedbackCurrentPage - 1) * PAGE_SIZE;
+    const pageRows = feedbackRows.slice(startIndex, startIndex + PAGE_SIZE);
+
+    const rowsHtml = pageRows.map((row) => `
+        <article class="feedback-admin-card">
+            <div class="feedback-admin-meta">
+                <span class="feedback-admin-badge">Ẩn danh</span>
+                <span>${AppUtils.formatDateTime(row.created_at)}</span>
+            </div>
+            <p class="feedback-admin-text">${escapeHtml(row.message || '')}</p>
+        </article>
+    `).join('');
+
+    container.innerHTML = rowsHtml + renderPaginationControls('feedbackCurrentPage', feedbackCurrentPage, totalPages, 'renderFeedbackList');
+}
+
+function escapeHtml(value) {
+    return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
 
 function openCustomerOrderModal(encodedName) {
