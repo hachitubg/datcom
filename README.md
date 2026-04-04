@@ -1,153 +1,171 @@
-# Website Đặt Cơm (Hướng dẫn nhanh)
+# Datcom
 
-## 1) Chạy website ở localhost để test
+Huong dan nhanh de chay, deploy va van hanh du an `datcom`.
+
+## Tong quan
+
+Day la web app dat com gom 2 phan:
+
+- Trang khach: xem menu, dat com, dang ky/dang nhap, thanh toan, gui gop y an danh.
+- Trang admin: quan ly don, menu, thanh toan, ma khuyen mai, nguoi dung, cai dat va doc gop y.
+
+Tech stack hien tai:
+
+- Backend: Node.js + Express
+- Frontend: HTML/CSS/JavaScript thuan
+- Database: SQLite (`datcom.db`)
+- Thanh toan: PayOS
+- Deploy: PM2 tren VPS/Linux
+
+## Chay local
 
 ```bash
-# Cài dependencies
 npm install
+```
 
-# (Khuyến nghị) tạo file .env ở thư mục gốc project
-cat > .env <<'EOF'
+Tao file `.env` tai thu muc goc:
+
+```env
 PORT=3000
 PUBLIC_BASE_URL=http://localhost:3000
+
+# Bat buoc cho production, nen set ca local de on dinh session
+SESSION_SECRET=your-session-secret
+
+# Chi can khi khoi dong moi tren DB chua co admin
+ADMIN_INITIAL_PASSWORD=your-admin-password
+
+# Dat 1 neu chay HTTPS thuc su
+COOKIE_SECURE=0
+
+# Tuy chon neu dung PayOS
 # PAYOS_CLIENT_ID=your-client-id
 # PAYOS_API_KEY=your-api-key
 # PAYOS_CHECKSUM_KEY=your-checksum-key
-EOF
+# PAYOS_AUTO_SYNC_MS=30000
+```
 
-# Chạy server (mặc định http://localhost:3000)
+Chay server:
+
+```bash
 npm start
 ```
 
-Mở trình duyệt:
-- Trang khách: `http://localhost:3000`
-- Trang admin: `http://localhost:3000/admin`
+Mo tren trinh duyet:
 
-> Nếu dùng thanh toán PayOS, cần set biến môi trường trước khi chạy:
+- Trang khach: `http://localhost:3000`
+- Admin login: `http://localhost:3000/admin-login`
+- Admin: `http://localhost:3000/admin`
+
+## Bien moi truong quan trong
+
+- `PORT`: cong server.
+- `PUBLIC_BASE_URL`: domain/public URL de backend tao callback URL va redirect dung.
+- `SESSION_SECRET`: khoa ky cookie session. Production bat buoc phai set.
+- `ADMIN_INITIAL_PASSWORD`: mat khau admin khoi tao lan dau neu DB chua co tai khoan admin.
+- `COOKIE_SECURE`: `1` khi chay HTTPS, `0` khi chay HTTP local.
+- `PAYOS_CLIENT_ID`, `PAYOS_API_KEY`, `PAYOS_CHECKSUM_KEY`: can khi bat thanh toan PayOS.
+- `PAYOS_AUTO_SYNC_MS`: chu ky dong bo trang thai thanh toan PayOS, mac dinh `30000`.
+
+Luu y:
+
+- Khong con mat khau admin hardcode trong code.
+- Neu DB da co admin thi `ADMIN_INITIAL_PASSWORD` khong tu dong ghi de.
+- Session dang nhap hien tai dung cookie co chu ky, khong phu thuoc session RAM nen restart app khong lam mat login ngay lap tuc chi vi bo nho process bi reset.
+- Neu local chua set `SESSION_SECRET`, server se dung fallback dev secret va in canh bao. Khong nen dung fallback nay tren production.
+
+## Database SQLite
+
+Du an dung file SQLite local:
+
+- DB file: `datcom.db`
+- Khong can cai PostgreSQL/MySQL neu giu kien truc hien tai.
+
+Can dam bao:
+
+- user chay app co quyen doc/ghi thu muc project
+- file `datcom.db` duoc backup truoc moi lan deploy
+- khong xoa DB khi pull/redeploy
+
+Neu muon kiem tra DB thu cong:
 
 ```bash
-export PAYOS_CLIENT_ID="your-client-id"
-export PAYOS_API_KEY="your-api-key"
-export PAYOS_CHECKSUM_KEY="your-checksum-key"
-export PUBLIC_BASE_URL="http://localhost:3000"
+sqlite3 datcom.db
 ```
 
----
+Mot so lenh hay dung:
 
-## 2) Deploy và cách build lại khi có code mới
-
-```bash
-# 1) Vào thư mục project trên server
-cd /var/www/datcom
-
-# 2) Lấy code mới
-git pull
-
-# 3) Cài đúng dependency theo lockfile
-npm ci --omit=dev
-
-# 4) Restart app bằng PM2
-pm2 restart datcom
-
-# 5) Kiểm tra log
-pm2 logs datcom --lines 100
-```
-
-Ghi chú ngắn:
-- Dự án này là Node.js server (không có bước build frontend riêng).
-- Mỗi lần có code mới: `git pull` → `npm ci --omit=dev` → `pm2 restart datcom`.
-
----
-
-## 3) Kiểm tra, backup, restore Database + lệnh hay dùng
-
-### Kiểm tra database
-
-```bash
-# Kiểm tra file DB
-ls -lh /var/www/datcom/datcom.db
-
-# Xem nhanh bảng trong DB
-sqlite3 /var/www/datcom/datcom.db ".tables"
-```
-
-### Backup database
-
-```bash
-# Tạo file backup kèm thời gian
-cp /var/www/datcom/datcom.db /var/www/datcom/datcom.db.backup-$(date +%F-%H%M%S)
-```
-
-### Restore từ file backup
-
-```bash
-# Ví dụ restore từ 1 file backup cụ thể
-cp /var/www/datcom/datcom.db.backup-2026-02-12-234028 /var/www/datcom/datcom.db
-
-# Restart app sau khi restore
-pm2 restart datcom
-```
-
-### Một số lệnh SQLite hay dùng
-
-```bash
-# Mở DB
-sqlite3 /var/www/datcom/datcom.db
-
-# Trong màn hình sqlite3:
+```sql
 .tables
 .schema
 SELECT * FROM orders ORDER BY id DESC LIMIT 20;
-.quit
+SELECT * FROM feedback_submissions ORDER BY id DESC LIMIT 20;
 ```
 
+## Deploy tren VPS
 
-### Lỗi thường gặp
-
-- **`Error: Cannot find module 'dotenv'`**
-  - Dự án đã chuyển sang loader nội bộ (`src/load-env.js`) để đọc file `.env`, nên không cần cài package `dotenv`.
-  - Nếu gặp lỗi này, hãy pull code mới nhất rồi chạy lại:
+Quy trinh cap nhat code:
 
 ```bash
+cd /var/www/datcom
 git pull
-npm install
-npm start
+npm ci --omit=dev
+pm2 restart datcom
+pm2 logs datcom --lines 100
 ```
 
-## 4) Cập nhật Admin: đơn giản hơn cho PC + mobile
-
-Admin được tách rõ 3 khu vực để dễ dùng:
-
-- **Danh sách đặt cơm** (màn hình đầu tiên):
-  - Mặc định hiển thị đơn của ngày hôm nay.
-  - Có ô chọn ngày + danh sách ngày nổi bật (ngày có phát sinh đơn).
-  - Hiển thị thông tin nhanh: ngày hiện tại và tổng xuất đã đặt.
-  - Có thao tác **Sửa** và **Xóa** trực tiếp từng đơn.
-
-- **Quản lý menu**:
-  - Giữ nguyên phần cập nhật menu/số lượng như cũ.
-  - Bỏ danh sách đơn hôm nay trong tab này để tránh trùng với tab Danh sách đặt cơm.
-
-- **Quản lý thanh toán**:
-  - Mặc định hiển thị **Công nợ cần thu** (tổng xuất + số tiền cần thanh toán của người chưa trả đủ).
-  - Có nút chuyển sang **Lịch sử thanh toán** ngay phía trên.
-  - Hỗ trợ cập nhật thủ công: **Đã thu tiền mặt** / **Chuyển Paid** khi API không hoạt động.
-
-## 5) Khắc phục trường hợp khách không quay lại trang PayOS success
-
-Đã bổ sung cơ chế **auto-sync trạng thái thanh toán ở backend** để không phụ thuộc việc người dùng quay lại website:
-
-- Server tự quét các `payment_requests` đang `PENDING`.
-- Mỗi chu kỳ sẽ gọi API `getPaymentLinkInformation` của PayOS theo `orderCode`.
-- Nếu PayOS đã ghi nhận thanh toán, server tự cập nhật sang `PAID` và ghi transaction vào DB.
-- Nếu PayOS trả trạng thái `CANCELLED` hoặc `EXPIRED`, request cũng được cập nhật tương ứng.
-
-Biến môi trường tùy chọn:
+Vi du khoi dong bang PM2:
 
 ```bash
-# Chu kỳ auto-sync (ms), mặc định 30000 = 30 giây
-export PAYOS_AUTO_SYNC_MS=30000
+cd /var/www/datcom
+npm ci --omit=dev
+pm2 start src/server.js --name datcom
+pm2 save
 ```
 
-> Như vậy kể cả khách chỉ chuyển khoản xong rồi thoát, hệ thống vẫn tự cập nhật status sau mỗi chu kỳ đồng bộ.
+Neu chay sau reverse proxy/HTTPS:
 
+- set `PUBLIC_BASE_URL` dung domain that
+- set `COOKIE_SECURE=1`
+- giu `SESSION_SECRET` co gia tri co dinh va rieng tu
+
+## Backup va restore
+
+Backup:
+
+```bash
+cp /var/www/datcom/datcom.db /var/www/datcom/datcom.db.backup-$(date +%F-%H%M%S)
+```
+
+Restore:
+
+```bash
+cp /var/www/datcom/datcom.db.backup-2026-04-05-010000 /var/www/datcom/datcom.db
+pm2 restart datcom
+```
+
+## Tinh nang dang co
+
+- Dat com theo ngay
+- Dang ky/dang nhap user
+- Sua/xoa don trong thoi gian cho phep
+- Promo code va khuyen mai theo chuoi ngay
+- Thanh toan cong no qua PayOS
+- Auto sync trang thai PayOS tu backend
+- Admin xem cong no can thu va lich su thanh toan
+- Tong hop tong tien theo bo loc trong admin payment
+- Gop y an danh tu trang chu
+- Admin doc danh sach gop y
+- So suat mac dinh cho ngay moi: `40`
+
+## Tai lieu bo sung
+
+- Tong quan cau truc du an: `AI_PROJECT_GUIDE.md`
+- Dinh huong giao dien: `DESIGN.md`
+
+## Ghi chu van hanh
+
+- Neu app moi khoi tao ma chua co admin, hay set `ADMIN_INITIAL_PASSWORD` truoc lan chay dau.
+- Neu thay doi `SESSION_SECRET` tren production, cac session hien tai se bi vo hieu hoa va can dang nhap lai.
+- Neu PayOS khong cau hinh, cac chuc nang thanh toan online se khong hoat dong nhung website van chay cac phan khac.
+- Local dev co the chay khi thieu `SESSION_SECRET`, nhung production thi khong.

@@ -10,6 +10,17 @@ let debtRows = [];
 let debtCurrentPage = 1;
 let paymentRows = [];
 let paymentCurrentPage = 1;
+let feedbackRows = [];
+let feedbackCurrentPage = 1;
+const escapeHtml = AppUtils.escapeHtml;
+const escapeAttr = AppUtils.escapeAttribute;
+
+function getLocalDateInputValue(date = new Date()) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
 
 // ===== Tìm kiếm lịch sử theo tên =====
 let allCustomerNames = [];
@@ -41,7 +52,7 @@ function updateHistoryNameSuggestions() {
     if (!matches.length) { dropdown.style.display = 'none'; return; }
 
     dropdown.innerHTML = matches.slice(0, 12).map(name =>
-        `<div class="name-suggestion-item" onmousedown="selectHistoryName('${encodeURIComponent(name)}')">${name}</div>`
+        `<div class="name-suggestion-item" onmousedown="selectHistoryName('${encodeURIComponent(name)}')">${escapeHtml(name)}</div>`
     ).join('');
     dropdown.style.display = 'block';
 }
@@ -126,7 +137,7 @@ function openCustomerFullHistoryModal(customerName) {
                 let promoHtml = '';
                 if (row.promos && row.promos.length > 0) {
                     promoHtml = row.promos.map(p =>
-                        `<div class="promo-detail-note">🎫 Mã <strong>${p.promo_code}</strong>: giảm ${p.discount_percent}% · ${p.quantity} xuất × ${AppUtils.formatCurrency(p.finalPrice)}/xuất</div>`
+                        `<div class="promo-detail-note">🎫 Mã <strong>${escapeHtml(p.promo_code)}</strong>: giảm ${p.discount_percent}% · ${p.quantity} xuất × ${AppUtils.formatCurrency(p.finalPrice)}/xuất</div>`
                     ).join('');
                 }
                 return `
@@ -139,7 +150,7 @@ function openCustomerFullHistoryModal(customerName) {
                             ${promoHtml}
                         </div>
                         <div style="text-align:right; flex-shrink:0;">
-                            <span class="payment-status-badge ${cls}">${label}</span>
+                            <span class="payment-status-badge ${cls}">${escapeHtml(label)}</span>
                             <div style="font-weight:700; color:#A0826D; margin-top:6px; font-size:15px;">${AppUtils.formatCurrency(row.totalAmount)}</div>
                         </div>
                     </div>
@@ -188,6 +199,8 @@ function switchTab(tab, event) {
         loadUsers();
     } else if (tab === 'settings') {
         loadSettings();
+    } else if (tab === 'feedback') {
+        loadFeedbackList();
     }
 }
 
@@ -310,7 +323,7 @@ function loadHistory() {
         .then(res => res.json())
         .then(days => {
             const activeDays = (days || []).filter(day => Number(day.ordered || 0) > 0);
-            const today = new Date().toISOString().slice(0, 10);
+            const today = getLocalDateInputValue();
             const defaultDate = activeDays.find(d => d.date === today)?.date || activeDays[0]?.date || today;
 
             if (!selectedOrderDate) {
@@ -382,12 +395,12 @@ function renderHistoryOrders() {
     const rowsHtml = pageRows.map((order) => {
         const disc = Number(order.discount_percent || 0);
         const discBadge = disc > 0 ? `<span class="discount-badge">-${disc}%</span>` : '';
-        const promoInfo = disc > 0 ? `<div class="admin-payment-meta promo-info-text">Mã KM: ${order.promo_code} — Giảm ${disc}%</div>` : '';
+        const promoInfo = disc > 0 ? `<div class="admin-payment-meta promo-info-text">Mã KM: ${escapeHtml(order.promo_code || '')} — Giảm ${disc}%</div>` : '';
         return `
         <div class="order-row ${disc > 0 ? 'order-row-discounted' : ''}">
             <div class="order-info">
-                <div class="order-name">${order.name} ${discBadge}</div>
-                <div class="order-details">Số lượng: ${order.quantity} xuất ${order.description ? '</br> Ghi chú: ' + order.description : ''}</div>
+                <div class="order-name">${escapeHtml(order.name)} ${discBadge}</div>
+                <div class="order-details">Số lượng: ${order.quantity} xuất ${order.description ? '</br> Ghi chú: ' + escapeHtml(order.description) : ''}</div>
                 ${promoInfo}
                 <div class="admin-payment-meta">Thời gian đặt: ${AppUtils.formatDateTime(order.created_at)}</div>
             </div>
@@ -534,7 +547,11 @@ function onDebtSearchInput() {
 
 function loadDebtSummary() {
     const container = document.getElementById('adminDebtSummaryList');
+    const summary = document.getElementById('adminDebtSummaryMeta');
     container.innerHTML = '<div class="loading">Đang tải...</div>';
+    if (summary) {
+        summary.innerHTML = 'Đang tính tổng công nợ...';
+    }
     const search = (document.getElementById('debtSearchInput')?.value || '').trim();
     const url = search ? `${API_BASE}/api/payments/today?search=${encodeURIComponent(search)}` : `${API_BASE}/api/payments/today`;
 
@@ -552,9 +569,18 @@ function loadDebtSummary() {
 
 function renderDebtSummary() {
     const container = document.getElementById('adminDebtSummaryList');
+    const summary = document.getElementById('adminDebtSummaryMeta');
     if (!debtRows.length) {
+        if (summary) {
+            summary.innerHTML = 'Tổng công nợ theo bộ lọc: <strong>0đ</strong>';
+        }
         container.innerHTML = '<div style="padding: 14px; color:#999; text-align:center;">Không có công nợ cần xử lý.</div>';
         return;
+    }
+
+    const totalRemaining = debtRows.reduce((sum, row) => sum + Number(row.remainingAmount || 0), 0);
+    if (summary) {
+        summary.innerHTML = `Tổng khách theo bộ lọc: <strong>${debtRows.length}</strong> · Tổng tiền cần thu: <strong>${AppUtils.formatCurrency(totalRemaining)}</strong>`;
     }
 
     const totalPages = Math.ceil(debtRows.length / PAGE_SIZE);
@@ -566,7 +592,7 @@ function renderDebtSummary() {
         return `
             <div class="admin-payment-row">
                 <div>
-                    <div class="order-name payment-name-link" onclick="openCustomerOrderModal('${encodeURIComponent(row.name || '')}')">${row.name}</div>
+                    <div class="order-name payment-name-link" onclick="openCustomerOrderModal('${encodeURIComponent(row.name || '')}')">${escapeHtml(row.name)}</div>
                     <div class="admin-payment-meta">Số xuất: ${row.quantity} </br> Tổng tiền: ${AppUtils.formatCurrency(row.totalAmount || 0)}</div>
                 </div>
                 <div class="admin-payment-actions">
@@ -588,6 +614,7 @@ function loadAdminPayments() {
     const fromDate = document.getElementById('paymentFromDateFilter').value;
     const toDate = document.getElementById('paymentToDateFilter').value;
     const container = document.getElementById('adminPaymentList');
+    const summary = document.getElementById('adminPaymentSummaryMeta');
     container.style.display = 'block';
 
     if (period === 'date' && !date) {
@@ -620,6 +647,9 @@ function loadAdminPayments() {
     if (period === 'range' && toDate) params.set('toDate', toDate);
 
     container.innerHTML = '<div class="loading">Đang tải...</div>';
+    if (summary) {
+        summary.innerHTML = 'Đang tính tổng thanh toán...';
+    }
     const url = `${API_BASE}/api/payments/history?${params.toString()}`;
 
     fetch(url)
@@ -636,9 +666,23 @@ function loadAdminPayments() {
 
 function renderPaymentHistory() {
     const container = document.getElementById('adminPaymentList');
+    const summary = document.getElementById('adminPaymentSummaryMeta');
     if (!paymentRows.length) {
+        if (summary) {
+            summary.innerHTML = 'Tổng thanh toán thành công theo bộ lọc: <strong>0đ</strong>';
+        }
         container.innerHTML = '<div style="padding: 16px; color: #999; text-align: center;">Không có giao dịch theo bộ lọc hiện tại.</div>';
         return;
+    }
+
+    const totalRequestAmount = paymentRows.reduce((sum, row) => sum + Number(row.request_amount || 0), 0);
+    const totalPaidAmount = paymentRows.reduce((sum, row) => sum + Number(row.paid_amount || 0), 0);
+    const successfulPaidAmount = paymentRows.reduce((sum, row) => {
+        const statusText = String(row.request_status || 'PENDING').toUpperCase();
+        return statusText === 'PAID' ? sum + Number(row.paid_amount || 0) : sum;
+    }, 0);
+    if (summary) {
+        summary.innerHTML = `Tổng giao dịch theo bộ lọc: <strong>${paymentRows.length}</strong> · Tổng tiền yêu cầu: <strong>${AppUtils.formatCurrency(totalRequestAmount)}</strong> · Tổng đã thu: <strong>${AppUtils.formatCurrency(totalPaidAmount)}</strong> · Thanh toán thành công: <strong>${AppUtils.formatCurrency(successfulPaidAmount)}</strong>`;
     }
 
     const totalPages = Math.ceil(paymentRows.length / PAGE_SIZE);
@@ -662,9 +706,9 @@ function renderPaymentHistory() {
         return `
             <div class="admin-payment-row">
                 <div>
-                    <div class="order-name" style="display:flex;align-items:center;gap:8px;">${row.customer_name} <span class="payment-status-badge ${cls}">${label}</span></div>
-                    <div class="admin-payment-meta">Ngày: ${row.date} | OrderCode: ${row.order_code}</div>
-                    <div class="admin-payment-meta">Số tiền: ${AppUtils.formatCurrency(amount)} | Đã thanh toán: ${AppUtils.formatCurrency(paidAmount)} | Ref: ${row.latest_reference || row.payment_link_id || '-'}</div>
+                    <div class="order-name" style="display:flex;align-items:center;gap:8px;">${escapeHtml(row.customer_name)} <span class="payment-status-badge ${cls}">${escapeHtml(label)}</span></div>
+                    <div class="admin-payment-meta">Ngày: ${escapeHtml(row.date)} | OrderCode: ${row.order_code}</div>
+                    <div class="admin-payment-meta">Số tiền: ${AppUtils.formatCurrency(amount)} | Đã thanh toán: ${AppUtils.formatCurrency(paidAmount)} | Ref: ${escapeHtml(row.latest_reference || row.payment_link_id || '-')}</div>
                     <div class="admin-payment-meta">Cập nhật: ${AppUtils.formatDateTime(paidAt)}</div>
                 </div>
                 <div class="admin-payment-actions">
@@ -689,6 +733,77 @@ function renderPaginationControls(pageVarName, currentPage, totalPages, renderFn
     `;
 }
 
+function onFeedbackSearchKeyDown(event) {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        loadFeedbackList();
+    }
+}
+
+function loadFeedbackList() {
+    const search = (document.getElementById('feedbackSearchInput')?.value || '').trim();
+    const summary = document.getElementById('feedbackSummaryInfo');
+    const container = document.getElementById('feedbackList');
+    const params = new URLSearchParams();
+
+    if (search) {
+        params.set('search', search);
+    }
+
+    container.innerHTML = '<div class="loading">Đang tải...</div>';
+    if (summary) {
+        summary.innerHTML = 'Đang tải góp ý...';
+    }
+
+    const query = params.toString();
+    const url = query ? `${API_BASE}/api/admin/feedback?${query}` : `${API_BASE}/api/admin/feedback`;
+
+    fetch(url)
+        .then(res => res.json())
+        .then(rows => {
+            feedbackRows = rows || [];
+            feedbackCurrentPage = 1;
+            renderFeedbackList();
+        })
+        .catch(err => {
+            container.innerHTML = `<div style="padding: 14px; color:red; text-align:center;">Lỗi tải góp ý: ${err.message}</div>`;
+        });
+}
+
+function renderFeedbackList() {
+    const summary = document.getElementById('feedbackSummaryInfo');
+    const container = document.getElementById('feedbackList');
+
+    if (!feedbackRows.length) {
+        if (summary) {
+            summary.innerHTML = 'Không có góp ý nào theo bộ lọc hiện tại.';
+        }
+        container.innerHTML = '<div style="padding: 14px; color:#999; text-align:center;">Chưa có góp ý nào để hiển thị.</div>';
+        return;
+    }
+
+    if (summary) {
+        summary.innerHTML = `Tổng góp ý theo bộ lọc: <strong>${feedbackRows.length}</strong>`;
+    }
+
+    const totalPages = Math.ceil(feedbackRows.length / PAGE_SIZE);
+    if (feedbackCurrentPage > totalPages) feedbackCurrentPage = totalPages;
+    const startIndex = (feedbackCurrentPage - 1) * PAGE_SIZE;
+    const pageRows = feedbackRows.slice(startIndex, startIndex + PAGE_SIZE);
+
+    const rowsHtml = pageRows.map((row) => `
+        <article class="feedback-admin-card">
+            <div class="feedback-admin-meta">
+                <span class="feedback-admin-badge">Ẩn danh</span>
+                <span>${AppUtils.formatDateTime(row.created_at)}</span>
+            </div>
+            <p class="feedback-admin-text">${escapeHtml(row.message || '')}</p>
+        </article>
+    `).join('');
+
+    container.innerHTML = rowsHtml + renderPaginationControls('feedbackCurrentPage', feedbackCurrentPage, totalPages, 'renderFeedbackList');
+}
+
 function openCustomerOrderModal(encodedName) {
     const customerName = decodeURIComponent(encodedName || '');
     if (!customerName) return;
@@ -711,7 +826,7 @@ function openCustomerOrderModal(encodedName) {
                 let promoHtml = '';
                 if (row.promos && row.promos.length > 0) {
                     promoHtml = row.promos.map(p =>
-                        `<div class="promo-detail-note">🎫 Mã <strong>${p.promo_code}</strong>: giảm ${p.discount_percent}% · ${p.quantity} xuất × ${AppUtils.formatCurrency(p.finalPrice)}/xuất</div>`
+                        `<div class="promo-detail-note">🎫 Mã <strong>${escapeHtml(p.promo_code)}</strong>: giảm ${p.discount_percent}% · ${p.quantity} xuất × ${AppUtils.formatCurrency(p.finalPrice)}/xuất</div>`
                     ).join('');
                 }
                 return `
@@ -888,7 +1003,7 @@ function getMenuDisplay(menu) {
 function showMessage(elementId, message, type) {
     const element = document.getElementById(elementId);
     const className = type === 'error' ? 'error-message' : 'success-message';
-    element.innerHTML = `<div class="${className}">${message}</div>`;
+    element.innerHTML = `<div class="${className}">${escapeHtml(message)}</div>`;
 }
 
 async function deleteOrder(orderId, date, skipConfirm = false) {
@@ -966,9 +1081,9 @@ function loadPromoCodes() {
                 return `
                     <div class="admin-payment-row ${isUsed ? 'promo-used' : ''}">
                         <div>
-                            <div class="order-name" style="font-family:monospace; letter-spacing:1px;">${c.code}</div>
+                            <div class="order-name" style="font-family:monospace; letter-spacing:1px;">${escapeHtml(c.code)}</div>
                             <div class="admin-payment-meta">Giảm <strong>${c.discount_percent}%</strong> · Tạo: ${AppUtils.formatDateTime(c.created_at)}</div>
-                            <span class="payment-status-badge ${statusCls}">${statusLabel}</span>
+                            <span class="payment-status-badge ${statusCls}">${escapeHtml(statusLabel)}</span>
                             ${isUsed ? `<div class="admin-payment-meta">Dùng lúc: ${AppUtils.formatDateTime(c.used_at)}</div>` : ''}
                         </div>
                         <div class="admin-payment-actions">
@@ -1045,8 +1160,8 @@ function loadUsers() {
                 return `
                     <div class="admin-payment-row">
                         <div>
-                            <div class="order-name">${u.name} ${roleBadge}</div>
-                            <div class="admin-payment-meta">SĐT: ${u.phone} · Tạo: ${AppUtils.formatDateTime(u.created_at)}</div>
+                            <div class="order-name">${escapeHtml(u.name)} ${roleBadge}</div>
+                            <div class="admin-payment-meta">SĐT: ${escapeHtml(u.phone)} · Tạo: ${AppUtils.formatDateTime(u.created_at)}</div>
                         </div>
                         <div class="admin-payment-actions">
                             <button class="btn-warning btn-small" onclick="resetUserPassword(${u.id}, '${encodeURIComponent(u.name)}')">Đổi MK</button>

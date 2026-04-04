@@ -1075,6 +1075,53 @@ tr:hover {
 .customer-history-order-row.row-partial  { border-left-color: #e0a75a; }
 .customer-history-order-row.row-unpaid   { border-left-color: var(--tertiary); }
 
+/* ===== Feedback Admin ===== */
+.feedback-admin-card {
+    background: var(--surface-container-lowest);
+    border-radius: var(--radius-xl);
+    padding: 16px 18px;
+    margin-bottom: 10px;
+    box-shadow: 0 4px 16px var(--shadow-warm);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.feedback-admin-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 24px var(--shadow-warm-md);
+}
+
+.feedback-admin-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+    color: var(--on-surface-variant);
+    font-size: 0.75rem;
+}
+
+.feedback-admin-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 5px 12px;
+    border-radius: var(--radius-full);
+    background: var(--primary-fixed);
+    color: var(--primary);
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    font-size: 0.68rem;
+}
+
+.feedback-admin-text {
+    color: var(--on-surface);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    line-height: 1.65;
+    font-size: 0.95rem;
+}
+
 /* ===== Menu Management Panel ===== */
 .menu-management-panel {
     background: var(--surface-container-low);
@@ -1221,6 +1268,11 @@ tr:hover {
     .payment-toolbar {
         flex-direction: column;
         gap: 8px;
+    }
+
+    .feedback-admin-meta {
+        flex-direction: column;
+        align-items: flex-start;
     }
 
     .payment-toolbar input,

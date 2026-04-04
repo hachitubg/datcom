@@ -38,6 +38,10 @@
                 <span class="tab-icon">⚙️</span>
                 <span class="tab-label">CÀI ĐẶT</span>
             </button>
+            <button class="tab-btn" onclick="switchTab('feedback', event)">
+                <span class="tab-icon">✍️</span>
+                <span class="tab-label">GÓP Ý</span>
+            </button>
         </div>
 
         <!-- Tab Quản lý hôm nay -->
@@ -154,6 +158,7 @@
                             </div>
                         </div>
                     </div>
+                    <div id="adminDebtSummaryMeta" class="filter-summary"></div>
                     <div id="adminDebtSummaryList" class="loading">Đang tải...</div>
                 </div>
 
@@ -215,6 +220,7 @@
                             </div>
                         </div>
                     </div>
+                    <div id="adminPaymentSummaryMeta" class="filter-summary"></div>
                 </div>
                 <div id="adminPaymentList" class="loading" style="display:none;">Đang tải...</div>
             </div>
@@ -351,6 +357,28 @@
                 <div class="button-group" style="margin-top:20px;">
                     <button class="btn-primary" onclick="saveSettings()">LƯU CÀI ĐẶT</button>
                 </div>
+            </div>
+        </div>
+
+        <div id="feedback" class="tab-content">
+            <div class="section">
+                <div class="filter-card">
+                    <div class="filter-row">
+                        <div class="filter-field filter-field--grow">
+                            <label for="feedbackSearchInput">Tìm trong góp ý</label>
+                            <div class="search-input-wrap">
+                                <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                                <input type="text" id="feedbackSearchInput" placeholder="Nhập từ khóa trong góp ý..." onkeydown="onFeedbackSearchKeyDown(event)">
+                            </div>
+                        </div>
+                        <div class="filter-actions">
+                            <button class="btn-primary btn-filter" type="button" onclick="loadFeedbackList()">LỌC</button>
+                        </div>
+                    </div>
+                    <div id="feedbackSummaryInfo" class="filter-summary"></div>
+                </div>
+
+                <div id="feedbackList" class="loading">Đang tải...</div>
             </div>
         </div>
     </div>

@@ -178,6 +178,10 @@
                 <span class="btn-icon">💳</span>
                 <span>THANH TOÁN</span>
             </button>
+            <button class="btn-action" id="btnFeedback">
+                <span class="btn-icon">✍️</span>
+                <span>GÓP Ý</span>
+            </button>
         </div>
     </main>
 
@@ -194,6 +198,10 @@
         <button class="mobile-btn" id="mobileBtnPayment">
             <span class="mobile-btn-icon">💳</span>
             <span class="mobile-btn-text">Thanh toán</span>
+        </button>
+        <button class="mobile-btn" id="mobileBtnFeedback">
+            <span class="mobile-btn-icon">✍️</span>
+            <span class="mobile-btn-text">Góp ý</span>
         </button>
     </nav>
 
@@ -322,6 +330,36 @@
                     </div>
                 </div>
                 <div id="paymentHistoryList" class="orders-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="feedbackModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Góp ý ẩn danh</h2>
+                <button type="button" class="modal-close" id="closeFeedback">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="feedback-intro-card">
+                    <span class="feedback-intro-label">Ẩn danh mặc định</span>
+                    <p>Mọi góp ý ở đây đều không cần tên hay đăng nhập. Bạn chỉ cần viết điều muốn nhắn để bên mình cải thiện dịch vụ.</p>
+                </div>
+                <div id="feedbackMessage"></div>
+                <form id="feedbackForm">
+                    <div class="form-group">
+                        <label for="feedbackContent">Nội dung góp ý</label>
+                        <textarea id="feedbackContent" maxlength="2000" placeholder="Ví dụ: Cơm hôm nay rất ổn, nhưng phần canh hơi mặn. Nếu được mong thêm lựa chọn ít cơm cho người ăn ít."></textarea>
+                    </div>
+                    <div class="feedback-meta-row">
+                        <span class="feedback-anonymous-note">Gửi với tư cách ẩn danh</span>
+                        <span class="feedback-counter" id="feedbackCounter">0 / 2000</span>
+                    </div>
+                    <div class="form-buttons">
+                        <button type="submit" class="btn-submit">GỬI GÓP Ý</button>
+                        <button type="button" class="btn-cancel" id="cancelFeedback">HỦY</button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
