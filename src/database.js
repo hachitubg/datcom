@@ -134,6 +134,7 @@ class Database {
       this.db.run("ALTER TABLE orders ADD COLUMN discount_percent INTEGER DEFAULT 0", () => {});
       this.db.run("ALTER TABLE orders ADD COLUMN promo_code TEXT", () => {});
       this.db.run("ALTER TABLE orders ADD COLUMN user_id INTEGER", () => {});
+      this.db.run("ALTER TABLE users ADD COLUMN session_version INTEGER DEFAULT 1", () => {});
 
       // Tạo record cho hôm nay nếu chưa có
       this.ensureTodayRecord();
@@ -228,7 +229,6 @@ class Database {
   }
 
   addOrder(name, quantity, description, promoCode, userId, callback) {
-    // Hỗ trợ gọi kiểu cũ: addOrder(name, qty, desc, callback)
     if (typeof promoCode === 'function') {
       callback = promoCode;
       promoCode = null;
@@ -238,87 +238,159 @@ class Database {
       userId = null;
     }
 
-    this.getTodayInfo((err, dayInfo) => {
-      if (err) {
-        callback(err);
-        return;
-      }
+    const normalizedQuantity = Number(quantity || 0);
+    const normalizedDescription = String(description || '').trim();
+    const normalizedPromoCode = String(promoCode || '').trim().toUpperCase();
+    const finalUserId = userId || null;
+    const today = this.getDateString();
+    const dbConn = this.db;
+    let finished = false;
 
-      if (dayInfo.remaining < quantity) {
-        callback(new Error('Không đủ số lượng xuất còn lại'));
-        return;
-      }
+    const done = (err, result) => {
+      if (finished) return;
+      finished = true;
+      callback(err, result);
+    };
 
-      const insertOrder = (discountPercent, codeUsed) => {
-        this.db.run(
-          `INSERT INTO orders (day_id, name, quantity, description, discount_percent, promo_code, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [dayInfo.id, name, quantity, description, discountPercent || 0, codeUsed || null, userId || null],
-          function(insertErr) {
-            if (insertErr) {
-              callback(insertErr);
+    const rollback = (err) => {
+      dbConn.run(`ROLLBACK`, () => done(err));
+    };
+
+    const commit = (result) => {
+      dbConn.run(`COMMIT`, (commitErr) => {
+        if (commitErr) {
+          rollback(commitErr);
+          return;
+        }
+        done(null, result);
+      });
+    };
+
+    dbConn.serialize(() => {
+      dbConn.run(`BEGIN IMMEDIATE TRANSACTION`, (beginErr) => {
+        if (beginErr) {
+          done(beginErr);
+          return;
+        }
+
+        dbConn.run(
+          `INSERT OR IGNORE INTO days (date, menu, quantity, price) VALUES (?, ?, ?, ?)`,
+          [today, 'Com chien tom', 40, 40000],
+          (ensureErr) => {
+            if (ensureErr) {
+              rollback(ensureErr);
               return;
             }
-            const orderId = this.lastID;
 
-            // Đánh dấu mã đã dùng
-            if (codeUsed && orderId) {
-              // Không cần callback vì order đã tạo thành công
-              // nếu update promo fail thì order vẫn OK
-            }
+            dbConn.get(
+              `SELECT id, quantity FROM days WHERE date = ?`,
+              [today],
+              (dayErr, dayInfo) => {
+                if (dayErr) {
+                  rollback(dayErr);
+                  return;
+                }
 
-            callback(null, {
-              id: orderId,
-              name,
-              quantity,
-              description,
-              discount_percent: discountPercent || 0,
-              promo_code: codeUsed || null
-            });
-          }
-        );
-      };
+                if (!dayInfo) {
+                  rollback(new Error('Khong tim thay thong tin ngay hien tai'));
+                  return;
+                }
 
-      if (promoCode) {
-        const code = String(promoCode).trim().toUpperCase();
-        this.db.get(
-          `SELECT id, discount_percent FROM promo_codes WHERE UPPER(code) = ? AND used_by IS NULL`,
-          [code],
-          (promoErr, promo) => {
-            if (promoErr) { callback(promoErr); return; }
-            if (!promo) {
-              callback(new Error('Mã khuyến mãi không hợp lệ hoặc đã được sử dụng'));
-              return;
-            }
-            // Insert order rồi mark promo
-            this.db.run(
-              `INSERT INTO orders (day_id, name, quantity, description, discount_percent, promo_code, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-              [dayInfo.id, name, quantity, description, promo.discount_percent, code, userId || null],
-              function(insertErr) {
-                if (insertErr) { callback(insertErr); return; }
-                const orderId = this.lastID;
-                // Mark promo as used - dùng this của outer scope
-                // nhưng this ở đây là Statement, dùng biến bên ngoài
-                callback(null, {
-                  id: orderId,
-                  name,
-                  quantity,
-                  description,
-                  discount_percent: promo.discount_percent,
-                  promo_code: code
-                });
+                dbConn.get(
+                  `SELECT COALESCE(SUM(quantity), 0) AS ordered FROM orders WHERE day_id = ?`,
+                  [dayInfo.id],
+                  (sumErr, orderRow) => {
+                    if (sumErr) {
+                      rollback(sumErr);
+                      return;
+                    }
+
+                    if (!Number.isFinite(normalizedQuantity) || normalizedQuantity <= 0) {
+                      rollback(new Error('So luong dat khong hop le'));
+                      return;
+                    }
+
+                    const remaining = Number(dayInfo.quantity || 0) - Number(orderRow?.ordered || 0);
+                    if (remaining < normalizedQuantity) {
+                      rollback(new Error('Khong du so luong suat con lai'));
+                      return;
+                    }
+
+                    const insertOrder = (discountPercent, codeUsed, promoId) => {
+                      dbConn.run(
+                        `INSERT INTO orders (day_id, name, quantity, description, discount_percent, promo_code, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                        [dayInfo.id, name, normalizedQuantity, normalizedDescription, discountPercent || 0, codeUsed || null, finalUserId],
+                        function(insertErr) {
+                          if (insertErr) {
+                            rollback(insertErr);
+                            return;
+                          }
+
+                          const orderId = this.lastID;
+                          const result = {
+                            id: orderId,
+                            name,
+                            quantity: normalizedQuantity,
+                            description: normalizedDescription,
+                            discount_percent: discountPercent || 0,
+                            promo_code: codeUsed || null
+                          };
+
+                          if (!promoId) {
+                            commit(result);
+                            return;
+                          }
+
+                          dbConn.run(
+                            `UPDATE promo_codes SET used_by = ?, used_at = CURRENT_TIMESTAMP, order_id = ? WHERE id = ? AND used_by IS NULL`,
+                            [name, orderId, promoId],
+                            function(updateErr) {
+                              if (updateErr) {
+                                rollback(updateErr);
+                                return;
+                              }
+
+                              if ((this.changes || 0) !== 1) {
+                                rollback(new Error('Ma khuyen mai khong hop le hoac da duoc su dung'));
+                                return;
+                              }
+
+                              commit(result);
+                            }
+                          );
+                        }
+                      );
+                    };
+
+                    if (!normalizedPromoCode) {
+                      insertOrder(0, null, null);
+                      return;
+                    }
+
+                    dbConn.get(
+                      `SELECT id, discount_percent FROM promo_codes WHERE UPPER(code) = ? AND used_by IS NULL`,
+                      [normalizedPromoCode],
+                      (promoErr, promo) => {
+                        if (promoErr) {
+                          rollback(promoErr);
+                          return;
+                        }
+
+                        if (!promo) {
+                          rollback(new Error('Ma khuyen mai khong hop le hoac da duoc su dung'));
+                          return;
+                        }
+
+                        insertOrder(Number(promo.discount_percent || 0), normalizedPromoCode, promo.id);
+                      }
+                    );
+                  }
+                );
               }
             );
-            // Mark promo used sau khi insert thành công
-            // Dùng serialize để đảm bảo thứ tự
-            this.db.run(
-              `UPDATE promo_codes SET used_by = ?, used_at = CURRENT_TIMESTAMP, order_id = (SELECT MAX(id) FROM orders WHERE promo_code = ? AND name = ?) WHERE id = ?`,
-              [name, code, name, promo.id]
-            );
           }
         );
-      } else {
-        insertOrder(0, null);
-      }
+      });
     });
   }
 
@@ -911,58 +983,164 @@ class Database {
     );
   }
 
+  getLatestPendingPaymentRequest(customerName, callback) {
+    const normalizedName = String(customerName || '').trim();
+    if (!normalizedName) {
+      callback(null, null);
+      return;
+    }
+
+    this.db.get(
+      `SELECT id, day_id, customer_name, order_code, amount, payment_link_id, checkout_url, qr_code, status, created_at, updated_at
+       FROM payment_requests
+       WHERE LOWER(customer_name) = LOWER(?) AND status = 'PENDING'
+       ORDER BY created_at DESC, id DESC
+       LIMIT 1`,
+      [normalizedName],
+      callback
+    );
+  }
+
+  supersedePendingPaymentRequests(customerName, keepOrderCode, callback) {
+    const normalizedName = String(customerName || '').trim();
+    const normalizedOrderCode = Number(keepOrderCode || 0);
+    this.db.run(
+      `UPDATE payment_requests
+       SET status = 'SUPERSEDED', updated_at = CURRENT_TIMESTAMP
+       WHERE LOWER(customer_name) = LOWER(?) AND status = 'PENDING' AND order_code != ?`,
+      [normalizedName, normalizedOrderCode],
+      callback
+    );
+  }
+
   markPaymentPaid(orderCode, paymentData, callback) {
     const normalizedOrderCode = Number(orderCode);
-    this.db.get(
-      `SELECT id, day_id, customer_name FROM payment_requests WHERE order_code = ?`,
-      [normalizedOrderCode],
-      (err, requestRow) => {
-        if (err) {
-          callback(err);
+    const dbConn = this.db;
+    let finished = false;
+
+    const done = (err) => {
+      if (finished) return;
+      finished = true;
+      callback(err);
+    };
+
+    const rollback = (err) => {
+      dbConn.run(`ROLLBACK`, () => done(err));
+    };
+
+    dbConn.serialize(() => {
+      dbConn.run(`BEGIN IMMEDIATE TRANSACTION`, (beginErr) => {
+        if (beginErr) {
+          done(beginErr);
           return;
         }
 
-        if (!requestRow) {
-          callback(new Error('Không tìm thấy yêu cầu thanh toán tương ứng'));
-          return;
-        }
-
-        const amount = Number(paymentData.amount || 0);
-        const status = 'PAID';
-        const reference = paymentData.reference || paymentData.code || paymentData.paymentLinkId || '';
-        const transactionDate = paymentData.transactionDateTime || paymentData.transactionDate || '';
-
-        this.db.run(
-          `INSERT OR IGNORE INTO payment_transactions
-            (day_id, customer_name, order_code, amount, status, reference, transaction_date, raw_payload)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            requestRow.day_id,
-            requestRow.customer_name,
-            normalizedOrderCode,
-            amount,
-            status,
-            reference,
-            transactionDate,
-            JSON.stringify(paymentData)
-          ],
-          (insertErr) => {
-            if (insertErr) {
-              callback(insertErr);
+        dbConn.get(
+          `SELECT id, day_id, customer_name FROM payment_requests WHERE order_code = ?`,
+          [normalizedOrderCode],
+          (err, requestRow) => {
+            if (err) {
+              rollback(err);
               return;
             }
 
-            this.db.run(
-              `UPDATE payment_requests
-               SET status = 'PAID', updated_at = CURRENT_TIMESTAMP
-               WHERE order_code = ?`,
-              [normalizedOrderCode],
-              callback
+            if (!requestRow) {
+              rollback(new Error('Khong tim thay yeu cau thanh toan tuong ung'));
+              return;
+            }
+
+            dbConn.get(
+              `SELECT COALESCE(SUM(o.quantity * d.price * (100 - COALESCE(o.discount_percent, 0)) / 100), 0) AS total_amount
+               FROM orders o
+               JOIN days d ON o.day_id = d.id
+               WHERE LOWER(o.name) = LOWER(?)`,
+              [requestRow.customer_name],
+              (totalErr, totalRow) => {
+                if (totalErr) {
+                  rollback(totalErr);
+                  return;
+                }
+
+                dbConn.get(
+                  `SELECT COALESCE(SUM(amount), 0) AS paid_amount
+                   FROM payment_transactions
+                   WHERE status = 'PAID' AND LOWER(customer_name) = LOWER(?)`,
+                  [requestRow.customer_name],
+                  (paidErr, paidRow) => {
+                    if (paidErr) {
+                      rollback(paidErr);
+                      return;
+                    }
+
+                    const totalAmount = Number(totalRow?.total_amount || 0);
+                    const paidAmount = Number(paidRow?.paid_amount || 0);
+                    const remainingDebt = Math.max(0, totalAmount - paidAmount);
+                    const incomingAmount = Number(paymentData.amount || 0);
+                    const appliedAmount = Math.max(0, Math.min(incomingAmount, remainingDebt));
+                    const reference = paymentData.reference || paymentData.code || paymentData.paymentLinkId || '';
+                    const transactionDate = paymentData.transactionDateTime || paymentData.transactionDate || '';
+                    const rawPayload = JSON.stringify({
+                      ...paymentData,
+                      incomingAmount,
+                      appliedAmount
+                    });
+
+                    const finishUpdate = () => {
+                      dbConn.run(
+                        `UPDATE payment_requests SET status = 'PAID', updated_at = CURRENT_TIMESTAMP WHERE order_code = ?`,
+                        [normalizedOrderCode],
+                        (updateErr) => {
+                          if (updateErr) {
+                            rollback(updateErr);
+                            return;
+                          }
+
+                          dbConn.run(`COMMIT`, (commitErr) => {
+                            if (commitErr) {
+                              rollback(commitErr);
+                              return;
+                            }
+                            done(null);
+                          });
+                        }
+                      );
+                    };
+
+                    if (appliedAmount <= 0) {
+                      finishUpdate();
+                      return;
+                    }
+
+                    dbConn.run(
+                      `INSERT OR IGNORE INTO payment_transactions
+                        (day_id, customer_name, order_code, amount, status, reference, transaction_date, raw_payload)
+                       VALUES (?, ?, ?, ?, 'PAID', ?, ?, ?)`,
+                      [
+                        requestRow.day_id,
+                        requestRow.customer_name,
+                        normalizedOrderCode,
+                        appliedAmount,
+                        reference,
+                        transactionDate,
+                        rawPayload
+                      ],
+                      (insertErr) => {
+                        if (insertErr) {
+                          rollback(insertErr);
+                          return;
+                        }
+
+                        finishUpdate();
+                      }
+                    );
+                  }
+                );
+              }
             );
           }
         );
-      }
-    );
+      });
+    });
   }
 
 
@@ -1006,62 +1184,139 @@ class Database {
 
   markCustomerCashPaid(customerName, amount, callback) {
     const normalizedName = (customerName || '').trim().replace(/\s+/g, ' ');
-    const normalizedAmount = Number(amount || 0);
+    const requestedAmount = Number(amount || 0);
+    const dbConn = this.db;
+    let finished = false;
 
     if (!normalizedName) {
-      callback(new Error('Tên khách hàng không hợp lệ'));
+      callback(new Error('Ten khach hang khong hop le'));
       return;
     }
 
-    if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
-      callback(new Error('Số tiền thanh toán không hợp lệ'));
+    if (!Number.isFinite(requestedAmount) || requestedAmount <= 0) {
+      callback(new Error('So tien thanh toan khong hop le'));
       return;
     }
 
-    this.db.get(
-      `SELECT MAX(d.id) AS latest_day_id, MIN(o.name) AS db_name
-       FROM orders o
-       JOIN days d ON o.day_id = d.id
-       WHERE LOWER(o.name) = LOWER(?)`,
-      [normalizedName],
-      (dayErr, dayRow) => {
-        if (dayErr) {
-          callback(dayErr);
+    const done = (err) => {
+      if (finished) return;
+      finished = true;
+      callback(err);
+    };
+
+    const rollback = (err) => {
+      dbConn.run(`ROLLBACK`, () => done(err));
+    };
+
+    dbConn.serialize(() => {
+      dbConn.run(`BEGIN IMMEDIATE TRANSACTION`, (beginErr) => {
+        if (beginErr) {
+          done(beginErr);
           return;
         }
 
-        if (!dayRow || !dayRow.latest_day_id) {
-          callback(new Error('Không tìm thấy đơn đặt cơm của khách này'));
-          return;
-        }
+        dbConn.get(
+          `SELECT MAX(d.id) AS latest_day_id, MIN(o.name) AS db_name
+           FROM orders o
+           JOIN days d ON o.day_id = d.id
+           WHERE LOWER(o.name) = LOWER(?)`,
+          [normalizedName],
+          (dayErr, dayRow) => {
+            if (dayErr) {
+              rollback(dayErr);
+              return;
+            }
 
-        const orderCode = Number(`${Date.now().toString().slice(-10)}${Math.floor(Math.random() * 90 + 10)}`);
-        const finalName = (dayRow.db_name || normalizedName).trim();
-        const now = new Date().toISOString();
-        const payload = {
-          source: 'admin_cash_manual',
-          note: 'Manual cash payment from admin panel'
-        };
+            if (!dayRow || !dayRow.latest_day_id) {
+              rollback(new Error('Khong tim thay don dat com cua khach nay'));
+              return;
+            }
 
-        this.db.run(
-          `INSERT INTO payment_requests
-            (day_id, customer_name, order_code, amount, payment_link_id, checkout_url, qr_code, status, created_at, updated_at)
-           VALUES (?, ?, ?, ?, NULL, NULL, NULL, 'PAID', ?, ?)`,
-          [Number(dayRow.latest_day_id), finalName, orderCode, normalizedAmount, now, now],
-          (reqErr) => {
-            if (reqErr) { callback(reqErr); return; }
+            const finalName = (dayRow.db_name || normalizedName).trim();
 
-            this.db.run(
-              `INSERT INTO payment_transactions
-                (day_id, customer_name, order_code, amount, status, reference, transaction_date, raw_payload)
-               VALUES (?, ?, ?, ?, 'PAID', 'CASH-MANUAL', ?, ?)`,
-              [Number(dayRow.latest_day_id), finalName, orderCode, normalizedAmount, now, JSON.stringify(payload)],
-              callback
+            dbConn.get(
+              `SELECT COALESCE(SUM(o.quantity * d.price * (100 - COALESCE(o.discount_percent, 0)) / 100), 0) AS total_amount
+               FROM orders o
+               JOIN days d ON o.day_id = d.id
+               WHERE LOWER(o.name) = LOWER(?)`,
+              [finalName],
+              (totalErr, totalRow) => {
+                if (totalErr) {
+                  rollback(totalErr);
+                  return;
+                }
+
+                dbConn.get(
+                  `SELECT COALESCE(SUM(amount), 0) AS paid_amount
+                   FROM payment_transactions
+                   WHERE LOWER(customer_name) = LOWER(?) AND status = 'PAID'`,
+                  [finalName],
+                  (paidErr, paidRow) => {
+                    if (paidErr) {
+                      rollback(paidErr);
+                      return;
+                    }
+
+                    const remainingAmount = Math.max(0, Number(totalRow?.total_amount || 0) - Number(paidRow?.paid_amount || 0));
+                    if (remainingAmount <= 0) {
+                      rollback(new Error('Khach nay khong con cong no de cap nhat'));
+                      return;
+                    }
+
+                    if (requestedAmount > remainingAmount) {
+                      rollback(new Error(`So tien vuot qua cong no con lai (${remainingAmount})`));
+                      return;
+                    }
+
+                    const orderCode = Number(`${Date.now().toString().slice(-10)}${Math.floor(Math.random() * 90 + 10)}`);
+                    const now = new Date().toISOString();
+                    const payload = {
+                      source: 'admin_cash_manual',
+                      note: 'Manual cash payment from admin panel',
+                      appliedAmount: requestedAmount
+                    };
+
+                    dbConn.run(
+                      `INSERT INTO payment_requests
+                        (day_id, customer_name, order_code, amount, payment_link_id, checkout_url, qr_code, status, created_at, updated_at)
+                       VALUES (?, ?, ?, ?, NULL, NULL, NULL, 'PAID', ?, ?)`,
+                      [Number(dayRow.latest_day_id), finalName, orderCode, requestedAmount, now, now],
+                      (reqErr) => {
+                        if (reqErr) {
+                          rollback(reqErr);
+                          return;
+                        }
+
+                        dbConn.run(
+                          `INSERT INTO payment_transactions
+                            (day_id, customer_name, order_code, amount, status, reference, transaction_date, raw_payload)
+                           VALUES (?, ?, ?, ?, 'PAID', 'CASH-MANUAL', ?, ?)`,
+                          [Number(dayRow.latest_day_id), finalName, orderCode, requestedAmount, now, JSON.stringify(payload)],
+                          (txErr) => {
+                            if (txErr) {
+                              rollback(txErr);
+                              return;
+                            }
+
+                            dbConn.run(`COMMIT`, (commitErr) => {
+                              if (commitErr) {
+                                rollback(commitErr);
+                                return;
+                              }
+                              done(null);
+                            });
+                          }
+                        );
+                      }
+                    );
+                  }
+                );
+              }
             );
           }
         );
-      }
-    );
+      });
+    });
   }
 
   markPaymentPaidManual(orderCode, callback) {
@@ -1549,15 +1804,23 @@ class Database {
 
   getUserByPhone(phone, callback) {
     this.db.get(
-      `SELECT id, phone, name, password_hash, salt, role, created_at FROM users WHERE phone = ?`,
+      `SELECT id, phone, name, password_hash, salt, role, created_at, COALESCE(session_version, 1) AS session_version FROM users WHERE phone = ?`,
       [phone],
+      callback
+    );
+  }
+
+  getUserById(id, callback) {
+    this.db.get(
+      `SELECT id, phone, name, password_hash, salt, role, created_at, COALESCE(session_version, 1) AS session_version FROM users WHERE id = ?`,
+      [id],
       callback
     );
   }
 
   getUsers(callback) {
     this.db.all(
-      `SELECT id, phone, name, role, created_at FROM users ORDER BY created_at DESC`,
+      `SELECT id, phone, name, role, created_at, COALESCE(session_version, 1) AS session_version FROM users ORDER BY created_at DESC`,
       callback
     );
   }
@@ -1584,7 +1847,7 @@ class Database {
 
   updateUserPassword(id, passwordHash, salt, callback) {
     this.db.run(
-      `UPDATE users SET password_hash = ?, salt = ? WHERE id = ?`,
+      `UPDATE users SET password_hash = ?, salt = ?, session_version = COALESCE(session_version, 1) + 1 WHERE id = ?`,
       [passwordHash, salt, id],
       callback
     );

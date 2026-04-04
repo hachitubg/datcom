@@ -26,6 +26,19 @@
     return currencyFormatter.format(value || 0);
   }
 
+  function escapeHtml(value) {
+    return String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function escapeAttribute(value) {
+    return escapeHtml(value).replace(/`/g, '&#96;');
+  }
+
   // SQLite lưu CURRENT_TIMESTAMP theo UTC (không có ký hiệu timezone).
   // PayOS có thể trả về chuỗi đã có timezone (+07:00 hoặc Z).
   // Hàm này xử lý cả hai trường hợp: nếu chưa có timezone thì coi là UTC rồi convert sang giờ địa phương.
@@ -49,24 +62,24 @@
         if (fields) {
           inputsHtml = fields.map((f, i) => {
             const tag = f.type === 'textarea'
-              ? `<textarea class="popup-textarea" id="popupField${i}" placeholder="${f.placeholder || ''}">${f.value || ''}</textarea>`
-              : `<input class="popup-input" id="popupField${i}" type="${f.inputType || 'text'}" value="${(f.value || '').replace(/"/g, '&quot;')}" placeholder="${f.placeholder || ''}">`;
-            return `<label class="popup-input-label">${f.label}</label>${tag}`;
+              ? `<textarea class="popup-textarea" id="popupField${i}" placeholder="${escapeAttribute(f.placeholder || '')}">${escapeHtml(f.value || '')}</textarea>`
+              : `<input class="popup-input" id="popupField${i}" type="${escapeAttribute(f.inputType || 'text')}" value="${escapeAttribute(f.value || '')}" placeholder="${escapeAttribute(f.placeholder || '')}">`;
+            return `<label class="popup-input-label">${escapeHtml(f.label || '')}</label>${tag}`;
           }).join('');
         } else {
-          inputsHtml = `<input class="popup-input" id="popupField0" type="text" value="${String(defaultValue).replace(/"/g, '&quot;')}">`;
+          inputsHtml = `<input class="popup-input" id="popupField0" type="text" value="${escapeAttribute(defaultValue)}">`;
         }
       }
 
       overlay.innerHTML = `
         <div class="popup-box">
           <div class="popup-body">
-            <div class="popup-message">${message}</div>
+            <div class="popup-message">${escapeHtml(message)}</div>
             ${inputsHtml}
           </div>
           <div class="popup-actions">
-            ${type !== 'alert' ? `<button class="popup-btn popup-btn-cancel" id="popupCancel">${cancelLabel}</button>` : ''}
-            <button class="popup-btn ${danger ? 'popup-btn-danger' : 'popup-btn-ok'}" id="popupOk">${confirmLabel}</button>
+            ${type !== 'alert' ? `<button class="popup-btn popup-btn-cancel" id="popupCancel">${escapeHtml(cancelLabel)}</button>` : ''}
+            <button class="popup-btn ${danger ? 'popup-btn-danger' : 'popup-btn-ok'}" id="popupOk">${escapeHtml(confirmLabel)}</button>
           </div>
         </div>
       `;
@@ -123,6 +136,8 @@
     fetchJson,
     formatCurrency,
     formatDateTime,
+    escapeHtml,
+    escapeAttribute,
     showPopup
   };
 }(window));

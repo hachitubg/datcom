@@ -4,6 +4,8 @@ const API_BASE = window.location.origin;
 // User Auth
 // =============================================
 let currentUser = null;
+const escapeHtml = AppUtils.escapeHtml;
+const escapeAttr = AppUtils.escapeAttribute;
 
 function checkUserAuth() {
     fetch(`${API_BASE}/api/auth/me`)
@@ -271,7 +273,7 @@ function loadCustomerNameSuggestions() {
             }
 
             datalist.innerHTML = names
-                .map(name => `<option value="${name}"></option>`)
+                .map(name => `<option value="${escapeAttr(name)}"></option>`)
                 .join('');
         })
         .catch(() => {
@@ -349,7 +351,7 @@ function loadPaymentList() {
             list.innerHTML = rows.map((row) => `
                 <div class="order-item payment-order-item">
                     <div class="order-info">
-                        <h4>${row.name} - ${row.quantity} xuất</h4>
+                        <h4>${escapeHtml(row.name)} - ${row.quantity} xuất</h4>
                         <p><strong>Tổng tiền:</strong> ${AppUtils.formatCurrency(row.totalAmount)}</p>
                     </div>
                     <div class="payment-action-group">
@@ -383,7 +385,7 @@ function openPaymentDetail(name) {
 
             let html = `
                 <div class="payment-detail-header">
-                    <strong>${data.name}</strong>
+                    <strong>${escapeHtml(data.name)}</strong>
                     <span>Tổng ${data.totalQuantity} xuất • ${AppUtils.formatCurrency(data.totalAmount)}</span>
                 </div>
                 <div class="payment-detail-list">
@@ -392,13 +394,13 @@ function openPaymentDetail(name) {
             rows.forEach((row, index) => {
                 const disc = Number(row.discount_percent || 0);
                 const discBadge = disc > 0 ? `<span class="discount-badge">-${disc}%</span>` : '';
-                const promoInfo = row.promo_code ? `<p class="promo-info-text">Mã KM: ${row.promo_code} (giảm ${disc}%)</p>` : '';
+                const promoInfo = row.promo_code ? `<p class="promo-info-text">Mã KM: ${escapeHtml(row.promo_code)} (giảm ${disc}%)</p>` : '';
                 html += `
                     <div class="order-item payment-detail-item ${disc > 0 ? 'order-item-discounted' : ''}">
                         <div class="order-info">
                             <h4>Đã đặt ${row.quantity} xuất vào ngày ${formatDateTime(row.createdAt)} ${discBadge}</h4>
                             <h4>Tổng tiền ${AppUtils.formatCurrency(row.amount)}</h4>
-                            ${row.description ? `<p><strong>Ghi chú:</strong> ${row.description}</p>` : ''}
+                            ${row.description ? `<p><strong>Ghi chú:</strong> ${escapeHtml(row.description)}</p>` : ''}
                             ${promoInfo}
                         </div>
                     </div>
@@ -599,7 +601,7 @@ function loadPaymentHistory() {
                 html += `
                     <div class="history-simple-item">
                         <div class="history-simple-top">
-                            <span class="history-simple-name">${row.customer_name}</span>
+                            <span class="history-simple-name">${escapeHtml(row.customer_name)}</span>
                             <span class="history-simple-status hss-${cls}">${label}</span>
                         </div>
                         <div class="history-simple-bottom">
@@ -808,7 +810,7 @@ function updateMenuDisplay(menuObj) {
         
         if (alternativesDiv) {
             alternativesDiv.innerHTML = altItems.map(item => 
-                `<span class="alt-item">${item}</span>`
+                `<span class="alt-item">${escapeHtml(item)}</span>`
             ).join('');
         }
     }
@@ -832,13 +834,13 @@ function loadOrders() {
                     return `
                         <div class="order-item ${disc > 0 ? 'order-item-discounted' : ''}">
                             <div class="order-info">
-                                <h4>${orders.length - index}. ${order.name} đã đặt ${order.quantity} xuất ${discBadge}</h4>
-                                ${order.description ? `<p><strong>Ghi chú:</strong> ${order.description}</p>` : ''}
+                                <h4>${orders.length - index}. ${escapeHtml(order.name)} đã đặt ${order.quantity} xuất ${discBadge}</h4>
+                                ${order.description ? `<p><strong>Ghi chú:</strong> ${escapeHtml(order.description)}</p>` : ''}
                                 <p class="order-time">${AppUtils.formatDateTime(order.created_at)}</p>
                                 ${isOwner ? `
                                     <div class="order-actions">
                                         ${canModify
-                                            ? `<button class="btn-edit-order" data-id="${order.id}" data-quantity="${order.quantity}" data-description="${(order.description || '').replace(/"/g, '&quot;')}">Sửa</button>`
+                                            ? `<button class="btn-edit-order" data-id="${order.id}" data-quantity="${order.quantity}" data-description="${escapeAttr(order.description || '')}">Sửa</button>`
                                             : `<button class="btn-edit-order" disabled title="Quá 30 phút, liên hệ admin để sửa">Sửa</button>`
                                         }
                                         ${canModify
@@ -897,7 +899,7 @@ document.getElementById('orderForm').addEventListener('submit', (e) => {
 function showOrderMessage(message, type) {
     const messageDiv = document.getElementById('orderMessage');
     const className = type === 'error' ? 'error-message' : 'success-message';
-    messageDiv.innerHTML = `<div class="${className}">${message}</div>`;
+    messageDiv.innerHTML = `<div class="${className}">${escapeHtml(message)}</div>`;
 }
 
 // Edit/Delete order handlers

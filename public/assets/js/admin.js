@@ -12,6 +12,8 @@ let paymentRows = [];
 let paymentCurrentPage = 1;
 let feedbackRows = [];
 let feedbackCurrentPage = 1;
+const escapeHtml = AppUtils.escapeHtml;
+const escapeAttr = AppUtils.escapeAttribute;
 
 function getLocalDateInputValue(date = new Date()) {
     const year = date.getFullYear();
@@ -50,7 +52,7 @@ function updateHistoryNameSuggestions() {
     if (!matches.length) { dropdown.style.display = 'none'; return; }
 
     dropdown.innerHTML = matches.slice(0, 12).map(name =>
-        `<div class="name-suggestion-item" onmousedown="selectHistoryName('${encodeURIComponent(name)}')">${name}</div>`
+        `<div class="name-suggestion-item" onmousedown="selectHistoryName('${encodeURIComponent(name)}')">${escapeHtml(name)}</div>`
     ).join('');
     dropdown.style.display = 'block';
 }
@@ -135,7 +137,7 @@ function openCustomerFullHistoryModal(customerName) {
                 let promoHtml = '';
                 if (row.promos && row.promos.length > 0) {
                     promoHtml = row.promos.map(p =>
-                        `<div class="promo-detail-note">🎫 Mã <strong>${p.promo_code}</strong>: giảm ${p.discount_percent}% · ${p.quantity} xuất × ${AppUtils.formatCurrency(p.finalPrice)}/xuất</div>`
+                        `<div class="promo-detail-note">🎫 Mã <strong>${escapeHtml(p.promo_code)}</strong>: giảm ${p.discount_percent}% · ${p.quantity} xuất × ${AppUtils.formatCurrency(p.finalPrice)}/xuất</div>`
                     ).join('');
                 }
                 return `
@@ -148,7 +150,7 @@ function openCustomerFullHistoryModal(customerName) {
                             ${promoHtml}
                         </div>
                         <div style="text-align:right; flex-shrink:0;">
-                            <span class="payment-status-badge ${cls}">${label}</span>
+                            <span class="payment-status-badge ${cls}">${escapeHtml(label)}</span>
                             <div style="font-weight:700; color:#A0826D; margin-top:6px; font-size:15px;">${AppUtils.formatCurrency(row.totalAmount)}</div>
                         </div>
                     </div>
@@ -393,12 +395,12 @@ function renderHistoryOrders() {
     const rowsHtml = pageRows.map((order) => {
         const disc = Number(order.discount_percent || 0);
         const discBadge = disc > 0 ? `<span class="discount-badge">-${disc}%</span>` : '';
-        const promoInfo = disc > 0 ? `<div class="admin-payment-meta promo-info-text">Mã KM: ${order.promo_code} — Giảm ${disc}%</div>` : '';
+        const promoInfo = disc > 0 ? `<div class="admin-payment-meta promo-info-text">Mã KM: ${escapeHtml(order.promo_code || '')} — Giảm ${disc}%</div>` : '';
         return `
         <div class="order-row ${disc > 0 ? 'order-row-discounted' : ''}">
             <div class="order-info">
-                <div class="order-name">${order.name} ${discBadge}</div>
-                <div class="order-details">Số lượng: ${order.quantity} xuất ${order.description ? '</br> Ghi chú: ' + order.description : ''}</div>
+                <div class="order-name">${escapeHtml(order.name)} ${discBadge}</div>
+                <div class="order-details">Số lượng: ${order.quantity} xuất ${order.description ? '</br> Ghi chú: ' + escapeHtml(order.description) : ''}</div>
                 ${promoInfo}
                 <div class="admin-payment-meta">Thời gian đặt: ${AppUtils.formatDateTime(order.created_at)}</div>
             </div>
@@ -590,7 +592,7 @@ function renderDebtSummary() {
         return `
             <div class="admin-payment-row">
                 <div>
-                    <div class="order-name payment-name-link" onclick="openCustomerOrderModal('${encodeURIComponent(row.name || '')}')">${row.name}</div>
+                    <div class="order-name payment-name-link" onclick="openCustomerOrderModal('${encodeURIComponent(row.name || '')}')">${escapeHtml(row.name)}</div>
                     <div class="admin-payment-meta">Số xuất: ${row.quantity} </br> Tổng tiền: ${AppUtils.formatCurrency(row.totalAmount || 0)}</div>
                 </div>
                 <div class="admin-payment-actions">
@@ -704,9 +706,9 @@ function renderPaymentHistory() {
         return `
             <div class="admin-payment-row">
                 <div>
-                    <div class="order-name" style="display:flex;align-items:center;gap:8px;">${row.customer_name} <span class="payment-status-badge ${cls}">${label}</span></div>
-                    <div class="admin-payment-meta">Ngày: ${row.date} | OrderCode: ${row.order_code}</div>
-                    <div class="admin-payment-meta">Số tiền: ${AppUtils.formatCurrency(amount)} | Đã thanh toán: ${AppUtils.formatCurrency(paidAmount)} | Ref: ${row.latest_reference || row.payment_link_id || '-'}</div>
+                    <div class="order-name" style="display:flex;align-items:center;gap:8px;">${escapeHtml(row.customer_name)} <span class="payment-status-badge ${cls}">${escapeHtml(label)}</span></div>
+                    <div class="admin-payment-meta">Ngày: ${escapeHtml(row.date)} | OrderCode: ${row.order_code}</div>
+                    <div class="admin-payment-meta">Số tiền: ${AppUtils.formatCurrency(amount)} | Đã thanh toán: ${AppUtils.formatCurrency(paidAmount)} | Ref: ${escapeHtml(row.latest_reference || row.payment_link_id || '-')}</div>
                     <div class="admin-payment-meta">Cập nhật: ${AppUtils.formatDateTime(paidAt)}</div>
                 </div>
                 <div class="admin-payment-actions">
@@ -802,15 +804,6 @@ function renderFeedbackList() {
     container.innerHTML = rowsHtml + renderPaginationControls('feedbackCurrentPage', feedbackCurrentPage, totalPages, 'renderFeedbackList');
 }
 
-function escapeHtml(value) {
-    return String(value || '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-}
-
 function openCustomerOrderModal(encodedName) {
     const customerName = decodeURIComponent(encodedName || '');
     if (!customerName) return;
@@ -833,7 +826,7 @@ function openCustomerOrderModal(encodedName) {
                 let promoHtml = '';
                 if (row.promos && row.promos.length > 0) {
                     promoHtml = row.promos.map(p =>
-                        `<div class="promo-detail-note">🎫 Mã <strong>${p.promo_code}</strong>: giảm ${p.discount_percent}% · ${p.quantity} xuất × ${AppUtils.formatCurrency(p.finalPrice)}/xuất</div>`
+                        `<div class="promo-detail-note">🎫 Mã <strong>${escapeHtml(p.promo_code)}</strong>: giảm ${p.discount_percent}% · ${p.quantity} xuất × ${AppUtils.formatCurrency(p.finalPrice)}/xuất</div>`
                     ).join('');
                 }
                 return `
@@ -1010,7 +1003,7 @@ function getMenuDisplay(menu) {
 function showMessage(elementId, message, type) {
     const element = document.getElementById(elementId);
     const className = type === 'error' ? 'error-message' : 'success-message';
-    element.innerHTML = `<div class="${className}">${message}</div>`;
+    element.innerHTML = `<div class="${className}">${escapeHtml(message)}</div>`;
 }
 
 async function deleteOrder(orderId, date, skipConfirm = false) {
@@ -1088,9 +1081,9 @@ function loadPromoCodes() {
                 return `
                     <div class="admin-payment-row ${isUsed ? 'promo-used' : ''}">
                         <div>
-                            <div class="order-name" style="font-family:monospace; letter-spacing:1px;">${c.code}</div>
+                            <div class="order-name" style="font-family:monospace; letter-spacing:1px;">${escapeHtml(c.code)}</div>
                             <div class="admin-payment-meta">Giảm <strong>${c.discount_percent}%</strong> · Tạo: ${AppUtils.formatDateTime(c.created_at)}</div>
-                            <span class="payment-status-badge ${statusCls}">${statusLabel}</span>
+                            <span class="payment-status-badge ${statusCls}">${escapeHtml(statusLabel)}</span>
                             ${isUsed ? `<div class="admin-payment-meta">Dùng lúc: ${AppUtils.formatDateTime(c.used_at)}</div>` : ''}
                         </div>
                         <div class="admin-payment-actions">
@@ -1167,8 +1160,8 @@ function loadUsers() {
                 return `
                     <div class="admin-payment-row">
                         <div>
-                            <div class="order-name">${u.name} ${roleBadge}</div>
-                            <div class="admin-payment-meta">SĐT: ${u.phone} · Tạo: ${AppUtils.formatDateTime(u.created_at)}</div>
+                            <div class="order-name">${escapeHtml(u.name)} ${roleBadge}</div>
+                            <div class="admin-payment-meta">SĐT: ${escapeHtml(u.phone)} · Tạo: ${AppUtils.formatDateTime(u.created_at)}</div>
                         </div>
                         <div class="admin-payment-actions">
                             <button class="btn-warning btn-small" onclick="resetUserPassword(${u.id}, '${encodeURIComponent(u.name)}')">Đổi MK</button>

@@ -65,11 +65,7 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use((req, res, next) => {
   if (req.path === '/admin.html') {
-    const token = getAdminSessionToken(req);
-    const session = parseSessionToken(token);
-    if (!session || session.role !== 'admin') {
-      return res.redirect('/admin-login');
-    }
+    return requireAdminPageAuth(req, res, next);
   }
   next();
 });
@@ -110,12 +106,19 @@ function clearSessionCookie(res, cookieName) {
   res.setHeader('Set-Cookie', `${cookieName}=; ${parts.join('; ')}`);
 }
 
-const SESSION_SECRET = String(
-  process.env.SESSION_SECRET ||
-  process.env.PAYOS_CHECKSUM_KEY ||
-  process.env.ADMIN_INITIAL_PASSWORD ||
-  'datcom-local-session-secret'
-).trim();
+const configuredSessionSecret = String(process.env.SESSION_SECRET || '').trim();
+const publicBaseUrl = String(process.env.PUBLIC_BASE_URL || '').trim().toLowerCase();
+const isLocalLikeEnv = !publicBaseUrl || publicBaseUrl.includes('localhost') || publicBaseUrl.includes('127.0.0.1');
+const isProduction = String(process.env.NODE_ENV || '').trim().toLowerCase() === 'production';
+const SESSION_SECRET = configuredSessionSecret || (!isProduction && isLocalLikeEnv ? 'datcom-dev-session-secret' : '');
+
+if (!SESSION_SECRET) {
+  throw new Error('SESSION_SECRET is required in production');
+}
+
+if (!configuredSessionSecret) {
+  console.warn('[Auth] SESSION_SECRET is missing. Using local development fallback secret.');
+}
 
 function toBase64Url(value) {
   return Buffer.from(value).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
@@ -128,18 +131,12 @@ function fromBase64Url(value) {
 }
 
 function signSessionPayload(encodedPayload) {
-  if (!SESSION_SECRET) {
-    return '';
-  }
   return crypto.createHmac('sha256', SESSION_SECRET).update(encodedPayload).digest('base64url');
 }
 
 function buildSessionToken(payload) {
   const encodedPayload = toBase64Url(JSON.stringify(payload));
   const signature = signSessionPayload(encodedPayload);
-  if (!signature) {
-    throw new Error('SESSION_SECRET hoặc PAYOS_CHECKSUM_KEY chưa được cấu hình');
-  }
   return `${encodedPayload}.${signature}`;
 }
 
@@ -161,11 +158,6 @@ function parseSessionToken(token) {
   }
 }
 
-function getUserSessionInfo(req) {
-  const cookies = parseCookies(req);
-  return parseSessionToken(cookies.user_session || '');
-}
-
 function parseCookies(req) {
   const cookieHeader = req.headers.cookie || '';
   const cookies = {};
@@ -182,24 +174,84 @@ function getAdminSessionToken(req) {
   return cookies.admin_session || '';
 }
 
-function requireAdminApiAuth(req, res, next) {
-  const token = getAdminSessionToken(req);
+function getUserSessionToken(req) {
+  const cookies = parseCookies(req);
+  return cookies.user_session || '';
+}
+
+function loadSessionUser(req, cookieName, expectedRole, callback) {
+  const token = cookieName === 'admin_session' ? getAdminSessionToken(req) : getUserSessionToken(req);
   const session = parseSessionToken(token);
-  if (!session || session.role !== 'admin') {
-    return res.status(401).json({ error: 'UNAUTHORIZED_ADMIN' });
+  if (!session || !session.id) {
+    callback(null, null);
+    return;
   }
-  req.adminSession = session;
-  next();
+
+  db.getUserById(session.id, (err, user) => {
+    if (err) {
+      callback(err);
+      return;
+    }
+
+    if (!user) {
+      callback(null, null);
+      return;
+    }
+
+    const sessionVersion = Number(user.session_version || 1);
+    if (Number(session.sv || 1) !== sessionVersion) {
+      callback(null, null);
+      return;
+    }
+
+    if (session.role !== user.role) {
+      callback(null, null);
+      return;
+    }
+
+    if (expectedRole && user.role !== expectedRole) {
+      callback(null, null);
+      return;
+    }
+
+    callback(null, {
+      id: user.id,
+      phone: user.phone,
+      name: user.name,
+      role: user.role,
+      sessionVersion
+    });
+  });
+}
+
+function getUserSessionInfo(req, callback) {
+  loadSessionUser(req, 'user_session', null, callback);
+}
+
+function requireAdminApiAuth(req, res, next) {
+  loadSessionUser(req, 'admin_session', 'admin', (err, adminUser) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    if (!adminUser) {
+      return res.status(401).json({ error: 'UNAUTHORIZED_ADMIN' });
+    }
+    req.adminSession = adminUser;
+    next();
+  });
 }
 
 function requireAdminPageAuth(req, res, next) {
-  const token = getAdminSessionToken(req);
-  const session = parseSessionToken(token);
-  if (!session || session.role !== 'admin') {
-    return res.redirect('/admin-login');
-  }
-  req.adminSession = session;
-  next();
+  loadSessionUser(req, 'admin_session', 'admin', (err, adminUser) => {
+    if (err) {
+      return res.redirect('/admin-login');
+    }
+    if (!adminUser) {
+      return res.redirect('/admin-login');
+    }
+    req.adminSession = adminUser;
+    next();
+  });
 }
 
 app.use('/api/admin', (req, res, next) => {
@@ -355,134 +407,137 @@ app.post('/api/orders', (req, res) => {
   const promoCode = (req.body.promoCode || '').trim() || null;
 
   if (!normalizedCustomerName || !quantity) {
-    return res.status(400).json({ error: 'Thiếu thông tin bắt buộc' });
+    return res.status(400).json({ error: 'Thieu thong tin bat buoc' });
   }
 
-  const user = getUserSessionInfo(req);
-  const userId = user ? user.id : null;
-
-  // Kiểm tra giới hạn nợ trước khi cho đặt
-  db.getSettings(['debt_limit_enabled', 'debt_limit_servings', 'debt_limit_message'], (settingsErr, settings) => {
-    if (settingsErr) {
-      return res.status(500).json({ error: settingsErr.message });
+  getUserSessionInfo(req, (userErr, user) => {
+    if (userErr) {
+      return res.status(500).json({ error: userErr.message });
     }
 
-    const debtEnabled = settings.debt_limit_enabled === '1';
-    const debtLimit = Number(settings.debt_limit_servings || 2);
-    const debtMessage = settings.debt_limit_message || 'Vui lòng thanh toán nợ cũ trước khi đặt cơm.';
+    const userId = user ? user.id : null;
 
-    const proceedWithOrder = () => {
-      db.addOrder(normalizedCustomerName, quantity, description || '', promoCode, userId, (err, order) => {
-        if (err) {
-          return res.status(400).json({ error: err.message });
-        }
+    db.getSettings(['debt_limit_enabled', 'debt_limit_servings', 'debt_limit_message'], (settingsErr, settings) => {
+      if (settingsErr) {
+        return res.status(500).json({ error: settingsErr.message });
+      }
 
-        // Sau khi đặt thành công, kiểm tra tặng mã KM liên tục
-        db.getSettings(['consecutive_promo_enabled', 'consecutive_promo_days', 'consecutive_promo_discount'], (cpErr, cpSettings) => {
-          if (cpErr || cpSettings.consecutive_promo_enabled !== '1') {
-            return res.json(order);
+      const debtEnabled = settings.debt_limit_enabled === '1';
+      const debtLimit = Number(settings.debt_limit_servings || 2);
+      const debtMessage = settings.debt_limit_message || 'Vui long thanh toan no cu truoc khi dat com.';
+
+      const proceedWithOrder = () => {
+        db.addOrder(normalizedCustomerName, quantity, description || '', promoCode, userId, (err, order) => {
+          if (err) {
+            return res.status(400).json({ error: err.message });
           }
 
-          const requiredDays = Number(cpSettings.consecutive_promo_days || 5);
-          const discount = Number(cpSettings.consecutive_promo_discount || 50);
-
-          db.getConsecutiveOrderDays(normalizedCustomerName, (daysErr, consecutiveDays) => {
-            if (daysErr || consecutiveDays < requiredDays) {
+          db.getSettings(['consecutive_promo_enabled', 'consecutive_promo_days', 'consecutive_promo_discount'], (cpErr, cpSettings) => {
+            if (cpErr || cpSettings.consecutive_promo_enabled !== '1') {
               return res.json(order);
             }
 
-            // Chỉ tặng nếu đúng mốc (chia hết cho requiredDays)
-            if (consecutiveDays % requiredDays !== 0) {
-              return res.json(order);
-            }
+            const requiredDays = Number(cpSettings.consecutive_promo_days || 5);
+            const discount = Number(cpSettings.consecutive_promo_discount || 50);
 
-            db.createAutoPromoCode(normalizedCustomerName, discount, (promoErr, promoInfo) => {
-              if (promoErr) {
+            db.getConsecutiveOrderDays(normalizedCustomerName, (daysErr, consecutiveDays) => {
+              if (daysErr || consecutiveDays < requiredDays) {
                 return res.json(order);
               }
-              res.json({
-                ...order,
-                bonus_promo: {
-                  code: promoInfo.code,
-                  discount: promoInfo.discountPercent,
-                  message: `Chúc mừng! Bạn đã đặt cơm ${consecutiveDays} ngày liên tục và được tặng mã giảm ${discount}%: ${promoInfo.code}`
+
+              if (consecutiveDays % requiredDays !== 0) {
+                return res.json(order);
+              }
+
+              db.createAutoPromoCode(normalizedCustomerName, discount, (promoErr, promoInfo) => {
+                if (promoErr) {
+                  return res.json(order);
                 }
+                res.json({
+                  ...order,
+                  bonus_promo: {
+                    code: promoInfo.code,
+                    discount: promoInfo.discountPercent,
+                    message: `Chuc mung! Ban da dat com ${consecutiveDays} ngay lien tuc va duoc tang ma giam ${discount}%: ${promoInfo.code}`
+                  }
+                });
               });
             });
           });
         });
+      };
+
+      if (!debtEnabled) {
+        return proceedWithOrder();
+      }
+
+      db.getCustomerUnpaidServings(normalizedCustomerName, (debtErr, debtInfo) => {
+        if (debtErr) {
+          return res.status(500).json({ error: debtErr.message });
+        }
+
+        if (debtInfo.unpaidServings >= debtLimit) {
+          return res.status(400).json({ error: debtMessage });
+        }
+
+        proceedWithOrder();
       });
-    };
-
-    if (!debtEnabled) {
-      return proceedWithOrder();
-    }
-
-    db.getCustomerUnpaidServings(normalizedCustomerName, (debtErr, debtInfo) => {
-      if (debtErr) {
-        return res.status(500).json({ error: debtErr.message });
-      }
-
-      if (debtInfo.unpaidServings >= debtLimit) {
-        return res.status(400).json({ error: debtMessage });
-      }
-
-      proceedWithOrder();
     });
   });
 });
 
-// Xóa đơn hàng (user tự xóa đơn của mình, trong 30 phút)
 app.delete('/api/orders/:orderId', (req, res) => {
-  const user = getUserSessionInfo(req);
-  if (!user) return res.status(401).json({ error: 'Vui lòng đăng nhập' });
+  getUserSessionInfo(req, (userErr, user) => {
+    if (userErr) return res.status(500).json({ error: userErr.message });
+    if (!user) return res.status(401).json({ error: 'Vui long dang nhap' });
 
-  const { orderId } = req.params;
-  db.getOrderById(orderId, (err, order) => {
-    if (err) return res.status(500).json({ error: err.message });
-    if (!order) return res.status(404).json({ error: 'Không tìm thấy đơn hàng' });
-    if (order.user_id !== user.id) return res.status(403).json({ error: 'Bạn không có quyền xóa đơn này' });
+    const { orderId } = req.params;
+    db.getOrderById(orderId, (err, order) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (!order) return res.status(404).json({ error: 'Khong tim thay don hang' });
+      if (order.user_id !== user.id) return res.status(403).json({ error: 'Ban khong co quyen xoa don nay' });
 
-    const createdAt = new Date(order.created_at + 'Z');
-    const now = new Date();
-    const diffMinutes = (now - createdAt) / 60000;
-    if (diffMinutes > 30) {
-      return res.status(400).json({ error: 'Đã quá 30 phút, vui lòng nhắn tin cho admin để xóa đơn.' });
-    }
+      const createdAt = new Date(order.created_at + 'Z');
+      const now = new Date();
+      const diffMinutes = (now - createdAt) / 60000;
+      if (diffMinutes > 30) {
+        return res.status(400).json({ error: 'Da qua 30 phut, vui long nhan tin cho admin de xoa don.' });
+      }
 
-    db.deleteOrder(orderId, (delErr) => {
-      if (delErr) return res.status(500).json({ error: delErr.message });
-      res.json({ success: true });
+      db.deleteOrder(orderId, (delErr) => {
+        if (delErr) return res.status(500).json({ error: delErr.message });
+        res.json({ success: true });
+      });
     });
   });
 });
 
-// Sửa đơn hàng (user tự sửa đơn của mình)
 app.put('/api/orders/:orderId', (req, res) => {
-  const user = getUserSessionInfo(req);
-  if (!user) return res.status(401).json({ error: 'Vui lòng đăng nhập' });
+  getUserSessionInfo(req, (userErr, user) => {
+    if (userErr) return res.status(500).json({ error: userErr.message });
+    if (!user) return res.status(401).json({ error: 'Vui long dang nhap' });
 
-  const { orderId } = req.params;
-  db.getOrderById(orderId, (err, order) => {
-    if (err) return res.status(500).json({ error: err.message });
-    if (!order) return res.status(404).json({ error: 'Không tìm thấy đơn hàng' });
-    if (order.user_id !== user.id) return res.status(403).json({ error: 'Bạn không có quyền sửa đơn này' });
+    const { orderId } = req.params;
+    db.getOrderById(orderId, (err, order) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (!order) return res.status(404).json({ error: 'Khong tim thay don hang' });
+      if (order.user_id !== user.id) return res.status(403).json({ error: 'Ban khong co quyen sua don nay' });
 
-    const quantity = Number(req.body.quantity || 0);
-    const description = (req.body.description || '').toString();
+      const quantity = Number(req.body.quantity || 0);
+      const description = (req.body.description || '').toString();
 
-    if (!Number.isFinite(quantity) || quantity <= 0) {
-      return res.status(400).json({ error: 'Số lượng không hợp lệ' });
-    }
+      if (!Number.isFinite(quantity) || quantity <= 0) {
+        return res.status(400).json({ error: 'So luong khong hop le' });
+      }
 
-    db.updateOrder(orderId, { name: order.name, quantity, description }, (updErr) => {
-      if (updErr) return res.status(500).json({ error: updErr.message });
-      res.json({ success: true });
+      db.updateOrder(orderId, { name: order.name, quantity, description }, (updErr) => {
+        if (updErr) return res.status(500).json({ error: updErr.message });
+        res.json({ success: true });
+      });
     });
   });
 });
 
-// Lấy danh sách tất cả ngày (cho admin)
 app.get('/api/admin/all-days', (req, res) => {
   console.log('📋 Request: Danh sách tất cả ngày');
   db.getAllDays((err, days) => {
@@ -711,6 +766,31 @@ app.post('/api/payments/create', async (req, res) => {
     }
 
     try {
+      const reusePending = await new Promise((resolve, reject) => {
+        db.getLatestPendingPaymentRequest(name, (pendingErr, pendingRow) => {
+          if (pendingErr) {
+            reject(pendingErr);
+            return;
+          }
+          resolve(pendingRow || null);
+        });
+      });
+
+      if (reusePending && Number(reusePending.amount || 0) === Number(paymentInfo.remainingAmount || 0) && reusePending.checkout_url) {
+        return res.json({
+          paid: false,
+          reused: true,
+          paymentInfo,
+          payos: {
+            orderCode: Number(reusePending.order_code),
+            amount: Number(reusePending.amount || 0),
+            checkoutUrl: reusePending.checkout_url,
+            qrCode: reusePending.qr_code || '',
+            paymentLinkId: reusePending.payment_link_id || ''
+          }
+        });
+      }
+
       const orderCode = buildOrderCode();
       const baseUrl = getPublicBaseUrl(req);
       const payload = {
@@ -739,16 +819,18 @@ app.post('/api/payments/create', async (req, res) => {
             return res.status(500).json({ error: saveErr.message });
           }
 
-          res.json({
-            paid: false,
-            paymentInfo,
-            payos: {
-              orderCode,
-              amount: paymentInfo.remainingAmount,
-              checkoutUrl: payosLink.checkoutUrl,
-              qrCode: payosLink.qrCode,
-              paymentLinkId: payosLink.paymentLinkId
-            }
+          db.supersedePendingPaymentRequests(name, orderCode, () => {
+            res.json({
+              paid: false,
+              paymentInfo,
+              payos: {
+                orderCode,
+                amount: paymentInfo.remainingAmount,
+                checkoutUrl: payosLink.checkoutUrl,
+                qrCode: payosLink.qrCode,
+                paymentLinkId: payosLink.paymentLinkId
+              }
+            });
           });
         }
       );
@@ -885,12 +967,12 @@ app.get('/admin', requireAdminPageAuth, (req, res) => {
 });
 
 app.get('/admin-login', (req, res) => {
-  const token = getAdminSessionToken(req);
-  const session = parseSessionToken(token);
-  if (session && session.role === 'admin') {
-    return res.redirect('/admin');
-  }
-  res.sendFile(path.join(__dirname, '../public/admin-login.html'));
+  loadSessionUser(req, 'admin_session', 'admin', (err, adminUser) => {
+    if (!err && adminUser) {
+      return res.redirect('/admin');
+    }
+    res.sendFile(path.join(__dirname, '../public/admin-login.html'));
+  });
 });
 app.post('/api/admin/login', (req, res) => {
   const password = String(req.body.password || '');
@@ -914,6 +996,7 @@ app.post('/api/admin/login', (req, res) => {
       phone: adminUser.phone,
       name: adminUser.name,
       role: 'admin',
+      sv: Number(adminUser.session_version || 1),
       exp: Date.now() + maxAgeSeconds * 1000
     });
     setSessionCookie(res, 'admin_session', sessionToken, maxAgeSeconds);
@@ -1083,6 +1166,7 @@ app.post('/api/auth/register', (req, res) => {
       phone: user.phone,
       name: user.name,
       role: 'user',
+      sv: Number(user.session_version || 1),
       exp: Date.now() + maxAgeSeconds * 1000
     });
     setSessionCookie(res, 'user_session', sessionToken, maxAgeSeconds);
@@ -1108,6 +1192,7 @@ app.post('/api/auth/login', (req, res) => {
       phone: user.phone,
       name: user.name,
       role: user.role,
+      sv: Number(user.session_version || 1),
       exp: Date.now() + maxAgeSeconds * 1000
     });
     setSessionCookie(res, 'user_session', sessionToken, maxAgeSeconds);
@@ -1121,9 +1206,11 @@ app.post('/api/auth/logout', (req, res) => {
 });
 
 app.get('/api/auth/me', (req, res) => {
-  const user = getUserSessionInfo(req);
-  if (!user) return res.json({ loggedIn: false });
-  res.json({ loggedIn: true, user });
+  getUserSessionInfo(req, (err, user) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!user) return res.json({ loggedIn: false });
+    res.json({ loggedIn: true, user });
+  });
 });
 
 const payosAutoSyncMs = Number(process.env.PAYOS_AUTO_SYNC_MS || 30000);
