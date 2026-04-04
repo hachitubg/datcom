@@ -21,7 +21,7 @@ class Database {
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           date TEXT UNIQUE NOT NULL,
           menu TEXT DEFAULT 'Cơm chiên tôm',
-          quantity INTEGER DEFAULT 10,
+          quantity INTEGER DEFAULT 40,
           price INTEGER DEFAULT 40000,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
@@ -127,7 +127,7 @@ class Database {
     const today = this.getDateString();
     this.db.run(
       `INSERT OR IGNORE INTO days (date, menu, quantity, price) VALUES (?, ?, ?, ?)`,
-      [today, 'Cơm chiên tôm', 10, 40000]
+      [today, 'Cơm chiên tôm', 40, 40000]
     );
   }
 
@@ -427,8 +427,10 @@ class Database {
               pool -= applied;
               const dayRemaining = dayAmount - applied;
 
-              // Hiển thị cả đơn còn nợ lẫn đơn dùng mã KM 100% (amount=0)
-              if (dayRemaining > 0 || (dayAmount === 0 && Number(row.has_promo))) {
+              // Popup/thống kê thanh toán chỉ nên hiển thị các ngày còn nợ thực sự.
+              // Các đơn dùng mã KM 100% có day_amount = 0 không phải là công nợ
+              // nên không được giữ lại trong danh sách thanh toán.
+              if (dayRemaining > 0) {
                 unpaidRows.push({
                   date: row.date,
                   quantity: Number(row.quantity || 0),
@@ -760,7 +762,6 @@ class Database {
             // Bước 3: FIFO waterfall - xác định ngày nào còn nợ và còn bao nhiêu
             let pool = Number(payRow?.total_paid || 0);
             const unpaidDates = new Set();
-            const promoDates = new Set();
             let totalRemaining = 0;
 
             for (const day of dayRows) {
@@ -774,31 +775,20 @@ class Database {
               }
             }
 
-            // Bước 3b: Tìm ngày có đơn dùng mã khuyến mãi (bao gồm 100%)
-            this.db.all(
-              `SELECT DISTINCT d.date FROM orders o JOIN days d ON d.id = o.day_id
-               WHERE LOWER(o.name) = LOWER(?) AND o.promo_code IS NOT NULL AND o.promo_code != ''`,
-              [normalizedName],
-              (errPromo, promoRows = []) => {
-                if (errPromo) { callback(errPromo); return; }
-                for (const pr of promoRows) {
-                  if (!unpaidDates.has(pr.date)) promoDates.add(pr.date);
-                }
+            const allDates = Array.from(unpaidDates);
+            if (allDates.length === 0) {
+              return callback(null, { name: normalizedName, totalQuantity: 0, totalAmount: 0, rows: [] });
+            }
 
-                const allDates = new Set([...unpaidDates, ...promoDates]);
-                if (allDates.size === 0) {
-                  return callback(null, { name: normalizedName, totalQuantity: 0, totalAmount: 0, rows: [] });
-                }
-
-            // Bước 4: lấy từng đơn lẻ thuộc các ngày còn nợ + ngày có promo
-            const placeholders = Array.from(allDates).map(() => '?').join(', ');
+            // Bước 4: lấy từng đơn lẻ thuộc các ngày còn nợ thực sự.
+            const placeholders = allDates.map(() => '?').join(', ');
             this.db.all(
               `SELECT o.id, o.quantity, o.description, o.created_at, d.price, d.date,
                       COALESCE(o.discount_percent, 0) AS discount_percent, o.promo_code
                FROM orders o JOIN days d ON d.id = o.day_id
                WHERE LOWER(o.name) = LOWER(?) AND d.date IN (${placeholders})
                ORDER BY d.date ASC, o.created_at ASC, o.id ASC`,
-              [normalizedName, ...Array.from(allDates)],
+              [normalizedName, ...allDates],
               (err3, orderRows = []) => {
                 if (err3) { callback(err3); return; }
 
@@ -825,8 +815,6 @@ class Database {
                   rows: mappedRows
                 });
               }
-            );
-              } // close promo dates callback
             );
           }
         );

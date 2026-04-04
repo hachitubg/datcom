@@ -534,7 +534,11 @@ function onDebtSearchInput() {
 
 function loadDebtSummary() {
     const container = document.getElementById('adminDebtSummaryList');
+    const summary = document.getElementById('adminDebtSummaryMeta');
     container.innerHTML = '<div class="loading">Đang tải...</div>';
+    if (summary) {
+        summary.innerHTML = 'Đang tính tổng công nợ...';
+    }
     const search = (document.getElementById('debtSearchInput')?.value || '').trim();
     const url = search ? `${API_BASE}/api/payments/today?search=${encodeURIComponent(search)}` : `${API_BASE}/api/payments/today`;
 
@@ -552,9 +556,18 @@ function loadDebtSummary() {
 
 function renderDebtSummary() {
     const container = document.getElementById('adminDebtSummaryList');
+    const summary = document.getElementById('adminDebtSummaryMeta');
     if (!debtRows.length) {
+        if (summary) {
+            summary.innerHTML = 'Tổng công nợ theo bộ lọc: <strong>0đ</strong>';
+        }
         container.innerHTML = '<div style="padding: 14px; color:#999; text-align:center;">Không có công nợ cần xử lý.</div>';
         return;
+    }
+
+    const totalRemaining = debtRows.reduce((sum, row) => sum + Number(row.remainingAmount || 0), 0);
+    if (summary) {
+        summary.innerHTML = `Tổng khách theo bộ lọc: <strong>${debtRows.length}</strong> · Tổng tiền cần thu: <strong>${AppUtils.formatCurrency(totalRemaining)}</strong>`;
     }
 
     const totalPages = Math.ceil(debtRows.length / PAGE_SIZE);
@@ -588,6 +601,7 @@ function loadAdminPayments() {
     const fromDate = document.getElementById('paymentFromDateFilter').value;
     const toDate = document.getElementById('paymentToDateFilter').value;
     const container = document.getElementById('adminPaymentList');
+    const summary = document.getElementById('adminPaymentSummaryMeta');
     container.style.display = 'block';
 
     if (period === 'date' && !date) {
@@ -620,6 +634,9 @@ function loadAdminPayments() {
     if (period === 'range' && toDate) params.set('toDate', toDate);
 
     container.innerHTML = '<div class="loading">Đang tải...</div>';
+    if (summary) {
+        summary.innerHTML = 'Đang tính tổng thanh toán...';
+    }
     const url = `${API_BASE}/api/payments/history?${params.toString()}`;
 
     fetch(url)
@@ -636,9 +653,23 @@ function loadAdminPayments() {
 
 function renderPaymentHistory() {
     const container = document.getElementById('adminPaymentList');
+    const summary = document.getElementById('adminPaymentSummaryMeta');
     if (!paymentRows.length) {
+        if (summary) {
+            summary.innerHTML = 'Tổng thanh toán thành công theo bộ lọc: <strong>0đ</strong>';
+        }
         container.innerHTML = '<div style="padding: 16px; color: #999; text-align: center;">Không có giao dịch theo bộ lọc hiện tại.</div>';
         return;
+    }
+
+    const totalRequestAmount = paymentRows.reduce((sum, row) => sum + Number(row.request_amount || 0), 0);
+    const totalPaidAmount = paymentRows.reduce((sum, row) => sum + Number(row.paid_amount || 0), 0);
+    const successfulPaidAmount = paymentRows.reduce((sum, row) => {
+        const statusText = String(row.request_status || 'PENDING').toUpperCase();
+        return statusText === 'PAID' ? sum + Number(row.paid_amount || 0) : sum;
+    }, 0);
+    if (summary) {
+        summary.innerHTML = `Tổng giao dịch theo bộ lọc: <strong>${paymentRows.length}</strong> · Tổng tiền yêu cầu: <strong>${AppUtils.formatCurrency(totalRequestAmount)}</strong> · Tổng đã thu: <strong>${AppUtils.formatCurrency(totalPaidAmount)}</strong> · Thanh toán thành công: <strong>${AppUtils.formatCurrency(successfulPaidAmount)}</strong>`;
     }
 
     const totalPages = Math.ceil(paymentRows.length / PAGE_SIZE);
