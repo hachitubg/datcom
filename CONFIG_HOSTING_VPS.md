@@ -127,7 +127,29 @@ pm2 logs datcom --lines 100
 
 ---
 
+## Ports đang dùng
+
+| Port | App | Domain |
+|------|-----|--------|
+| 3000 | datcom | comcogiang.io.vn |
+
+> Mỗi site mới dùng 1 port riêng, tăng dần: 3001, 3002...
+
+---
+
 ## Deploy website mới (sau này)
+
+Nginx sẽ tự định tuyến theo domain — thêm site mới **không ảnh hưởng** các site đang chạy.
+
+```
+Internet
+    │
+    ▼
+Nginx :80/:443
+    ├── comcogiang.io.vn  ──►  Node.js :3000  (datcom)
+    ├── site2.com         ──►  Node.js :3001  (sau này)
+    └── site3.com         ──►  Node.js :3002  (sau này)
+```
 
 ### 1. Clone code
 
@@ -140,35 +162,90 @@ npm ci --omit=dev
 
 ### 2. Tạo file .env
 
-Mỗi site dùng 1 port riêng (3001, 3002...):
-
 ```bash
 nano .env
-# PORT=3001
+```
+
+```env
+PORT=3001                          # port chưa dùng, xem bảng ở trên
+PUBLIC_BASE_URL=https://site2.com
+COOKIE_SECURE=1
+# ... các biến khác của app
 ```
 
 ### 3. Chạy bằng PM2
 
+Tùy loại app:
+
 ```bash
+# App Node.js thông thường (như datcom)
 pm2 start src/server.js --name "ten-site"
+
+# App Next.js
+pm2 start npm --name "ten-site" -- start
+
 pm2 save
 ```
 
 ### 4. Thêm Nginx config
 
 ```bash
+# Copy template từ datcom
 cp /etc/nginx/sites-available/datcom /etc/nginx/sites-available/ten-site
-nano /etc/nginx/sites-available/ten-site
-# Sửa server_name và port cho đúng
 
-ln -s /etc/nginx/sites-available/ten-site /etc/nginx/sites-enabled/
+# Sửa 2 dòng: server_name và proxy_pass port
+nano /etc/nginx/sites-available/ten-site
+```
+
+Hai dòng cần sửa trong file:
+```nginx
+server_name site2.com www.site2.com;   # ← domain mới
+proxy_pass http://localhost:3001;       # ← port mới
+```
+
+```bash
+# Kích hoạt và reload
+ln -s /etc/nginx/sites-available/ten-site /etc/nginx/sites-enabled/ten-site
 nginx -t && systemctl reload nginx
 ```
 
 ### 5. Cấp SSL
 
 ```bash
-certbot --nginx -d ten-site-domain.com
+certbot --nginx -d site2.com -d www.site2.com
+```
+
+### 6. Cập nhật bảng Ports đang dùng ở trên
+
+Thêm dòng mới vào bảng để tiện theo dõi sau này.
+
+---
+
+## Tắt / Xóa một website
+
+**Tắt tạm (giữ config):**
+```bash
+rm /etc/nginx/sites-enabled/ten-site
+nginx -t && systemctl reload nginx
+pm2 stop ten-site
+```
+
+**Bật lại:**
+```bash
+ln -s /etc/nginx/sites-available/ten-site /etc/nginx/sites-enabled/ten-site
+nginx -t && systemctl reload nginx
+pm2 start ten-site
+```
+
+**Xóa hẳn:**
+```bash
+rm /etc/nginx/sites-enabled/ten-site
+rm /etc/nginx/sites-available/ten-site
+nginx -t && systemctl reload nginx
+pm2 delete ten-site
+pm2 save
+# Xóa thư mục nếu muốn:
+# rm -rf /var/www/ten-site
 ```
 
 ---
