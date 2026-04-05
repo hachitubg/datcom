@@ -144,6 +144,11 @@ cp /var/www/datcom/datcom.db.backup-2026-04-05-010000 /var/www/datcom/datcom.db
 pm2 restart datcom
 ```
 
+Copy file ve local:
+```bash
+scp "root@103.200.20.160:/var/www/datcom/datcom.db.backup-*" "C:\Users\admin\Desktop"
+```
+
 ## Tinh nang dang co
 
 - Dat com theo ngay
