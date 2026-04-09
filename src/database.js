@@ -2019,12 +2019,19 @@ class Database {
 
           const totalDays = Number(totalRow?.total_days || 0);
 
-          const leaders = rows.map((row, index) => ({
-            rank: index + 1,
-            name: row.name,
-            days: Number(row.days || 0),
-            percentage: totalDays > 0 ? Math.min(100, Math.round((row.days / totalDays) * 100)) : 0
-          }));
+          // Standard competition ranking: cùng số ngày → cùng hạng (1, 2, 2, 4...)
+          let currentRank = 1;
+          const leaders = rows.map((row, index) => {
+            if (index > 0 && row.days < rows[index - 1].days) {
+              currentRank = index + 1;
+            }
+            return {
+              rank: currentRank,
+              name: row.name,
+              days: Number(row.days || 0),
+              percentage: totalDays > 0 ? Math.min(100, Math.round((row.days / totalDays) * 100)) : 0
+            };
+          });
 
           callback(null, { month: currentMonth, leaders });
         }
