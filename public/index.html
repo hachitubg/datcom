@@ -11,6 +11,7 @@
 <body>
     <!-- ===== User Auth Bar ===== -->
     <div class="user-auth-bar" id="userAuthBar">
+        <button type="button" class="user-auth-btn" id="btnLeaderboard">Xếp hạng</button>
         <div id="userAuthLoggedOut" class="user-auth-state">
             <div class="auth-help-wrap">
                 <button type="button" class="auth-help-btn" id="btnAuthHelp">?</button>
@@ -362,6 +363,21 @@
                         <button type="button" class="btn-cancel" id="cancelFeedback">HỦY</button>
                     </div>
                 </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Bảng Xếp Hạng -->
+    <div id="leaderboardModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="leaderboardTitle">🏆 Bảng xếp hạng</h2>
+                <button type="button" class="modal-close" id="closeLeaderboard">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="leaderboardContent">
+                    <div class="loading-text">Đang tải...</div>
+                </div>
             </div>
         </div>
     </div>

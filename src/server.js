@@ -956,6 +956,16 @@ app.get('/api/payments/history', (req, res) => {
   });
 });
 
+// Bảng xếp hạng theo tháng
+app.get('/api/leaderboard/monthly', (req, res) => {
+  db.getMonthlyLeaderboard((err, data) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(data);
+  });
+});
+
 // Serve trang chủ
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/index.html'));

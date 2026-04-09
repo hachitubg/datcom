@@ -1104,7 +1104,8 @@ textarea {
     max-width: 800px;
     margin: 12px auto 12px;
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
+    align-items: center;
     padding: 0 8px;
 }
 
@@ -1899,3 +1900,158 @@ textarea {
     .order-info h4 { font-size: 0.85rem; }
     .order-info p { font-size: 0.8rem; }
 }
+
+/* ========================================
+   TROPHY BUTTON
+   ======================================== */
+.trophy-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-full);
+    border: none;
+    background: var(--secondary-container);
+    font-size: 1.1rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+    line-height: 1;
+    padding: 0;
+}
+
+.trophy-btn:hover {
+    background: var(--primary-fixed-dim);
+    transform: scale(1.08);
+}
+
+.trophy-btn:active {
+    transform: scale(0.95);
+}
+
+/* ========================================
+   LEADERBOARD MODAL
+   ======================================== */
+.leaderboard-month {
+    text-align: center;
+    color: var(--on-surface-variant);
+    font-size: 0.82rem;
+    font-weight: 500;
+    margin-bottom: 18px;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+
+.leaderboard-empty {
+    text-align: center;
+    padding: 40px 0;
+    color: var(--on-surface-variant);
+    font-size: 0.9rem;
+}
+
+.leaderboard-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.lb-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: var(--radius-md);
+    background: var(--surface-container-low);
+    border: 1px solid transparent;
+    opacity: 0;
+    transform: translateY(16px);
+    animation: lbRowIn 0.35s ease-out forwards;
+}
+
+@keyframes lbRowIn {
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.lb-row--gold {
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+    border-color: #fcd34d;
+}
+
+.lb-row--silver {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-color: #adb5bd;
+}
+
+.lb-row--bronze {
+    background: linear-gradient(135deg, #fff8f5 0%, #fde8dd 100%);
+    border-color: #f4a37b;
+}
+
+.lb-rank {
+    font-size: 1.5rem;
+    min-width: 36px;
+    text-align: center;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.lb-rank--num {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--on-surface-variant);
+    min-width: 36px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.lb-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.lb-name {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--on-surface);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 6px;
+}
+
+.lb-bar-wrap {
+    height: 6px;
+    background: rgba(111, 90, 82, 0.1);
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.lb-bar {
+    height: 100%;
+    border-radius: 999px;
+    background: var(--primary-container);
+    width: 0;
+    transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.lb-row--gold .lb-bar   { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+.lb-row--silver .lb-bar { background: linear-gradient(90deg, #6b7280, #9ca3af); }
+.lb-row--bronze .lb-bar { background: linear-gradient(90deg, #c2703a, #f4a37b); }
+
+.lb-days {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--primary);
+    white-space: nowrap;
+    flex-shrink: 0;
+    background: var(--secondary-container);
+    padding: 4px 10px;
+    border-radius: var(--radius-full);
+    min-width: 54px;
+    text-align: center;
+}
+
+.lb-row--gold   .lb-days { background: #fef3c7; color: #92400e; }
+.lb-row--silver .lb-days { background: #e9ecef; color: #374151; }
+.lb-row--bronze .lb-days { background: #fde8dd; color: #9a3412; }

@@ -980,3 +980,103 @@ togglePaymentHistoryInputs();
 loadCustomerNameSuggestions();
 updateFeedbackCounter();
 setInterval(loadTodayInfo, 5000); // Refresh every 5 seconds
+
+// =============================================
+// Leaderboard
+// =============================================
+const leaderboardModal = document.getElementById('leaderboardModal');
+const leaderboardContent = document.getElementById('leaderboardContent');
+const leaderboardTitle = document.getElementById('leaderboardTitle');
+
+const VIETNAMESE_MONTHS = [
+    'Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6',
+    'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12'
+];
+
+function formatMonthVi(monthStr) {
+    // monthStr e.g. "2026-04"
+    const parts = monthStr.split('-');
+    if (parts.length !== 2) return monthStr;
+    const year = parts[0];
+    const month = parseInt(parts[1], 10);
+    return `${VIETNAMESE_MONTHS[month - 1]} năm ${year}`;
+}
+
+function getRankClass(rank) {
+    if (rank === 1) return 'lb-row--gold';
+    if (rank === 2) return 'lb-row--silver';
+    if (rank === 3) return 'lb-row--bronze';
+    return '';
+}
+
+function getRankIcon(rank) {
+    if (rank === 1) return '<span class="lb-rank">🥇</span>';
+    if (rank === 2) return '<span class="lb-rank">🥈</span>';
+    if (rank === 3) return '<span class="lb-rank">🥉</span>';
+    return `<span class="lb-rank--num">#${rank}</span>`;
+}
+
+function renderLeaderboard(data) {
+    const { month, leaders } = data;
+    leaderboardTitle.textContent = '🏆 Bảng xếp hạng';
+
+    if (!leaders || leaders.length === 0) {
+        leaderboardContent.innerHTML = `
+            <p class="leaderboard-month">${escapeHtml(formatMonthVi(month))}</p>
+            <div class="leaderboard-empty">Chưa có dữ liệu tháng này</div>`;
+        return;
+    }
+
+    const rows = leaders.map((item, idx) => {
+        const delay = (idx * 60) + 'ms';
+        const rowClass = getRankClass(item.rank);
+        const rankIcon = getRankIcon(item.rank);
+        const safeName = escapeHtml(item.name);
+        const pct = item.percentage;
+        const daysLabel = item.days === 1 ? '1 ngày' : `${item.days} ngày`;
+
+        return `<div class="lb-row ${rowClass}" style="animation-delay:${delay}">
+            ${rankIcon}
+            <div class="lb-info">
+                <div class="lb-name">${safeName}</div>
+                <div class="lb-bar-wrap">
+                    <div class="lb-bar" data-pct="${pct}"></div>
+                </div>
+            </div>
+            <div class="lb-days">${escapeHtml(daysLabel)}</div>
+        </div>`;
+    }).join('');
+
+    leaderboardContent.innerHTML = `
+        <p class="leaderboard-month">${escapeHtml(formatMonthVi(month))}</p>
+        <div class="leaderboard-list">${rows}</div>`;
+
+    // Animate progress bars after paint
+    requestAnimationFrame(() => {
+        leaderboardContent.querySelectorAll('.lb-bar').forEach((bar) => {
+            const pct = Number(bar.dataset.pct || 0);
+            requestAnimationFrame(() => { bar.style.width = pct + '%'; });
+        });
+    });
+}
+
+async function openLeaderboard() {
+    leaderboardContent.innerHTML = '<div class="loading-text">Đang tải...</div>';
+    leaderboardModal.style.display = 'flex';
+    try {
+        const res = await fetch(`${API_BASE}/api/leaderboard/monthly`);
+        const data = await res.json();
+        if (data.error) {
+            leaderboardContent.innerHTML = `<div class="leaderboard-empty">${escapeHtml(data.error)}</div>`;
+        } else {
+            renderLeaderboard(data);
+        }
+    } catch (err) {
+        leaderboardContent.innerHTML = '<div class="leaderboard-empty">Không thể tải dữ liệu</div>';
+    }
+}
+
+document.getElementById('btnLeaderboard').addEventListener('click', openLeaderboard);
+document.getElementById('closeLeaderboard').addEventListener('click', () => {
+    leaderboardModal.style.display = 'none';
+});

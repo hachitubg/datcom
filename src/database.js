@@ -1986,6 +1986,51 @@ class Database {
       }
     );
   }
+
+  // Bảng xếp hạng theo tháng — đếm số ngày đặt cơm (không phải số xuất)
+  getMonthlyLeaderboard(callback) {
+    const now = new Date();
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+    // Đếm số ngày phân biệt (distinct) mà mỗi người đặt cơm trong tháng hiện tại
+    const sql = `
+      SELECT
+        o.name,
+        COUNT(DISTINCT d.date) AS days
+      FROM orders o
+      JOIN days d ON o.day_id = d.id
+      WHERE strftime('%Y-%m', d.date) = ?
+      GROUP BY LOWER(o.name)
+      ORDER BY days DESC, MIN(o.name) ASC
+    `;
+
+    this.db.all(sql, [currentMonth], (err, rows = []) => {
+      if (err) { callback(err); return; }
+
+      // Tổng số ngày có phát sinh đơn hàng trong tháng (để tính %)
+      this.db.get(
+        `SELECT COUNT(DISTINCT d.date) AS total_days
+         FROM days d
+         JOIN orders o ON o.day_id = d.id
+         WHERE strftime('%Y-%m', d.date) = ?`,
+        [currentMonth],
+        (err2, totalRow) => {
+          if (err2) { callback(err2); return; }
+
+          const totalDays = Number(totalRow?.total_days || 0);
+
+          const leaders = rows.map((row, index) => ({
+            rank: index + 1,
+            name: row.name,
+            days: Number(row.days || 0),
+            percentage: totalDays > 0 ? Math.min(100, Math.round((row.days / totalDays) * 100)) : 0
+          }));
+
+          callback(null, { month: currentMonth, leaders });
+        }
+      );
+    });
+  }
 }
 
 

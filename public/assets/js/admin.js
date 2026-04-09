@@ -682,7 +682,7 @@ function renderPaymentHistory() {
         return statusText === 'PAID' ? sum + Number(row.paid_amount || 0) : sum;
     }, 0);
     if (summary) {
-        summary.innerHTML = `Tổng giao dịch theo bộ lọc: <strong>${paymentRows.length}</strong> · Tổng tiền yêu cầu: <strong>${AppUtils.formatCurrency(totalRequestAmount)}</strong> · Tổng đã thu: <strong>${AppUtils.formatCurrency(totalPaidAmount)}</strong> · Thanh toán thành công: <strong>${AppUtils.formatCurrency(successfulPaidAmount)}</strong>`;
+        summary.innerHTML = `Tổng giao dịch theo bộ lọc: <strong>${paymentRows.length}</strong> · Tổng đã thu: <strong>${AppUtils.formatCurrency(totalPaidAmount)}</strong>`;
     }
 
     const totalPages = Math.ceil(paymentRows.length / PAGE_SIZE);
