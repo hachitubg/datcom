@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Hứng Cơm - Cơm Cô Giang</title>
+    <link rel="icon" type="image/png" href="/images/datcom_icon.png">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap');
+
+        :root {
+            --primary: #6d5850;
+            --primary-container: #877067;
+            --surface: #faf9f5;
+            --on-surface: #1a1c1a;
+            --secondary-container: #ece0dc;
+            --radius-md: 0.75rem;
+            --radius-xl: 1.5rem;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html, body { height: 100%; height: 100dvh; overflow: hidden; }
+
+        body {
+            font-family: 'Be Vietnam Pro', sans-serif;
+            background: linear-gradient(135deg, #6d5850 0%, #877067 50%, #a08880 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: var(--on-surface);
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+        }
+
+        .game-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            max-width: 500px;
+            padding: 6px 8px;
+            z-index: 10;
+            flex-shrink: 0;
+            gap: 4px;
+        }
+
+        .game-header-left { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+
+        .btn-back {
+            background: rgba(255,255,255,0.15);
+            border: none; color: #fff;
+            font-family: inherit; font-size: 0.68rem; font-weight: 600;
+            padding: 3px 8px; border-radius: 999px;
+            cursor: pointer; text-decoration: none;
+            transition: background 0.2s; white-space: nowrap;
+        }
+        .btn-back:hover { background: rgba(255,255,255,0.25); }
+
+        .game-title { color: #fff; font-size: 0.8rem; font-weight: 700; white-space: nowrap; }
+
+        .game-stats { display: flex; gap: 4px; align-items: center; flex-wrap: nowrap; }
+
+        .stat-badge {
+            background: rgba(255,255,255,0.2); color: #fff;
+            font-size: 0.65rem; font-weight: 600;
+            padding: 2px 6px; border-radius: 999px;
+            backdrop-filter: blur(8px); white-space: nowrap;
+        }
+        .stat-lives { font-size: 0.72rem; letter-spacing: 0px; }
+
+        .game-area { position: relative; width: 100%; max-width: 500px; flex: 1; min-height: 0; overflow: hidden; }
+
+        canvas {
+            display: block; width: 100%; height: 100%;
+            border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+            background: linear-gradient(180deg, #f8f6f0 0%, #efe9e3 100%);
+        }
+
+        .overlay {
+            position: absolute; inset: 0;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            background: rgba(250,249,245,0.95); backdrop-filter: blur(12px);
+            border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+            z-index: 20; gap: 10px; padding: 16px 20px; text-align: center;
+            overflow-y: auto; -webkit-overflow-scrolling: touch;
+        }
+        .overlay.hidden { display: none; }
+        .overlay-icon { font-size: 2.5rem; }
+        .overlay-title { font-size: 1.25rem; font-weight: 800; color: var(--primary); line-height: 1.2; }
+        .overlay-subtitle { font-size: 0.8rem; color: var(--primary-container); max-width: 300px; line-height: 1.4; }
+        .overlay-stats { display: flex; gap: 16px; margin: 4px 0; }
+        .overlay-stat { text-align: center; }
+        .overlay-stat-value { font-size: 1.4rem; font-weight: 800; color: var(--primary); }
+        .overlay-stat-label { font-size: 0.65rem; color: var(--primary-container); text-transform: uppercase; font-weight: 600; letter-spacing: 0.04em; }
+
+        .btn-play {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-container) 100%);
+            border: none; color: #fff; font-family: inherit;
+            font-size: 0.88rem; font-weight: 700;
+            padding: 11px 30px; border-radius: 999px; cursor: pointer;
+            transition: transform 0.15s, box-shadow 0.15s;
+            box-shadow: 0 4px 20px rgba(109,88,80,0.3); margin-top: 4px; flex-shrink: 0;
+        }
+        .btn-play:hover { transform: scale(1.04); box-shadow: 0 6px 28px rgba(109,88,80,0.4); }
+        .btn-play:active { transform: scale(0.97); }
+
+        .toast {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%,-50%) scale(0);
+            font-size: 1.3rem; font-weight: 800;
+            padding: 14px 32px; border-radius: 999px;
+            z-index: 30; pointer-events: none; opacity: 0; white-space: nowrap;
+        }
+        .toast-level { background: linear-gradient(135deg,#fbbf24,#f59e0b); color: #78350f; }
+        .toast-debuff { background: linear-gradient(135deg,#7c3aed,#a855f7); color: #fff; font-size: 1.05rem; }
+        .toast.show { animation: toastPop 1.8s ease-out forwards; }
+
+        @keyframes toastPop {
+            0%  { opacity:0; transform: translate(-50%,-50%) scale(0); }
+            12% { opacity:1; transform: translate(-50%,-50%) scale(1.1); }
+            25% { transform: translate(-50%,-50%) scale(1); }
+            70% { opacity:1; }
+            100%{ opacity:0; transform: translate(-50%,-60%) scale(0.8); }
+        }
+
+        .controls-hint { font-size: 0.68rem; color: var(--primary-container); opacity: 0.8; }
+
+        .level-progress { width: 100%; max-width: 500px; height: 3px; background: rgba(255,255,255,0.15); flex-shrink: 0; }
+        .level-progress-fill { height: 100%; background: linear-gradient(90deg,#fbbf24,#f59e0b); width: 0%; transition: width 0.3s ease; }
+
+        .rules-list { font-size: 0.76rem; color: var(--primary-container); text-align: left; max-width: 280px; line-height: 1.55; list-style: none; padding: 0; }
+        .rules-list li { margin-bottom: 1px; }
+
+        .debuff-bar { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 15; display: flex; gap: 6px; }
+        .debuff-tag {
+            background: rgba(124,58,237,0.85); color: #fff;
+            font-size: 0.68rem; font-weight: 700;
+            padding: 3px 10px; border-radius: 999px;
+            backdrop-filter: blur(6px); animation: debuffPulse 1.2s infinite;
+        }
+        @keyframes debuffPulse { 0%,100%{opacity:0.85;} 50%{opacity:1;} }
+
+        .shake { animation: shakeAnim 0.4s ease; }
+        @keyframes shakeAnim {
+            0%,100%{transform:translateX(0);} 15%{transform:translateX(-6px) rotate(-1deg);}
+            30%{transform:translateX(5px) rotate(.5deg);} 45%{transform:translateX(-4px);}
+            60%{transform:translateX(3px);} 75%{transform:translateX(-2px);}
+        }
+
+        .flash-miss { position:absolute; inset:0; background:rgba(239,68,68,0.25); z-index:12; pointer-events:none; border-radius:var(--radius-xl) var(--radius-xl) 0 0; animation:flashFade .35s ease-out forwards; }
+        .flash-bomb { position:absolute; inset:0; background:rgba(0,0,0,0.5); z-index:12; pointer-events:none; border-radius:var(--radius-xl) var(--radius-xl) 0 0; animation:flashFade .5s ease-out forwards; }
+        @keyframes flashFade { from{opacity:1;} to{opacity:0;} }
+
+        .flash-powerup { position:absolute; inset:0; background:rgba(34,197,94,0.2); z-index:12; pointer-events:none; border-radius:var(--radius-xl) var(--radius-xl) 0 0; animation:flashFade .35s ease-out forwards; }
+        .toast-powerup { background: linear-gradient(135deg,#22c55e,#16a34a); color: #fff; font-size: 1.05rem; }
+
+        .login-banner {
+            width: 100%; max-width: 500px; padding: 4px 10px;
+            background: rgba(251,191,36,0.15); border-bottom: 1px solid rgba(251,191,36,0.3);
+            display: flex; align-items: center; justify-content: center; gap: 6px;
+            flex-shrink: 0; z-index: 10;
+        }
+        .login-banner.hidden { display: none; }
+        .login-banner-text { font-size: 0.65rem; color: #fff; opacity: 0.9; }
+        .login-banner a {
+            font-size: 0.65rem; font-weight: 700; color: #fbbf24;
+            text-decoration: underline; cursor: pointer;
+        }
+        .user-banner {
+            width: 100%; max-width: 500px; padding: 3px 10px;
+            background: rgba(34,197,94,0.15); border-bottom: 1px solid rgba(34,197,94,0.2);
+            display: flex; align-items: center; justify-content: space-between;
+            flex-shrink: 0; z-index: 10;
+        }
+        .user-banner.hidden { display: none; }
+        .user-banner-name { font-size: 0.65rem; color: #fff; font-weight: 600; }
+        .user-banner-best { font-size: 0.6rem; color: rgba(255,255,255,0.7); }
+
+        .btn-rank {
+            background: rgba(255,255,255,0.15); border: none; color: #fbbf24;
+            font-family: inherit; font-size: 0.68rem; font-weight: 700;
+            padding: 3px 8px; border-radius: 999px; cursor: pointer;
+            transition: background 0.2s; white-space: nowrap; flex-shrink: 0;
+        }
+        .btn-rank:hover { background: rgba(255,255,255,0.25); }
+
+        .rank-modal {
+            position: fixed; inset: 0; z-index: 100;
+            display: flex; align-items: center; justify-content: center;
+            background: rgba(0,0,0,0.5); backdrop-filter: blur(6px);
+            animation: fadeIn .25s ease;
+        }
+        .rank-modal.hidden { display: none; }
+        @keyframes fadeIn { from{opacity:0;} to{opacity:1;} }
+        .rank-panel {
+            background: var(--surface); border-radius: var(--radius-xl);
+            width: 92%; max-width: 400px; max-height: 80vh;
+            display: flex; flex-direction: column; overflow: hidden;
+            animation: slideUp .3s ease;
+        }
+        @keyframes slideUp { from{transform:translateY(20px);opacity:0;} to{transform:translateY(0);opacity:1;} }
+        .rank-header {
+            padding: 14px 16px; display: flex; align-items: center; justify-content: space-between;
+            border-bottom: 1px solid rgba(109,88,80,0.1);
+        }
+        .rank-header h2 { font-size: 1rem; font-weight: 800; color: var(--primary); }
+        .rank-close { background:none; border:none; font-size:1.3rem; cursor:pointer; color:var(--primary-container); padding:4px; }
+        .rank-body { flex:1; overflow-y:auto; padding:8px 12px; -webkit-overflow-scrolling:touch; }
+        .rank-row {
+            display: flex; align-items: center; gap: 10px;
+            padding: 8px 6px; border-bottom: 1px solid rgba(0,0,0,0.04);
+            animation: rankRowIn .3s ease both;
+        }
+        .rank-row:nth-child(n) { animation-delay: calc(var(--i,0)*50ms); }
+        @keyframes rankRowIn { from{opacity:0;transform:translateX(-10px);} to{opacity:1;transform:translateX(0);} }
+        .rank-pos { font-size: 1.1rem; width: 28px; text-align: center; font-weight: 800; }
+        .rank-info { flex: 1; min-width: 0; }
+        .rank-name { font-size: 0.8rem; font-weight: 700; color: var(--on-surface); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .rank-meta { font-size: 0.65rem; color: var(--primary-container); }
+        .rank-score { font-size: 0.85rem; font-weight: 800; color: var(--primary); white-space: nowrap; }
+        .rank-empty { text-align: center; padding: 30px; font-size: 0.82rem; color: var(--primary-container); }
+
+        /* Mobile compact */
+        @media (max-height: 680px) {
+            .game-header { padding: 4px 6px; }
+            .btn-back { font-size: 0.62rem; padding: 2px 6px; }
+            .game-title { font-size: 0.72rem; }
+            .stat-badge { font-size: 0.6rem; padding: 2px 5px; }
+            .stat-lives { font-size: 0.65rem; }
+            .login-banner { padding: 3px 8px; }
+            .login-banner-text { font-size: 0.6rem; }
+            .login-banner a { font-size: 0.6rem; }
+            .user-banner { padding: 2px 8px; }
+            .level-progress { height: 2px; }
+            .overlay { gap: 8px; padding: 12px 16px; }
+            .overlay-icon { font-size: 2rem; }
+            .overlay-title { font-size: 1.1rem; }
+            .overlay-subtitle { font-size: 0.75rem; }
+            .overlay-stat-value { font-size: 1.2rem; }
+            .overlay-stat-label { font-size: 0.6rem; }
+            .rules-list { font-size: 0.7rem; line-height: 1.45; }
+            .btn-play { font-size: 0.82rem; padding: 9px 26px; }
+            .controls-hint { font-size: 0.62rem; }
+        }
+        @media (max-height: 520px) {
+            .game-header { padding: 2px 4px; }
+            .game-header-left { gap: 3px; }
+            .btn-back { padding: 2px 5px; font-size: 0.58rem; }
+            .game-title { font-size: 0.65rem; }
+            .stat-badge { font-size: 0.55rem; padding: 1px 4px; }
+            .login-banner { padding: 2px 6px; }
+            .login-banner-text { font-size: 0.55rem; }
+            .overlay { gap: 6px; padding: 8px 12px; }
+            .overlay-icon { font-size: 1.6rem; }
+            .overlay-title { font-size: 0.95rem; }
+            .rules-list { font-size: 0.65rem; line-height: 1.35; }
+            .btn-play { font-size: 0.78rem; padding: 8px 22px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="login-banner" id="loginBanner">
+        <span class="login-banner-text">💡 Đăng nhập để lưu điểm và xếp hạng</span>
+        <a href="/" id="loginLink">Đăng nhập</a>
+    </div>
+    <div class="user-banner hidden" id="userBanner">
+        <span class="user-banner-name" id="userNameLabel">👋</span>
+        <span class="user-banner-best" id="userBestLabel"></span>
+    </div>
+    <div class="game-header">
+        <div class="game-header-left">
+            <a href="/" class="btn-back">←</a>
+            <span class="game-title">Hứng Cơm</span>
+            <button class="btn-rank" id="btnRank">🏆</button>
+        </div>
+        <div class="game-stats">
+            <span class="stat-badge" id="statLevel">Lv.1</span>
+            <span class="stat-badge" id="statScore">0đ</span>
+            <span class="stat-badge stat-lives" id="statLives">🍚🍚🍚</span>
+        </div>
+    </div>
+    <div class="level-progress"><div class="level-progress-fill" id="levelProgressFill"></div></div>
+
+    <div class="game-area" id="gameArea">
+        <canvas id="gameCanvas"></canvas>
+        <div class="debuff-bar" id="debuffBar"></div>
+
+        <div class="overlay" id="startScreen">
+            <div class="overlay-icon">🍚</div>
+            <h1 class="overlay-title">Hứng Cơm<br>Cô Giang</h1>
+            <ul class="rules-list">
+                <li>🍚 Di chuột / kéo tay để hứng đồ ăn</li>
+                <li>💣 Dính bom = <strong>thua ngay</strong></li>
+                <li>⬇️ Để rơi 3 món ăn = <strong>thua</strong></li>
+                <li>⭐ Hứng sao để nhận buff có lợi</li>
+                <li>🌀 Level cao có hiệu ứng phá rối</li>
+                <li>👑 10 level — khó dần tới bất khả thi!</li>
+            </ul>
+            <button class="btn-play" id="btnStart">BẮT ĐẦU CHƠI</button>
+            <p class="controls-hint">🖱️ Chuột / 👆 Cảm ứng</p>
+        </div>
+
+        <div class="overlay hidden" id="gameOverScreen">
+            <div class="overlay-icon" id="gameOverIcon">💥</div>
+            <h1 class="overlay-title" id="gameOverTitle">Hết mạng rồi!</h1>
+            <p class="overlay-subtitle" id="gameOverReason"></p>
+            <div class="overlay-stats">
+                <div class="overlay-stat"><div class="overlay-stat-value" id="finalScore">0</div><div class="overlay-stat-label">Điểm</div></div>
+                <div class="overlay-stat"><div class="overlay-stat-value" id="finalLevel">1</div><div class="overlay-stat-label">Level</div></div>
+                <div class="overlay-stat"><div class="overlay-stat-value" id="finalCaught">0</div><div class="overlay-stat-label">Đã hứng</div></div>
+            </div>
+            <button class="btn-play" id="btnRestart">CHƠI LẠI</button>
+        </div>
+
+        <div class="overlay hidden" id="winScreen">
+            <div class="overlay-icon">👑</div>
+            <h1 class="overlay-title">HUYỀN THOẠI!</h1>
+            <p class="overlay-subtitle">Không thể tin được — bạn đã vượt qua tất cả 10 level!</p>
+            <div class="overlay-stats">
+                <div class="overlay-stat"><div class="overlay-stat-value" id="winScore">0</div><div class="overlay-stat-label">Tổng điểm</div></div>
+                <div class="overlay-stat"><div class="overlay-stat-value" id="winCaught">0</div><div class="overlay-stat-label">Đã hứng</div></div>
+            </div>
+            <button class="btn-play" id="btnPlayAgain">CHƠI LẠI</button>
+        </div>
+
+        <div class="toast toast-level" id="levelUpToast"></div>
+        <div class="toast toast-debuff" id="debuffToast"></div>
+        <div class="toast toast-powerup" id="powerupToast"></div>
+    </div>
+
+    <div class="rank-modal hidden" id="rankModal">
+        <div class="rank-panel">
+            <div class="rank-header">
+                <h2>🏆 Bảng xếp hạng</h2>
+                <button class="rank-close" id="rankClose">✕</button>
+            </div>
+            <div class="rank-body" id="rankBody">
+                <div class="rank-empty">Đang tải...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        var canvas = document.getElementById('gameCanvas');
+        var ctx = canvas.getContext('2d');
+        var gameArea = document.getElementById('gameArea');
+        var startScreen = document.getElementById('startScreen');
+        var gameOverScreen = document.getElementById('gameOverScreen');
+        var winScreen = document.getElementById('winScreen');
+        var levelUpToast = document.getElementById('levelUpToast');
+        var debuffToast = document.getElementById('debuffToast');
+        var powerupToast = document.getElementById('powerupToast');
+        var debuffBar = document.getElementById('debuffBar');
+        var levelProgressFill = document.getElementById('levelProgressFill');
+        var rankModal = document.getElementById('rankModal');
+        var rankBody = document.getElementById('rankBody');
+        var loginBanner = document.getElementById('loginBanner');
+        var userBanner = document.getElementById('userBanner');
+
+        var MAX_LEVEL = 10;
+        var MAX_MISSES = 3;
+        var BASE_PLAYER_WIDTH = 58;
+        var PLAYER_WIDTH = BASE_PLAYER_WIDTH;
+
+        var currentUser = null;
+
+        var FOOD_TYPES = [
+            { emoji: '\u{1F35A}', points: 10 },
+            { emoji: '\u{1F356}', points: 15 },
+            { emoji: '\u{1F96C}', points: 5 },
+            { emoji: '\u{1F372}', points: 20 },
+            { emoji: '\u{1F373}', points: 12 },
+            { emoji: '\u{1F962}', points: 8 },
+        ];
+
+        var DEBUFF_TYPES = [
+            { emoji: '\u{1F300}', name: '\u0110\u1EA3o ng\u01B0\u1EE3c', effect: 'reverse', duration: 4000, color: '#7c3aed' },
+            { emoji: '\u{1F40C}', name: 'Ch\u1EADm l\u1EA1i', effect: 'slow', duration: 5000, color: '#0891b2' },
+            { emoji: '\u{1FAE3}', name: 'M\u1EDD m\u1EAFt', effect: 'blind', duration: 3000, color: '#374151' },
+            { emoji: '\u{1F9F2}', name: 'H\u00FAt l\u1EC7ch', effect: 'pull_left', duration: 3500, color: '#dc2626' },
+            { emoji: '\u{1FAB4}', name: 'Rung l\u1EAFc', effect: 'jitter', duration: 4000, color: '#d97706' },
+        ];
+
+        var POWERUP_TYPES = [
+            { emoji: '\u{2B50}', name: 'B\u00E1t to', effect: 'big_bowl', duration: 6000, color: '#f59e0b' },
+            { emoji: '\u{1FA78}', name: 'Th\u00EAm m\u1EA1ng', effect: 'extra_life', duration: 0, color: '#22c55e' },
+            { emoji: '\u{1F9F2}', name: 'Nam ch\u00E2m', effect: 'magnet', duration: 5000, color: '#3b82f6' },
+        ];
+
+        var LEVELS = [
+            { needed: 10, speed: 2.0,  spawnMs: 950,  bombPct: 0,  debuffPct: 0,  powerPct: 8,  maxItems: 3,  speedVar: 0.15 },
+            { needed: 12, speed: 2.5,  spawnMs: 850,  bombPct: 10, debuffPct: 0,  powerPct: 7,  maxItems: 4,  speedVar: 0.2  },
+            { needed: 14, speed: 3.0,  spawnMs: 780,  bombPct: 14, debuffPct: 6,  powerPct: 7,  maxItems: 5,  speedVar: 0.25 },
+            { needed: 16, speed: 3.5,  spawnMs: 700,  bombPct: 18, debuffPct: 10, powerPct: 6,  maxItems: 6,  speedVar: 0.3  },
+            { needed: 18, speed: 4.1,  spawnMs: 620,  bombPct: 22, debuffPct: 14, powerPct: 6,  maxItems: 8,  speedVar: 0.35 },
+            { needed: 22, speed: 4.8,  spawnMs: 540,  bombPct: 28, debuffPct: 18, powerPct: 5,  maxItems: 10, speedVar: 0.4  },
+            { needed: 26, speed: 5.6,  spawnMs: 460,  bombPct: 33, debuffPct: 22, powerPct: 5,  maxItems: 12, speedVar: 0.45 },
+            { needed: 30, speed: 6.5,  spawnMs: 380,  bombPct: 38, debuffPct: 26, powerPct: 4,  maxItems: 15, speedVar: 0.5  },
+            { needed: 36, speed: 7.8,  spawnMs: 300,  bombPct: 44, debuffPct: 30, powerPct: 3,  maxItems: 18, speedVar: 0.55 },
+            { needed: 45, speed: 9.5,  spawnMs: 220,  bombPct: 50, debuffPct: 35, powerPct: 2,  maxItems: 22, speedVar: 0.6  },
+        ];
+
+        var state = 'start';
+        var score = 0, misses = 0, level = 1, caughtThisLevel = 0, totalCaught = 0;
+        var playerX = 0, targetPlayerX = 0;
+        var items = [], particles = [];
+        var animFrame = null, lastSpawn = 0, lastTime = 0;
+        var W, H, dpr;
+        var activeDebuffs = {};
+        var activePowerups = {};
+
+        // Auth check
+        function checkAuth() {
+            fetch('/api/auth/me').then(function(r){return r.json();}).then(function(data){
+                if (data.loggedIn && data.user) {
+                    currentUser = data.user;
+                    loginBanner.classList.add('hidden');
+                    userBanner.classList.remove('hidden');
+                    document.getElementById('userNameLabel').textContent = '\u{1F44B} ' + escapeHtml(data.user.name);
+                    loadPlayerBest();
+                } else {
+                    currentUser = null;
+                    loginBanner.classList.remove('hidden');
+                    userBanner.classList.add('hidden');
+                }
+            }).catch(function(){});
+        }
+        function loadPlayerBest() {
+            // Load from leaderboard filtered
+        }
+        function escapeHtml(s) {
+            var d = document.createElement('div'); d.textContent = s; return d.innerHTML;
+        }
+        checkAuth();
+
+        function resize() {
+            var rect = gameArea.getBoundingClientRect();
+            dpr = window.devicePixelRatio || 1;
+            W = rect.width; H = rect.height;
+            canvas.width = W * dpr; canvas.height = H * dpr;
+            canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            playerX = clamp(playerX); targetPlayerX = clamp(targetPlayerX);
+        }
+        function clamp(x) { return Math.min(Math.max(x, PLAYER_WIDTH/2), W - PLAYER_WIDTH/2); }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // Input
+        function handlePointer(cx) {
+            var rect = canvas.getBoundingClientRect();
+            var x = cx - rect.left;
+            if (isActive('reverse')) x = W - x;
+            targetPlayerX = clamp(x);
+        }
+        canvas.addEventListener('mousemove', function(e) { if (state==='playing') handlePointer(e.clientX); });
+        canvas.addEventListener('touchmove', function(e) { if (state==='playing') { e.preventDefault(); handlePointer(e.touches[0].clientX); } }, {passive:false});
+        canvas.addEventListener('touchstart', function(e) { if (state==='playing') { e.preventDefault(); handlePointer(e.touches[0].clientX); } }, {passive:false});
+
+        function isActive(eff) { return activeDebuffs[eff] && activeDebuffs[eff] > performance.now(); }
+        function isPowerActive(eff) { return activePowerups[eff] && activePowerups[eff] > performance.now(); }
+
+        function applyDebuff(dt) {
+            activeDebuffs[dt.effect] = performance.now() + dt.duration;
+            showDebuffToast(dt);
+            refreshBuffBar();
+        }
+        function applyPowerup(pt) {
+            if (pt.effect === 'extra_life') {
+                if (misses > 0) { misses--; }
+                showPowerupToast(pt);
+                spawnText(playerX, H-BOWL_BOTTOM-30, '+1 \u{1F35A}', '#22c55e');
+            } else {
+                activePowerups[pt.effect] = performance.now() + pt.duration;
+                if (pt.effect === 'big_bowl') { PLAYER_WIDTH = BASE_PLAYER_WIDTH * 1.6; }
+                showPowerupToast(pt);
+            }
+            refreshBuffBar();
+        }
+        function refreshBuffBar() {
+            var now = performance.now(), html = '';
+            for (var eff in activeDebuffs) {
+                if (activeDebuffs[eff] > now) {
+                    var dt = DEBUFF_TYPES.find(function(d){return d.effect===eff;});
+                    if (dt) html += '<span class="debuff-tag" style="background:'+dt.color+'">'+dt.emoji+' '+dt.name+'</span>';
+                }
+            }
+            for (var eff2 in activePowerups) {
+                if (activePowerups[eff2] > now) {
+                    var pt = POWERUP_TYPES.find(function(p){return p.effect===eff2;});
+                    if (pt) html += '<span class="debuff-tag" style="background:'+pt.color+'">'+pt.emoji+' '+pt.name+'</span>';
+                }
+            }
+            debuffBar.innerHTML = html;
+        }
+
+        // Spawn
+        function spawnItem() {
+            var cfg = LEVELS[level-1];
+            if (items.length >= cfg.maxItems) return;
+            var roll = Math.random()*100;
+            var sz = 26 + Math.random()*8;
+            var x = sz + Math.random()*(W - sz*2);
+            var sv = 1 - cfg.speedVar/2 + Math.random()*cfg.speedVar;
+            var spd = cfg.speed * sv;
+            var wobble = level >= 4 ? (Math.random()-0.5)*(level-3)*0.4 : 0;
+
+            if (roll < cfg.bombPct) {
+                items.push({x:x,y:-sz,size:sz,speed:spd, type:'bomb',emoji:'\u{1F4A3}', rotation:0,rotSpeed:(Math.random()-0.5)*0.08, vx:wobble});
+            } else if (roll < cfg.bombPct + cfg.debuffPct) {
+                var d = DEBUFF_TYPES[Math.floor(Math.random()*DEBUFF_TYPES.length)];
+                items.push({x:x,y:-sz,size:sz,speed:spd*0.85, type:'debuff',emoji:d.emoji, debuffData:d, rotation:0,rotSpeed:(Math.random()-0.5)*0.1, vx:wobble});
+            } else if (roll < cfg.bombPct + cfg.debuffPct + cfg.powerPct) {
+                var p = POWERUP_TYPES[Math.floor(Math.random()*POWERUP_TYPES.length)];
+                items.push({x:x,y:-sz,size:sz+4,speed:spd*0.75, type:'powerup',emoji:p.emoji, powerData:p, rotation:0,rotSpeed:(Math.random()-0.5)*0.06, vx:wobble});
+            } else {
+                var f = FOOD_TYPES[Math.floor(Math.random()*FOOD_TYPES.length)];
+                items.push({x:x,y:-sz,size:sz,speed:spd, type:'food',emoji:f.emoji,points:f.points, rotation:0,rotSpeed:(Math.random()-0.5)*0.04, vx:wobble});
+            }
+        }
+
+        function spawnBurst(x,y,color,n) {
+            for (var i=0;i<n;i++) {
+                var a = Math.random()*Math.PI*2, s = 1+Math.random()*3.5;
+                particles.push({x:x,y:y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-2.5, life:1,decay:0.02+Math.random()*0.025, size:3+Math.random()*4, color:color});
+            }
+        }
+        function spawnText(x,y,text,color) {
+            particles.push({x:x,y:y,vx:0,vy:-1.8,life:1,decay:0.016,text:text,color:color,isText:true});
+        }
+        function flashScreen(type) {
+            var el=document.createElement('div'); el.className=type==='bomb'?'flash-bomb':type==='powerup'?'flash-powerup':'flash-miss';
+            gameArea.appendChild(el); el.addEventListener('animationend',function(){el.remove();});
+        }
+        function shakeScreen() {
+            gameArea.classList.remove('shake'); void gameArea.offsetWidth; gameArea.classList.add('shake');
+        }
+
+        // Bowl offset from bottom
+        var BOWL_BOTTOM = 28;
+
+        // Draw
+        function drawPlayer() {
+            var px=playerX, py=H-BOWL_BOTTOM, w=PLAYER_WIDTH;
+            ctx.save();
+            if (isActive('jitter')) { ctx.translate((Math.random()-0.5)*10,(Math.random()-0.5)*5); }
+            // Magnet glow
+            if (isPowerActive('magnet')) {
+                ctx.shadowColor='#3b82f6'; ctx.shadowBlur=20;
+            }
+            // Big bowl glow
+            if (isPowerActive('big_bowl')) {
+                ctx.shadowColor='#f59e0b'; ctx.shadowBlur=14;
+            }
+            ctx.beginPath();
+            ctx.moveTo(px-w/2,py);
+            ctx.quadraticCurveTo(px-w/2-4,py+18,px-w/4,py+22);
+            ctx.quadraticCurveTo(px,py+25,px+w/4,py+22);
+            ctx.quadraticCurveTo(px+w/2+4,py+18,px+w/2,py);
+            ctx.closePath();
+            ctx.fillStyle='#d4a574'; ctx.fill();
+            ctx.strokeStyle='#b8845a'; ctx.lineWidth=2; ctx.stroke();
+            ctx.beginPath(); ctx.ellipse(px,py+2,w/2-4,5,0,0,Math.PI*2);
+            ctx.fillStyle='#fff8ee'; ctx.fill();
+            ctx.restore();
+        }
+        function drawItem(it) {
+            ctx.save(); ctx.translate(it.x,it.y); ctx.rotate(it.rotation);
+            if (it.type==='debuff') { ctx.shadowColor=it.debuffData.color; ctx.shadowBlur=14; }
+            if (it.type==='powerup') { ctx.shadowColor=it.powerData.color; ctx.shadowBlur=18; }
+            ctx.font=it.size+'px serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+            ctx.fillText(it.emoji,0,0); ctx.restore();
+        }
+        function drawParticles() {
+            for (var i=0;i<particles.length;i++) {
+                var p=particles[i]; ctx.save(); ctx.globalAlpha=p.life;
+                if (p.isText) { ctx.font='700 15px "Be Vietnam Pro",sans-serif'; ctx.fillStyle=p.color; ctx.textAlign='center'; ctx.fillText(p.text,p.x,p.y); }
+                else { ctx.fillStyle=p.color; ctx.beginPath(); ctx.arc(p.x,p.y,p.size*p.life,0,Math.PI*2); ctx.fill(); }
+                ctx.restore();
+            }
+        }
+        function drawBlind() {
+            if (!isActive('blind')) return;
+            var grd=ctx.createRadialGradient(playerX,H-BOWL_BOTTOM,35,playerX,H-BOWL_BOTTOM,H*0.5);
+            grd.addColorStop(0,'rgba(0,0,0,0)'); grd.addColorStop(0.45,'rgba(0,0,0,0.35)'); grd.addColorStop(1,'rgba(0,0,0,0.9)');
+            ctx.save(); ctx.fillStyle=grd; ctx.fillRect(0,0,W,H); ctx.restore();
+        }
+        function drawGround() {
+            ctx.save(); ctx.strokeStyle='rgba(109,88,80,0.1)'; ctx.lineWidth=1; ctx.setLineDash([4,6]);
+            ctx.beginPath(); ctx.moveTo(0,H-6); ctx.lineTo(W,H-6); ctx.stroke(); ctx.restore();
+        }
+        function drawMisses() {
+            ctx.save(); ctx.font='11px "Be Vietnam Pro",sans-serif'; ctx.textBaseline='middle';
+            for (var i=0;i<MAX_MISSES;i++) {
+                ctx.fillStyle=i<misses?'rgba(239,68,68,0.7)':'rgba(109,88,80,0.15)';
+                ctx.fillText('\u2715',8+i*14,H-6);
+            }
+            ctx.restore();
+        }
+
+        // Update
+        function update(ts) {
+            var dt = Math.min(ts-lastTime,33)/16.67; lastTime=ts;
+            var cfg = LEVELS[level-1]; var now=performance.now();
+
+            // Player movement
+            var lerp = isActive('slow') ? 0.05 : 0.25;
+            if (isActive('pull_left')) targetPlayerX = clamp(targetPlayerX - 2.0*dt);
+            playerX += (targetPlayerX-playerX)*lerp;
+            playerX = clamp(playerX);
+
+            // Spawn
+            if (ts-lastSpawn > cfg.spawnMs) { spawnItem(); lastSpawn=ts; }
+
+            var py=H-BOWL_BOTTOM;
+            for (var i=items.length-1;i>=0;i--) {
+                var it=items[i];
+                it.y += it.speed*dt;
+                it.x += (it.vx||0)*dt;
+                it.rotation += it.rotSpeed*dt;
+                if (it.x<it.size) it.x=it.size;
+                if (it.x>W-it.size) it.x=W-it.size;
+
+                // Magnet: attract food items toward player
+                if (isPowerActive('magnet') && (it.type==='food' || it.type==='powerup')) {
+                    var mdx = playerX - it.x;
+                    var mdy = py - it.y;
+                    var mdist = Math.sqrt(mdx*mdx+mdy*mdy);
+                    if (mdist < 120 && mdist > 5) {
+                        it.x += (mdx/mdist)*3.0*dt;
+                        it.y += (mdy/mdist)*1.5*dt;
+                    }
+                }
+
+                var dx=Math.abs(it.x-playerX), dy=it.y-py;
+                if (dx < PLAYER_WIDTH/2+8 && dy>-14 && dy<14) {
+                    if (it.type==='food') {
+                        score+=it.points; caughtThisLevel++; totalCaught++;
+                        spawnBurst(it.x,it.y,'#fbbf24',6);
+                        spawnText(it.x,it.y-20,'+'+it.points,'#b45309');
+                    } else if (it.type==='bomb') {
+                        spawnBurst(it.x,it.y,'#ef4444',14); flashScreen('bomb'); shakeScreen();
+                        items.splice(i,1); state='over';
+                        endGame('B\u1EA1n \u0111\u00E3 d\u00EDnh bom! \u{1F4A3}'); return;
+                    } else if (it.type==='debuff') {
+                        applyDebuff(it.debuffData);
+                        spawnBurst(it.x,it.y,it.debuffData.color,8);
+                    } else if (it.type==='powerup') {
+                        applyPowerup(it.powerData);
+                        spawnBurst(it.x,it.y,it.powerData.color,10);
+                        flashScreen('powerup');
+                    }
+                    items.splice(i,1); updateHUD(); continue;
+                }
+
+                if (it.y > H+30) {
+                    if (it.type==='food') {
+                        misses++; spawnText(it.x,H-BOWL_BOTTOM-20,'\u{1F494}','#dc2626');
+                        flashScreen('miss'); shakeScreen();
+                        if (misses>=MAX_MISSES) {
+                            items.splice(i,1); state='over';
+                            endGame('\u0110\u1EC3 r\u01A1i qu\u00E1 nhi\u1EC1u \u0111\u1ED3 \u0103n!'); return;
+                        }
+                    }
+                    items.splice(i,1); updateHUD();
+                }
+            }
+
+            // Particles
+            for (var j=particles.length-1;j>=0;j--) {
+                var p=particles[j]; p.x+=p.vx*dt; p.y+=p.vy*dt;
+                if (!p.isText) p.vy+=0.08*dt;
+                p.life-=p.decay*dt; if (p.life<=0) particles.splice(j,1);
+            }
+
+            // Debuff/powerup cleanup
+            var changed=false;
+            for (var eff in activeDebuffs) { if (activeDebuffs[eff]<=now) { delete activeDebuffs[eff]; changed=true; } }
+            for (var eff2 in activePowerups) {
+                if (activePowerups[eff2]<=now) {
+                    if (eff2==='big_bowl') PLAYER_WIDTH=BASE_PLAYER_WIDTH;
+                    delete activePowerups[eff2]; changed=true;
+                }
+            }
+            if (changed) refreshBuffBar();
+
+            // Level up
+            if (state==='playing' && caughtThisLevel>=cfg.needed) {
+                if (level>=MAX_LEVEL) { state='win'; showWin(); saveScore(); }
+                else { level++; caughtThisLevel=0; misses=0; items=[]; activeDebuffs={}; activePowerups={}; PLAYER_WIDTH=BASE_PLAYER_WIDTH; refreshBuffBar(); showLevelUp(); updateHUD(); }
+            }
+
+            if (state==='playing') {
+                levelProgressFill.style.width = Math.min(100,(caughtThisLevel/cfg.needed)*100)+'%';
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0,0,W,H); drawGround();
+            for (var i=0;i<items.length;i++) drawItem(items[i]);
+            drawParticles(); drawPlayer(); drawBlind(); drawMisses();
+        }
+
+        function loop(ts) {
+            if (state!=='playing') { draw(); return; }
+            update(ts); draw(); animFrame=requestAnimationFrame(loop);
+        }
+
+        function updateHUD() {
+            document.getElementById('statLevel').textContent='Lv.'+level;
+            document.getElementById('statScore').textContent=score+'\u0111';
+            var h='\u{1F35A}'.repeat(Math.max(0,MAX_MISSES-misses))+'\u2715'.repeat(Math.min(misses,MAX_MISSES));
+            document.getElementById('statLives').textContent=h;
+        }
+
+        function endGame(reason) {
+            showGameOver(reason); updateHUD(); saveScore();
+        }
+
+        function saveScore() {
+            if (!currentUser) return;
+            fetch('/api/game/score', {
+                method: 'POST',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({score:score,level:level,caught:totalCaught})
+            }).then(function(r){return r.json();}).then(function(data){
+                if (data.best) {
+                    document.getElementById('userBestLabel').textContent = 'K\u1ef7 l\u1ee5c: '+data.best.bestScore+' \u0111i\u1ec3m | Lv.'+data.best.bestLevel;
+                }
+            }).catch(function(){});
+        }
+
+        function showGameOver(reason) {
+            gameOverScreen.classList.remove('hidden');
+            document.getElementById('finalScore').textContent=score;
+            document.getElementById('finalLevel').textContent=level;
+            document.getElementById('finalCaught').textContent=totalCaught;
+            document.getElementById('gameOverReason').textContent=reason||'';
+            if (reason&&reason.indexOf('bom')!==-1) {
+                document.getElementById('gameOverIcon').textContent='\u{1F4A3}';
+                document.getElementById('gameOverTitle').textContent='B\u00D9M!';
+            } else {
+                document.getElementById('gameOverIcon').textContent='\u{1F635}';
+                document.getElementById('gameOverTitle').textContent='H\u1EBFt m\u1EA1ng r\u1ED3i!';
+            }
+        }
+        function showWin() {
+            winScreen.classList.remove('hidden');
+            document.getElementById('winScore').textContent=score;
+            document.getElementById('winCaught').textContent=totalCaught;
+        }
+        function showLevelUp() {
+            levelUpToast.textContent='\u2B50 LEVEL '+level+' \u2B50';
+            levelUpToast.classList.remove('show'); void levelUpToast.offsetWidth; levelUpToast.classList.add('show');
+            var cfg=LEVELS[level-1];
+            if (cfg.debuffPct>0) {
+                setTimeout(function(){
+                    var w=[]; if (level>=3) w.push('\u{1F300} \u0110\u1EA3o ng\u01B0\u1EE3c');
+                    if (level>=4) w.push('\u{1F40C} Ch\u1EADm l\u1EA1i'); if (level>=5) w.push('\u{1FAE3} M\u1EDD m\u1EAFt');
+                    if (level>=6) w.push('\u{1F9F2} H\u00FAt l\u1EC7ch'); if (level>=7) w.push('\u{1FAB4} Rung l\u1EAFc');
+                    debuffToast.textContent='\u26A0\uFE0F C\u1EA9n th\u1EADn: '+w.join(', ');
+                    debuffToast.classList.remove('show'); void debuffToast.offsetWidth; debuffToast.classList.add('show');
+                },1200);
+            }
+        }
+        function showDebuffToast(dt) {
+            debuffToast.textContent=dt.emoji+' '+dt.name+'!';
+            debuffToast.style.background='linear-gradient(135deg,'+dt.color+','+dt.color+'cc)';
+            debuffToast.classList.remove('show'); void debuffToast.offsetWidth; debuffToast.classList.add('show');
+        }
+        function showPowerupToast(pt) {
+            powerupToast.textContent=pt.emoji+' '+pt.name+'!';
+            powerupToast.classList.remove('show'); void powerupToast.offsetWidth; powerupToast.classList.add('show');
+        }
+
+        // Ranking
+        function openRanking() {
+            rankModal.classList.remove('hidden');
+            rankBody.innerHTML = '<div class="rank-empty">\u0110ang t\u1EA3i...</div>';
+            fetch('/api/game/leaderboard').then(function(r){return r.json();}).then(function(data){
+                if (!data.leaders || !data.leaders.length) {
+                    rankBody.innerHTML = '<div class="rank-empty">Ch\u01B0a c\u00F3 d\u1EEF li\u1EC7u x\u1EBFp h\u1EA1ng</div>';
+                    return;
+                }
+                var html = '';
+                data.leaders.forEach(function(r, idx) {
+                    var icon = r.rank===1?'\u{1F947}':r.rank===2?'\u{1F948}':r.rank===3?'\u{1F949}':r.rank;
+                    html += '<div class="rank-row" style="--i:'+idx+'">';
+                    html += '<div class="rank-pos">'+icon+'</div>';
+                    html += '<div class="rank-info"><div class="rank-name">'+escapeHtml(r.name)+'</div>';
+                    html += '<div class="rank-meta">Level '+r.level+' \u2022 '+r.caught+' \u0111\u00E3 h\u1EE9ng</div></div>';
+                    html += '<div class="rank-score">'+r.score+' \u0111</div>';
+                    html += '</div>';
+                });
+                rankBody.innerHTML = html;
+            }).catch(function(){
+                rankBody.innerHTML = '<div class="rank-empty">L\u1ED7i t\u1EA3i d\u1EEF li\u1EC7u</div>';
+            });
+        }
+        document.getElementById('btnRank').addEventListener('click', openRanking);
+        document.getElementById('rankClose').addEventListener('click', function(){ rankModal.classList.add('hidden'); });
+        rankModal.addEventListener('click', function(e){ if (e.target===rankModal) rankModal.classList.add('hidden'); });
+
+        function resetGame() {
+            score=0; misses=0; level=1; caughtThisLevel=0; totalCaught=0;
+            items=[]; particles=[]; activeDebuffs={}; activePowerups={}; lastSpawn=0; lastTime=0;
+            PLAYER_WIDTH=BASE_PLAYER_WIDTH;
+            playerX=W/2; targetPlayerX=W/2;
+            levelProgressFill.style.width='0%'; debuffBar.innerHTML=''; updateHUD();
+        }
+        function startGame() {
+            resetGame(); state='playing';
+            startScreen.classList.add('hidden'); gameOverScreen.classList.add('hidden'); winScreen.classList.add('hidden');
+            lastTime=performance.now(); animFrame=requestAnimationFrame(loop);
+        }
+
+        document.getElementById('btnStart').addEventListener('click',startGame);
+        document.getElementById('btnRestart').addEventListener('click',startGame);
+        document.getElementById('btnPlayAgain').addEventListener('click',startGame);
+        document.body.addEventListener('touchmove',function(e){e.preventDefault();},{passive:false});
+
+        playerX=W/2; targetPlayerX=W/2; draw();
+    })();
+    </script>
+</body>
+</html>

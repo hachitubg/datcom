@@ -136,6 +136,18 @@ class Database {
       this.db.run("ALTER TABLE orders ADD COLUMN user_id INTEGER", () => {});
       this.db.run("ALTER TABLE users ADD COLUMN session_version INTEGER DEFAULT 1", () => {});
 
+      this.db.run(`
+        CREATE TABLE IF NOT EXISTS game_scores (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL,
+          score INTEGER NOT NULL DEFAULT 0,
+          level INTEGER NOT NULL DEFAULT 1,
+          caught INTEGER NOT NULL DEFAULT 0,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+      `);
+
       // Tạo record cho hôm nay nếu chưa có
       this.ensureTodayRecord();
       this.seedAdminUser();
@@ -2037,6 +2049,51 @@ class Database {
         }
       );
     });
+  }
+
+  // =============================================
+  // Game Scores
+  // =============================================
+  saveGameScore(userId, score, level, caught, callback) {
+    this.db.run(
+      `INSERT INTO game_scores (user_id, score, level, caught) VALUES (?, ?, ?, ?)`,
+      [userId, score, level, caught],
+      function(err) {
+        if (err) return callback(err);
+        callback(null, { id: this.lastID });
+      }
+    );
+  }
+
+  getGameLeaderboard(callback) {
+    this.db.all(
+      `SELECT u.name, gs.score, gs.level, gs.caught, gs.created_at
+       FROM game_scores gs
+       JOIN users u ON u.id = gs.user_id
+       ORDER BY gs.score DESC, gs.level DESC
+       LIMIT 50`,
+      [],
+      (err, rows) => {
+        if (err) return callback(err);
+        let currentRank = 0, prevScore = -1;
+        const leaders = (rows || []).map((row) => {
+          if (row.score !== prevScore) { currentRank++; prevScore = row.score; }
+          return { rank: currentRank, name: row.name, score: row.score, level: row.level, caught: row.caught, date: row.created_at };
+        });
+        callback(null, leaders);
+      }
+    );
+  }
+
+  getPlayerBest(userId, callback) {
+    this.db.get(
+      `SELECT MAX(score) AS best_score, MAX(level) AS best_level FROM game_scores WHERE user_id = ?`,
+      [userId],
+      (err, row) => {
+        if (err) return callback(err);
+        callback(null, { bestScore: row?.best_score || 0, bestLevel: row?.best_level || 0 });
+      }
+    );
   }
 }
 

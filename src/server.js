@@ -1155,6 +1155,36 @@ app.put('/api/admin/settings', (req, res) => {
 });
 
 // =============================================
+// Game Scores
+// =============================================
+app.post('/api/game/score', (req, res) => {
+  getUserSessionInfo(req, (err, user) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!user) return res.status(401).json({ error: 'Chưa đăng nhập' });
+    const score = parseInt(req.body.score, 10) || 0;
+    const level = parseInt(req.body.level, 10) || 1;
+    const caught = parseInt(req.body.caught, 10) || 0;
+    if (score < 0 || level < 1 || level > 10 || caught < 0) {
+      return res.status(400).json({ error: 'Dữ liệu không hợp lệ' });
+    }
+    db.saveGameScore(user.id, score, level, caught, (err2, result) => {
+      if (err2) return res.status(500).json({ error: err2.message });
+      db.getPlayerBest(user.id, (err3, best) => {
+        if (err3) return res.status(500).json({ error: err3.message });
+        res.json({ success: true, id: result.id, best });
+      });
+    });
+  });
+});
+
+app.get('/api/game/leaderboard', (req, res) => {
+  db.getGameLeaderboard((err, leaders) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ leaders });
+  });
+});
+
+// =============================================
 // User Auth (Public - Optional login)
 // =============================================
 app.post('/api/auth/register', (req, res) => {

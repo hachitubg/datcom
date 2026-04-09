@@ -1109,6 +1109,17 @@ textarea {
     padding: 0 8px;
 }
 
+.user-auth-left-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.user-auth-btn-game {
+    text-decoration: none;
+    font-size: 0.7rem;
+}
+
 .user-auth-state {
     display: flex;
     align-items: center;
