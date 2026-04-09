@@ -2019,11 +2019,11 @@ class Database {
 
           const totalDays = Number(totalRow?.total_days || 0);
 
-          // Standard competition ranking: cùng số ngày → cùng hạng (1, 2, 2, 4...)
+          // Dense ranking: cùng số ngày → cùng hạng (1, 1, 2, 2, 3...)
           let currentRank = 1;
           const leaders = rows.map((row, index) => {
             if (index > 0 && row.days < rows[index - 1].days) {
-              currentRank = index + 1;
+              currentRank++;
             }
             return {
               rank: currentRank,
