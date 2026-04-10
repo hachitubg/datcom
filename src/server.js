@@ -1169,10 +1169,7 @@ app.post('/api/game/score', (req, res) => {
     }
     db.saveGameScore(user.id, score, level, caught, (err2, result) => {
       if (err2) return res.status(500).json({ error: err2.message });
-      db.getPlayerBest(user.id, (err3, best) => {
-        if (err3) return res.status(500).json({ error: err3.message });
-        res.json({ success: true, id: result.id, best });
-      });
+      res.json({ success: true, best: result.best });
     });
   });
 });

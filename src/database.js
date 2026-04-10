@@ -2058,19 +2058,33 @@ class Database {
     this.db.run(
       `INSERT INTO game_scores (user_id, score, level, caught) VALUES (?, ?, ?, ?)`,
       [userId, score, level, caught],
-      function(err) {
+      (err) => {
         if (err) return callback(err);
-        callback(null, { id: this.lastID });
+        // Giữ lại chỉ bản ghi điểm cao nhất của user, xoá các bản cũ
+        this.db.run(
+          `DELETE FROM game_scores WHERE user_id = ? AND id NOT IN (
+            SELECT id FROM game_scores WHERE user_id = ? ORDER BY score DESC, level DESC LIMIT 1
+          )`,
+          [userId, userId],
+          (err2) => {
+            if (err2) return callback(err2);
+            this.getPlayerBest(userId, (err3, best) => {
+              if (err3) return callback(err3);
+              callback(null, { best });
+            });
+          }
+        );
       }
     );
   }
 
   getGameLeaderboard(callback) {
     this.db.all(
-      `SELECT u.name, gs.score, gs.level, gs.caught, gs.created_at
+      `SELECT u.name, MAX(gs.score) AS score, gs.level, gs.caught, gs.created_at
        FROM game_scores gs
        JOIN users u ON u.id = gs.user_id
-       ORDER BY gs.score DESC, gs.level DESC
+       GROUP BY gs.user_id
+       ORDER BY score DESC, gs.level DESC
        LIMIT 50`,
       [],
       (err, rows) => {
