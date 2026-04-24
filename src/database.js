@@ -1870,7 +1870,7 @@ class Database {
   seedDefaultSettings() {
     const defaults = [
       { key: 'debt_limit_enabled', value: '0', description: 'Bật/tắt giới hạn nợ khi đặt cơm' },
-      { key: 'debt_limit_servings', value: '2', description: 'Số xuất nợ tối đa trước khi bị chặn' },
+      { key: 'debt_limit_servings', value: '2', description: 'Số suất nợ tối đa trước khi bị chặn' },
       { key: 'debt_limit_message', value: 'Bạn thông cảm nhé, mình cần xoay vốn nên vui lòng thanh toán để tiếp tục đặt cơm.', description: 'Thông báo khi vượt giới hạn nợ' },
       { key: 'consecutive_promo_enabled', value: '0', description: 'Bật/tắt tặng mã KM khi đặt liên tục' },
       { key: 'consecutive_promo_days', value: '5', description: 'Số ngày đặt liên tục để được tặng mã' },
@@ -1926,7 +1926,7 @@ class Database {
     stmt.finalize(callback);
   }
 
-  // Kiểm tra nợ xuất cơm của khách hàng (trả về số xuất chưa thanh toán)
+  // Kiểm tra nợ suất cơm của khách hàng (trả về số suất chưa thanh toán)
   getCustomerUnpaidServings(name, callback) {
     const normalizedName = String(name || '').trim();
     this.db.get(
@@ -1947,7 +1947,7 @@ class Database {
             const totalAmount = Number(orderRow?.total_amount || 0);
             const totalPaid = Number(payRow?.total_paid || 0);
             const remaining = Math.max(0, totalAmount - totalPaid);
-            // Tính số xuất nợ = remaining / giá trung bình 1 xuất
+            // Tính số suất nợ = remaining / giá trung bình 1 suất
             const totalServings = Number(orderRow?.total_servings || 0);
             const avgPrice = totalServings > 0 ? totalAmount / totalServings : 0;
             const unpaidServings = avgPrice > 0 ? Math.ceil(remaining / avgPrice) : 0;
@@ -1999,7 +1999,7 @@ class Database {
     );
   }
 
-  // Bảng xếp hạng theo tháng — đếm số ngày đặt cơm (không phải số xuất)
+  // Bảng xếp hạng theo tháng — đếm số ngày đặt cơm (không phải số suất)
   getMonthlyLeaderboard(callback) {
     const now = new Date();
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;

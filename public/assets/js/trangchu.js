@@ -351,7 +351,7 @@ function loadPaymentList() {
             list.innerHTML = rows.map((row) => `
                 <div class="order-item payment-order-item">
                     <div class="order-info">
-                        <h4>${escapeHtml(row.name)} - ${row.quantity} xuất</h4>
+                        <h4>${escapeHtml(row.name)} - ${row.quantity} suất</h4>
                         <p><strong>Tổng tiền:</strong> ${AppUtils.formatCurrency(row.totalAmount)}</p>
                     </div>
                     <div class="payment-action-group">
@@ -379,14 +379,14 @@ function openPaymentDetail(name) {
         .then((data) => {
             const rows = Array.isArray(data.rows) ? data.rows : [];
             if (!rows.length) {
-                container.innerHTML = '<div style="padding: 16px">Không có xuất chưa thanh toán.</div>';
+                container.innerHTML = '<div style="padding: 16px">Không có suất chưa thanh toán.</div>';
                 return;
             }
 
             let html = `
                 <div class="payment-detail-header">
                     <strong>${escapeHtml(data.name)}</strong>
-                    <span>Tổng ${data.totalQuantity} xuất • ${AppUtils.formatCurrency(data.totalAmount)}</span>
+                    <span>Tổng ${data.totalQuantity} suất • ${AppUtils.formatCurrency(data.totalAmount)}</span>
                 </div>
                 <div class="payment-detail-list">
             `;
@@ -398,7 +398,7 @@ function openPaymentDetail(name) {
                 html += `
                     <div class="order-item payment-detail-item ${disc > 0 ? 'order-item-discounted' : ''}">
                         <div class="order-info">
-                            <h4>Đã đặt ${row.quantity} xuất vào ngày ${formatDateTime(row.createdAt)} ${discBadge}</h4>
+                            <h4>Đã đặt ${row.quantity} suất vào ngày ${formatDateTime(row.createdAt)} ${discBadge}</h4>
                             <h4>Tổng tiền ${AppUtils.formatCurrency(row.amount)}</h4>
                             ${row.description ? `<p><strong>Ghi chú:</strong> ${escapeHtml(row.description)}</p>` : ''}
                             ${promoInfo}
@@ -738,7 +738,7 @@ function loadTodayInfo() {
             if (data.remaining <= 0) {
                 orderBtn.disabled = true;
                 orderBtn.classList.add('disabled');
-                orderBtn.textContent = '❌ Hết xuất';
+                orderBtn.textContent = '❌ Hết suất';
                 document.getElementById('mobileBtnOrder').disabled = true;
             } else {
                 orderBtn.disabled = false;
@@ -834,7 +834,7 @@ function loadOrders() {
                     return `
                         <div class="order-item ${disc > 0 ? 'order-item-discounted' : ''}">
                             <div class="order-info">
-                                <h4>${orders.length - index}. ${escapeHtml(order.name)} đã đặt ${order.quantity} xuất ${discBadge}</h4>
+                                <h4>${orders.length - index}. ${escapeHtml(order.name)} đã đặt ${order.quantity} suất ${discBadge}</h4>
                                 ${order.description ? `<p><strong>Ghi chú:</strong> ${escapeHtml(order.description)}</p>` : ''}
                                 <p class="order-time">${AppUtils.formatDateTime(order.created_at)}</p>
                                 ${isOwner ? `
@@ -944,7 +944,7 @@ document.getElementById('ordersList').addEventListener('click', async (e) => {
             type: 'prompt',
             confirmLabel: 'Lưu',
             fields: [
-                { name: 'quantity', label: 'Số lượng xuất', value: oldQty, inputType: 'number', placeholder: 'Nhập số lượng' },
+                { name: 'quantity', label: 'Số lượng suất', value: oldQty, inputType: 'number', placeholder: 'Nhập số lượng' },
                 { name: 'description', label: 'Ghi chú', value: oldDesc, type: 'textarea', placeholder: 'Ví dụ: Ít mặn, thêm rau...' }
             ]
         });
