@@ -6,9 +6,12 @@ const API_BASE = window.location.origin;
 let currentUser = null;
 const escapeHtml = AppUtils.escapeHtml;
 const escapeAttr = AppUtils.escapeAttribute;
+let consecutivePromoStatus = null;
+let promoWalletStatus = null;
+const STREAK_INTRO_STORAGE_KEY = 'datcom_streak_intro_dismissed_v1';
 
 function checkUserAuth() {
-    fetch(`${API_BASE}/api/auth/me`)
+    return fetch(`${API_BASE}/api/auth/me`)
         .then(res => res.json())
         .then(data => {
             if (data.loggedIn && data.user) {
@@ -22,8 +25,15 @@ function checkUserAuth() {
                 document.getElementById('userAuthLoggedIn').style.display = 'none';
             }
             updatePromoAccess();
+            loadConsecutivePromoStatus({ maybeShowIntro: true });
+            loadPromoWalletSummary();
         })
-        .catch(() => { currentUser = null; updatePromoAccess(); });
+        .catch(() => {
+            currentUser = null;
+            updatePromoAccess();
+            loadConsecutivePromoStatus({ maybeShowIntro: true });
+            updatePromoWalletButton(null);
+        });
 }
 
 function updatePromoAccess() {
@@ -128,6 +138,8 @@ document.getElementById('btnUserLogout').addEventListener('click', () => {
             document.getElementById('userAuthLoggedOut').style.display = 'flex';
             document.getElementById('userAuthLoggedIn').style.display = 'none';
             updatePromoAccess();
+            loadConsecutivePromoStatus();
+            updatePromoWalletButton(null);
         });
 });
 
@@ -149,6 +161,9 @@ const paymentDetailModal = document.getElementById('paymentDetailModal');
 const paymentQrModal = document.getElementById('paymentQrModal');
 const paymentHistoryModal = document.getElementById('paymentHistoryModal');
 const feedbackModal = document.getElementById('feedbackModal');
+const streakIntroModal = document.getElementById('streakIntroModal');
+const streakStatusModal = document.getElementById('streakStatusModal');
+const promoWalletModal = document.getElementById('promoWalletModal');
 
 const customerNameInput = document.getElementById('customerName');
 const feedbackContentInput = document.getElementById('feedbackContent');
@@ -194,6 +209,28 @@ document.getElementById('closePaymentHistory').addEventListener('click', () => {
 
 document.getElementById('closeFeedback').addEventListener('click', closeFeedbackModal);
 document.getElementById('cancelFeedback').addEventListener('click', closeFeedbackModal);
+document.getElementById('btnStreakStatus').addEventListener('click', openStreakStatusModal);
+document.getElementById('closeStreakStatus').addEventListener('click', () => {
+    streakStatusModal.style.display = 'none';
+});
+document.getElementById('btnPromoWallet').addEventListener('click', openPromoWalletModal);
+document.getElementById('closePromoWallet').addEventListener('click', () => {
+    promoWalletModal.style.display = 'none';
+});
+document.getElementById('closeStreakIntro').addEventListener('click', closeStreakIntroModal);
+document.getElementById('btnStreakIntroOk').addEventListener('click', closeStreakIntroModal);
+document.addEventListener('click', async (e) => {
+    const copyBtn = e.target.closest('.promo-wallet-copy');
+    if (!copyBtn) return;
+
+    const code = copyBtn.dataset.code || '';
+    try {
+        await navigator.clipboard.writeText(code);
+        showPopup('Đã sao chép mã khuyến mãi');
+    } catch {
+        showPopup(`Mã của bạn: ${code}`);
+    }
+});
 
 document.getElementById('btnSearchPayment').addEventListener('click', loadPaymentList);
 document.getElementById('paymentSearch').addEventListener('keydown', (e) => {
@@ -327,6 +364,244 @@ document.getElementById('feedbackForm').addEventListener('submit', async (event)
     }
 });
 
+function shouldShowStreakIntro(status) {
+    if (!status || !status.enabled) return false;
+    return localStorage.getItem(STREAK_INTRO_STORAGE_KEY) !== '1';
+}
+
+function closeStreakIntroModal() {
+    if (document.getElementById('streakIntroDontShow').checked) {
+        localStorage.setItem(STREAK_INTRO_STORAGE_KEY, '1');
+    }
+    streakIntroModal.style.display = 'none';
+}
+
+function updateStreakIntroCopy(status) {
+    const requiredDays = Number(status?.requiredDays || 5);
+    const discount = Number(status?.discountPercent || 0);
+    const text = discount > 0
+        ? `Đăng nhập và đặt cơm ${requiredDays} ngày bán liên tục để nhận mã giảm ${discount}% cho 1 suất.`
+        : `Đăng nhập và đặt cơm ${requiredDays} ngày bán liên tục để nhận mã giảm giá.`;
+    document.getElementById('streakIntroText').textContent = text;
+}
+
+function updateStreakButton(status) {
+    const btn = document.getElementById('btnStreakStatus');
+    if (!btn) return;
+
+    const shouldShow = Boolean(status && status.enabled && status.loggedIn);
+    btn.style.display = shouldShow ? 'inline-flex' : 'none';
+    if (shouldShow) {
+        btn.title = `Chuỗi đặt cơm: ${status.currentDays || 0}/${status.requiredDays || 0} ngày`;
+    }
+}
+
+function updatePromoWalletButton(status) {
+    const btn = document.getElementById('btnPromoWallet');
+    const badge = document.getElementById('promoWalletBadge');
+    if (!btn || !badge) return;
+
+    const shouldShow = Boolean(currentUser);
+    btn.style.display = shouldShow ? 'inline-flex' : 'none';
+
+    const unseenCount = Number(status?.unseenCount || 0);
+    if (shouldShow && unseenCount > 0) {
+        badge.textContent = unseenCount > 9 ? '9+' : String(unseenCount);
+        badge.style.display = 'inline-flex';
+        btn.classList.add('has-new-promo');
+    } else {
+        badge.style.display = 'none';
+        btn.classList.remove('has-new-promo');
+    }
+}
+
+async function loadPromoWalletSummary() {
+    if (!currentUser) {
+        promoWalletStatus = null;
+        updatePromoWalletButton(null);
+        return null;
+    }
+
+    try {
+        const status = await AppUtils.fetchJson(`${API_BASE}/api/promo-wallet`);
+        promoWalletStatus = status;
+        updatePromoWalletButton(status);
+        return status;
+    } catch {
+        promoWalletStatus = null;
+        updatePromoWalletButton(null);
+        return null;
+    }
+}
+
+function loadConsecutivePromoStatus({ maybeShowIntro = false } = {}) {
+    return AppUtils.fetchJson(`${API_BASE}/api/consecutive-promo/status`)
+        .then((status) => {
+            consecutivePromoStatus = status;
+            updateStreakButton(status);
+
+            if (status.enabled && maybeShowIntro) {
+                updateStreakIntroCopy(status);
+                if (shouldShowStreakIntro(status)) {
+                    document.getElementById('streakIntroDontShow').checked = false;
+                    streakIntroModal.style.display = 'flex';
+                }
+            }
+
+            return status;
+        })
+        .catch(() => {
+            consecutivePromoStatus = null;
+            updateStreakButton(null);
+            return null;
+        });
+}
+
+function getStreakProgress(status) {
+    const requiredDays = Math.max(1, Number(status?.requiredDays || 1));
+    const currentDays = Math.max(0, Number(status?.currentDays || 0));
+    const cycleDays = currentDays >= requiredDays ? requiredDays : currentDays;
+    return Math.min(100, Math.round((cycleDays / requiredDays) * 100));
+}
+
+function renderStreakStatus(status) {
+    const container = document.getElementById('streakStatusContent');
+    if (!status || !status.enabled) {
+        container.innerHTML = '<div class="leaderboard-empty">Tính năng đang tắt.</div>';
+        return;
+    }
+
+    if (!status.loggedIn) {
+        container.innerHTML = `
+            <div class="streak-empty-state">
+                <div class="streak-empty-icon">🔐</div>
+                <h3>Cần đăng nhập</h3>
+                <p>Chuỗi ngày chỉ được tính cho các đơn đặt khi tài khoản đang đăng nhập.</p>
+                <button type="button" class="btn-submit" id="btnOpenLoginFromStreak">ĐĂNG NHẬP</button>
+            </div>
+        `;
+        document.getElementById('btnOpenLoginFromStreak').addEventListener('click', () => {
+            streakStatusModal.style.display = 'none';
+            document.getElementById('btnShowLogin').click();
+        });
+        return;
+    }
+
+    const requiredDays = Number(status.requiredDays || 5);
+    const currentDays = Number(status.currentDays || 0);
+    const remainingDays = Number(status.remainingDays || 0);
+    const percent = getStreakProgress(status);
+
+    const nextText = remainingDays <= 0
+        ? 'Bạn đã đạt mốc nhận mã trong chu kỳ hiện tại.'
+        : `Còn ${remainingDays} ngày bán nữa để chạm mốc tiếp theo.`;
+
+    container.innerHTML = `
+        <div class="streak-status-panel">
+            <div class="streak-status-top">
+                <div>
+                    <span class="streak-kicker">Tiến độ hiện tại</span>
+                    <h3>${currentDays} / ${requiredDays} ngày</h3>
+                    <p>${escapeHtml(nextText)}</p>
+                </div>
+                <div class="streak-ring" style="--streak-pct:${percent}%">
+                    <span>${percent}%</span>
+                </div>
+            </div>
+            <div class="streak-progress-track">
+                <div class="streak-progress-fill" style="width:${percent}%"></div>
+            </div>
+            <div class="streak-status-note">Thứ 7 và Chủ nhật được bỏ qua trong chuỗi ngày bán.</div>
+        </div>
+    `;
+}
+
+async function openStreakStatusModal() {
+    streakStatusModal.style.display = 'flex';
+    document.getElementById('streakStatusContent').innerHTML = '<div class="loading-text">Đang tải...</div>';
+    const status = await loadConsecutivePromoStatus();
+    renderStreakStatus(status);
+}
+
+function getPromoWalletNote(code) {
+    if (code.source === 'admin_gift') {
+        return `Mã quà tặng được nhận ngày ${AppUtils.formatDateTime(code.createdAt)}`;
+    }
+    if (code.source === 'auto_consecutive') {
+        const streakText = Number(code.earnedStreakDays || 0) > 0
+            ? ` · Mốc ${Number(code.earnedStreakDays)} ngày`
+            : '';
+        return `Mã chương trình đặt liên tục${streakText}`;
+    }
+    return `Mã khuyến mãi được tạo ngày ${AppUtils.formatDateTime(code.createdAt)}`;
+}
+
+function renderPromoWallet(status) {
+    const container = document.getElementById('promoWalletContent');
+    const codes = Array.isArray(status?.codes) ? status.codes : [];
+
+    if (!currentUser) {
+        container.innerHTML = `
+            <div class="streak-empty-state">
+                <div class="streak-empty-icon">🔐</div>
+                <h3>Cần đăng nhập</h3>
+                <p>Đăng nhập để xem các mã khuyến mãi đã nhận.</p>
+            </div>
+        `;
+        return;
+    }
+
+    if (!codes.length) {
+        container.innerHTML = '<div class="promo-wallet-empty">Bạn chưa có mã khuyến mãi nào.</div>';
+        return;
+    }
+
+    container.innerHTML = `
+        <div class="promo-wallet-list">
+            ${codes.map((code) => {
+                const used = Boolean(code.used);
+                const statusLabel = used ? 'Đã sử dụng' : 'Chưa sử dụng';
+                const statusClass = used ? 'promo-wallet-status-used' : 'promo-wallet-status-ready';
+                return `
+                    <div class="promo-wallet-row ${!code.seen && code.source === 'admin_gift' ? 'promo-wallet-row-new' : ''}">
+                        <div class="promo-wallet-main">
+                            <div class="promo-wallet-code">${escapeHtml(code.code)}</div>
+                            <div class="promo-wallet-meta">Giảm ${Number(code.discountPercent || 0)}% cho 1 suất</div>
+                            <div class="promo-wallet-note">${escapeHtml(getPromoWalletNote(code))}</div>
+                            ${used ? `<div class="promo-wallet-meta">Dùng lúc: ${AppUtils.formatDateTime(code.usedAt)}</div>` : ''}
+                        </div>
+                        <div class="promo-wallet-actions">
+                            <span class="promo-wallet-status ${statusClass}">${statusLabel}</span>
+                            ${!used ? `<button type="button" class="promo-wallet-copy" data-code="${escapeAttr(code.code)}">Sao chép</button>` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
+}
+
+async function openPromoWalletModal() {
+    promoWalletModal.style.display = 'flex';
+    document.getElementById('promoWalletContent').innerHTML = '<div class="loading-text">Đang tải...</div>';
+    const status = await loadPromoWalletSummary();
+    renderPromoWallet(status);
+
+    if (status && Number(status.unseenCount || 0) > 0) {
+        try {
+            await AppUtils.fetchJson(`${API_BASE}/api/promo-wallet/mark-seen`, { method: 'POST' });
+            promoWalletStatus = {
+                ...status,
+                unseenCount: 0,
+                codes: (status.codes || []).map((code) => ({ ...code, seen: true }))
+            };
+            updatePromoWalletButton(promoWalletStatus);
+        } catch {
+            // Không chặn người dùng xem mã nếu thao tác đánh dấu đã xem lỗi.
+        }
+    }
+}
+
 function loadPaymentList() {
     const keyword = document.getElementById('paymentSearch').value.trim();
     const url = keyword ? `${API_BASE}/api/payments/today?search=${encodeURIComponent(keyword)}` : `${API_BASE}/api/payments/today`;
@@ -393,8 +668,8 @@ function openPaymentDetail(name) {
 
             rows.forEach((row, index) => {
                 const disc = Number(row.discount_percent || 0);
-                const discBadge = disc > 0 ? `<span class="discount-badge">-${disc}%</span>` : '';
-                const promoInfo = row.promo_code ? `<p class="promo-info-text">Mã KM: ${escapeHtml(row.promo_code)} (giảm ${disc}%)</p>` : '';
+                const discBadge = disc > 0 ? `<span class="discount-badge">-${disc}% / 1 suất</span>` : '';
+                const promoInfo = row.promo_code ? `<p class="promo-info-text">Mã KM: ${escapeHtml(row.promo_code)} (giảm ${disc}% cho 1 suất)</p>` : '';
                 html += `
                     <div class="order-item payment-detail-item ${disc > 0 ? 'order-item-discounted' : ''}">
                         <div class="order-info">
@@ -700,6 +975,18 @@ window.addEventListener('click', (e) => {
     if (e.target === authModal) {
         authModal.style.display = 'none';
     }
+    if (e.target === streakIntroModal) {
+        closeStreakIntroModal();
+    }
+    if (e.target === streakStatusModal) {
+        streakStatusModal.style.display = 'none';
+    }
+    if (e.target === promoWalletModal) {
+        promoWalletModal.style.display = 'none';
+    }
+    if (e.target === leaderboardModal) {
+        leaderboardModal.style.display = 'none';
+    }
 });
 
 // Load today info
@@ -826,7 +1113,7 @@ function loadOrders() {
             } else {
                 ordersList.innerHTML = orders.map((order, index) => {
                     const disc = Number(order.discount_percent || 0);
-                    const discBadge = disc > 0 ? `<span class="discount-badge">-${disc}%</span>` : '';
+                    const discBadge = disc > 0 ? `<span class="discount-badge">-${disc}% / 1 suất</span>` : '';
                     const isOwner = currentUser && order.user_id === currentUser.id;
                     const createdAt = new Date(order.created_at + 'Z');
                     const diffMin = (Date.now() - createdAt.getTime()) / 60000;
@@ -886,6 +1173,8 @@ document.getElementById('orderForm').addEventListener('submit', (e) => {
             setTimeout(() => {
                 orderModal.style.display = 'none';
                 loadTodayInfo();
+                loadConsecutivePromoStatus();
+                loadPromoWalletSummary();
                 // Hiển thị thông báo tặng mã KM nếu có
                 if (data.bonus_promo) {
                     showPopup(data.bonus_promo.message);
@@ -987,6 +1276,7 @@ setInterval(loadTodayInfo, 5000); // Refresh every 5 seconds
 const leaderboardModal = document.getElementById('leaderboardModal');
 const leaderboardContent = document.getElementById('leaderboardContent');
 const leaderboardTitle = document.getElementById('leaderboardTitle');
+const leaderboardMonthInput = document.getElementById('leaderboardMonth');
 
 const VIETNAMESE_MONTHS = [
     'Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6',
@@ -1000,6 +1290,11 @@ function formatMonthVi(monthStr) {
     const year = parts[0];
     const month = parseInt(parts[1], 10);
     return `${VIETNAMESE_MONTHS[month - 1]} năm ${year}`;
+}
+
+function getCurrentMonthValue() {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 }
 
 function getRankClass(rank) {
@@ -1060,15 +1355,16 @@ function renderLeaderboard(data) {
     });
 }
 
-async function openLeaderboard() {
+async function loadLeaderboard(month) {
     leaderboardContent.innerHTML = '<div class="loading-text">Đang tải...</div>';
-    leaderboardModal.style.display = 'flex';
     try {
-        const res = await fetch(`${API_BASE}/api/leaderboard/monthly`);
+        const selectedMonth = month || leaderboardMonthInput.value || getCurrentMonthValue();
+        const res = await fetch(`${API_BASE}/api/leaderboard/monthly?month=${encodeURIComponent(selectedMonth)}`);
         const data = await res.json();
         if (data.error) {
             leaderboardContent.innerHTML = `<div class="leaderboard-empty">${escapeHtml(data.error)}</div>`;
         } else {
+            leaderboardMonthInput.value = data.month || selectedMonth;
             renderLeaderboard(data);
         }
     } catch (err) {
@@ -1076,7 +1372,18 @@ async function openLeaderboard() {
     }
 }
 
+async function openLeaderboard() {
+    if (!leaderboardMonthInput.value) {
+        leaderboardMonthInput.value = getCurrentMonthValue();
+    }
+    leaderboardModal.style.display = 'flex';
+    loadLeaderboard(leaderboardMonthInput.value);
+}
+
 document.getElementById('btnLeaderboard').addEventListener('click', openLeaderboard);
 document.getElementById('closeLeaderboard').addEventListener('click', () => {
     leaderboardModal.style.display = 'none';
+});
+leaderboardMonthInput.addEventListener('change', () => {
+    loadLeaderboard(leaderboardMonthInput.value);
 });

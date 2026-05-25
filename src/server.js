@@ -437,10 +437,14 @@ app.post('/api/orders', (req, res) => {
               return res.json(order);
             }
 
+            if (!user) {
+              return res.json(order);
+            }
+
             const requiredDays = Number(cpSettings.consecutive_promo_days || 5);
             const discount = Number(cpSettings.consecutive_promo_discount || 50);
 
-            db.getConsecutiveOrderDays(normalizedCustomerName, (daysErr, consecutiveDays) => {
+            db.getConsecutiveOrderDaysForUser(user.id, (daysErr, consecutiveDays) => {
               if (daysErr || consecutiveDays < requiredDays) {
                 return res.json(order);
               }
@@ -449,8 +453,11 @@ app.post('/api/orders', (req, res) => {
                 return res.json(order);
               }
 
-              db.createAutoPromoCode(normalizedCustomerName, discount, (promoErr, promoInfo) => {
+              db.createAutoPromoCode(normalizedCustomerName, discount, user.id, consecutiveDays, (promoErr, promoInfo) => {
                 if (promoErr) {
+                  return res.json(order);
+                }
+                if (promoInfo && promoInfo.existing) {
                   return res.json(order);
                 }
                 res.json({
@@ -956,9 +963,121 @@ app.get('/api/payments/history', (req, res) => {
   });
 });
 
+app.get('/api/consecutive-promo/status', (req, res) => {
+  db.getSettings(['consecutive_promo_enabled', 'consecutive_promo_days', 'consecutive_promo_discount'], (settingsErr, settings) => {
+    if (settingsErr) {
+      return res.status(500).json({ error: settingsErr.message });
+    }
+
+    const enabled = settings.consecutive_promo_enabled === '1';
+    const requiredDays = Number(settings.consecutive_promo_days || 5);
+    const discountPercent = Number(settings.consecutive_promo_discount || 50);
+
+    if (!enabled) {
+      return res.json({
+        enabled: false,
+        requiredDays,
+        discountPercent,
+        loggedIn: false,
+        currentDays: 0,
+        remainingDays: requiredDays
+      });
+    }
+
+    getUserSessionInfo(req, (userErr, user) => {
+      if (userErr) {
+        return res.status(500).json({ error: userErr.message });
+      }
+
+      if (!user) {
+        return res.json({
+          enabled: true,
+          requiredDays,
+          discountPercent,
+          loggedIn: false,
+          currentDays: 0,
+          remainingDays: requiredDays
+        });
+      }
+
+      db.getConsecutiveOrderDaysForUser(user.id, (daysErr, currentDays) => {
+        if (daysErr) {
+          return res.status(500).json({ error: daysErr.message });
+        }
+
+        res.json({
+          enabled: true,
+          requiredDays,
+          discountPercent,
+          loggedIn: true,
+          currentDays,
+          remainingDays: Math.max(0, requiredDays - (currentDays % requiredDays || (currentDays >= requiredDays ? requiredDays : 0)))
+        });
+      });
+    });
+  });
+});
+
+app.get('/api/promo-wallet', (req, res) => {
+  getUserSessionInfo(req, (userErr, user) => {
+    if (userErr) {
+      return res.status(500).json({ error: userErr.message });
+    }
+    if (!user) {
+      return res.status(401).json({ error: 'Vui lòng đăng nhập để xem mã khuyến mãi' });
+    }
+
+    db.getPromoWalletForUser(user.id, (err, rows = []) => {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+
+      const codes = rows.map((row) => ({
+        id: row.id,
+        code: row.code,
+        discountPercent: Number(row.discount_percent || 0),
+        createdAt: row.created_at,
+        usedAt: row.used_at,
+        used: Boolean(row.used_by),
+        source: row.source || 'manual',
+        earnedStreakDays: Number(row.earned_streak_days || 0),
+        seen: Boolean(row.promo_seen_at)
+      }));
+
+      res.json({
+        codes,
+        unseenCount: codes.filter((code) => code.source === 'admin_gift' && !code.seen).length
+      });
+    });
+  });
+});
+
+app.post('/api/promo-wallet/mark-seen', (req, res) => {
+  getUserSessionInfo(req, (userErr, user) => {
+    if (userErr) {
+      return res.status(500).json({ error: userErr.message });
+    }
+    if (!user) {
+      return res.status(401).json({ error: 'Vui lòng đăng nhập để xem mã khuyến mãi' });
+    }
+
+    db.markPromoWalletSeen(user.id, (err) => {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+      res.json({ success: true });
+    });
+  });
+});
+
 // Bảng xếp hạng theo tháng
 app.get('/api/leaderboard/monthly', (req, res) => {
-  db.getMonthlyLeaderboard((err, data) => {
+  const month = String(req.query.month || '').trim();
+  if (month && !/^\d{4}-\d{2}$/.test(month)) {
+    return res.status(400).json({ error: 'Tháng không hợp lệ' });
+  }
+
+  db.getMonthlyLeaderboard(month, (err, data) => {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
@@ -1031,7 +1150,22 @@ app.post('/api/promo-codes/validate', (req, res) => {
     if (err || !promo) {
       return res.json({ valid: false });
     }
-    res.json({ valid: true, discountPercent: promo.discount_percent });
+
+    const promoOwnerId = Number(promo.issued_to_user_id || 0);
+    if (!promoOwnerId) {
+      return res.json({ valid: true, discountPercent: promo.discount_percent });
+    }
+
+    getUserSessionInfo(req, (userErr, user) => {
+      if (userErr || !user || Number(user.id) !== promoOwnerId) {
+        return res.json({
+          valid: false,
+          reason: 'Mã này chỉ dùng được trên tài khoản được tặng'
+        });
+      }
+
+      res.json({ valid: true, discountPercent: promo.discount_percent });
+    });
   });
 });
 
@@ -1048,12 +1182,33 @@ app.get('/api/admin/promo-codes', (req, res) => {
 app.post('/api/admin/promo-codes', (req, res) => {
   const code = String(req.body.code || '').trim();
   const discountPercent = Number(req.body.discountPercent || 0);
+  const issuedToUserId = Number(req.body.issuedToUserId || 0);
   if (!code || discountPercent <= 0 || discountPercent > 100) {
     return res.status(400).json({ error: 'Mã và phần trăm giảm giá không hợp lệ (1-100%)' });
   }
-  db.createPromoCode(code, discountPercent, (err, promo) => {
-    if (err) return res.status(400).json({ error: err.message });
-    res.json(promo);
+  const createPromo = (user) => {
+    db.createPromoCode(
+      code,
+      discountPercent,
+      user ? { issuedToUserId: user.id, issuedToName: user.name } : {},
+      (err, promo) => {
+        if (err) return res.status(400).json({ error: err.message });
+        res.json(promo);
+      }
+    );
+  };
+
+  if (!issuedToUserId) {
+    createPromo(null);
+    return;
+  }
+
+  db.getUserById(issuedToUserId, (userErr, user) => {
+    if (userErr) return res.status(500).json({ error: userErr.message });
+    if (!user || user.role !== 'user') {
+      return res.status(400).json({ error: 'Tài khoản nhận mã không hợp lệ' });
+    }
+    createPromo(user);
   });
 });
 

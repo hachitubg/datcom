@@ -136,9 +136,12 @@ function openCustomerFullHistoryModal(customerName) {
                 const rowClass = row.paymentStatus === 'PAID' ? 'row-paid' : row.paymentStatus === 'PARTIAL' ? 'row-partial' : 'row-unpaid';
                 let promoHtml = '';
                 if (row.promos && row.promos.length > 0) {
-                    promoHtml = row.promos.map(p =>
-                        `<div class="promo-detail-note">🎫 Mã <strong>${escapeHtml(p.promo_code)}</strong>: giảm ${p.discount_percent}% · ${p.quantity} suất × ${AppUtils.formatCurrency(p.finalPrice)}/suất</div>`
-                    ).join('');
+                    promoHtml = row.promos.map(p => {
+                        const fullPriceText = Number(p.full_price_quantity || 0) > 0
+                            ? ` · ${p.full_price_quantity} suất còn lại tính giá gốc`
+                            : '';
+                        return `<div class="promo-detail-note">🎫 Mã <strong>${escapeHtml(p.promo_code)}</strong>: giảm ${p.discount_percent}% cho ${p.discount_quantity || 1} suất × ${AppUtils.formatCurrency(p.finalPrice)}/suất${fullPriceText}</div>`;
+                    }).join('');
                 }
                 return `
                     <div class="customer-history-order-row ${rowClass}">
@@ -195,6 +198,7 @@ function switchTab(tab, event) {
         switchPaymentView(currentPaymentView);
     } else if (tab === 'promos') {
         loadPromoCodes();
+        loadPromoUserOptions();
     } else if (tab === 'users') {
         loadUsers();
     } else if (tab === 'settings') {
@@ -394,8 +398,8 @@ function renderHistoryOrders() {
 
     const rowsHtml = pageRows.map((order) => {
         const disc = Number(order.discount_percent || 0);
-        const discBadge = disc > 0 ? `<span class="discount-badge">-${disc}%</span>` : '';
-        const promoInfo = disc > 0 ? `<div class="admin-payment-meta promo-info-text">Mã KM: ${escapeHtml(order.promo_code || '')} — Giảm ${disc}%</div>` : '';
+        const discBadge = disc > 0 ? `<span class="discount-badge">-${disc}% / 1 suất</span>` : '';
+        const promoInfo = disc > 0 ? `<div class="admin-payment-meta promo-info-text">Mã KM: ${escapeHtml(order.promo_code || '')} — Giảm ${disc}% cho 1 suất</div>` : '';
         return `
         <div class="order-row ${disc > 0 ? 'order-row-discounted' : ''}">
             <div class="order-info">
@@ -825,9 +829,12 @@ function openCustomerOrderModal(encodedName) {
             content.innerHTML = rows.map((row) => {
                 let promoHtml = '';
                 if (row.promos && row.promos.length > 0) {
-                    promoHtml = row.promos.map(p =>
-                        `<div class="promo-detail-note">🎫 Mã <strong>${escapeHtml(p.promo_code)}</strong>: giảm ${p.discount_percent}% · ${p.quantity} suất × ${AppUtils.formatCurrency(p.finalPrice)}/suất</div>`
-                    ).join('');
+                    promoHtml = row.promos.map(p => {
+                        const fullPriceText = Number(p.full_price_quantity || 0) > 0
+                            ? ` · ${p.full_price_quantity} suất còn lại tính giá gốc`
+                            : '';
+                        return `<div class="promo-detail-note">🎫 Mã <strong>${escapeHtml(p.promo_code)}</strong>: giảm ${p.discount_percent}% cho ${p.discount_quantity || 1} suất × ${AppUtils.formatCurrency(p.finalPrice)}/suất${fullPriceText}</div>`;
+                    }).join('');
                 }
                 return `
                 <div class="day-modal-order-item">
@@ -1062,6 +1069,24 @@ window.addEventListener('click', (e) => {
 // =============================================
 // Promo Code Management
 // =============================================
+function loadPromoUserOptions() {
+    const select = document.getElementById('newPromoUser');
+    if (!select) return;
+
+    fetch(`${API_BASE}/api/admin/users`)
+        .then(res => res.json())
+        .then(users => {
+            const userOptions = (users || [])
+                .filter(u => u.role === 'user')
+                .map(u => `<option value="${u.id}">${escapeHtml(u.name)} - ${escapeHtml(u.phone)}</option>`)
+                .join('');
+            select.innerHTML = `<option value="">Không gửi tới tài khoản cụ thể</option>${userOptions}`;
+        })
+        .catch(() => {
+            select.innerHTML = '<option value="">Không tải được danh sách tài khoản</option>';
+        });
+}
+
 function loadPromoCodes() {
     const container = document.getElementById('promoCodeList');
     container.innerHTML = '<div class="loading">Đang tải...</div>';
@@ -1078,11 +1103,18 @@ function loadPromoCodes() {
                 const isUsed = !!c.used_by;
                 const statusCls = isUsed ? 'psb-paid' : 'psb-pending';
                 const statusLabel = isUsed ? `Đã dùng bởi ${c.used_by}` : 'Chưa sử dụng';
+                let sourceInfo = '<div class="admin-payment-meta">Mã tạo thủ công, không gắn tài khoản cụ thể</div>';
+                if (c.source === 'admin_gift') {
+                    sourceInfo = `<div class="admin-payment-meta">Mã quà tặng cho ${escapeHtml(c.issued_to_name || 'khách hàng')} · Nhận ngày ${AppUtils.formatDateTime(c.created_at)}</div>`;
+                } else if (c.source === 'auto_consecutive') {
+                    sourceInfo = `<div class="admin-payment-meta">Mã chương trình đặt liên tục cho ${escapeHtml(c.issued_to_name || 'khách hàng')} · Mốc ${Number(c.earned_streak_days || 0)} ngày</div>`;
+                }
                 return `
                     <div class="admin-payment-row ${isUsed ? 'promo-used' : ''}">
                         <div>
                             <div class="order-name" style="font-family:monospace; letter-spacing:1px;">${escapeHtml(c.code)}</div>
                             <div class="admin-payment-meta">Giảm <strong>${c.discount_percent}%</strong> · Tạo: ${AppUtils.formatDateTime(c.created_at)}</div>
+                            ${sourceInfo}
                             <span class="payment-status-badge ${statusCls}">${escapeHtml(statusLabel)}</span>
                             ${isUsed ? `<div class="admin-payment-meta">Dùng lúc: ${AppUtils.formatDateTime(c.used_at)}</div>` : ''}
                         </div>
@@ -1101,6 +1133,7 @@ function loadPromoCodes() {
 function createPromoCode() {
     const code = document.getElementById('newPromoCode').value.trim().toUpperCase();
     const discount = Number(document.getElementById('newPromoDiscount').value || 0);
+    const issuedToUserId = Number(document.getElementById('newPromoUser')?.value || 0);
     const msgEl = document.getElementById('promoAdminMessage');
 
     if (!code || discount <= 0 || discount > 100) {
@@ -1111,7 +1144,7 @@ function createPromoCode() {
     fetch(`${API_BASE}/api/admin/promo-codes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, discountPercent: discount })
+        body: JSON.stringify({ code, discountPercent: discount, issuedToUserId })
     })
     .then(res => res.json())
     .then(data => {
@@ -1119,6 +1152,9 @@ function createPromoCode() {
         msgEl.innerHTML = '<div class="success-message">Tạo mã khuyến mãi thành công!</div>';
         document.getElementById('newPromoCode').value = '';
         document.getElementById('newPromoDiscount').value = '';
+        if (document.getElementById('newPromoUser')) {
+            document.getElementById('newPromoUser').value = '';
+        }
         loadPromoCodes();
     })
     .catch(err => {

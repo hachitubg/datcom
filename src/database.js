@@ -134,6 +134,11 @@ class Database {
       this.db.run("ALTER TABLE orders ADD COLUMN discount_percent INTEGER DEFAULT 0", () => {});
       this.db.run("ALTER TABLE orders ADD COLUMN promo_code TEXT", () => {});
       this.db.run("ALTER TABLE orders ADD COLUMN user_id INTEGER", () => {});
+      this.db.run("ALTER TABLE promo_codes ADD COLUMN issued_to_user_id INTEGER", () => {});
+      this.db.run("ALTER TABLE promo_codes ADD COLUMN issued_to_name TEXT", () => {});
+      this.db.run("ALTER TABLE promo_codes ADD COLUMN source TEXT DEFAULT 'manual'", () => {});
+      this.db.run("ALTER TABLE promo_codes ADD COLUMN earned_streak_days INTEGER", () => {});
+      this.db.run("ALTER TABLE promo_codes ADD COLUMN promo_seen_at DATETIME", () => {});
       this.db.run("ALTER TABLE users ADD COLUMN session_version INTEGER DEFAULT 1", () => {});
 
       this.db.run(`
@@ -169,6 +174,15 @@ class Database {
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+  }
+
+  getOrderAmountSql(orderAlias = 'o', dayAlias = 'd') {
+    return `CASE
+      WHEN COALESCE(${orderAlias}.discount_percent, 0) > 0 AND COALESCE(${orderAlias}.promo_code, '') != ''
+        THEN ((MAX(${orderAlias}.quantity - 1, 0) * ${dayAlias}.price)
+          + (${dayAlias}.price * (100 - COALESCE(${orderAlias}.discount_percent, 0)) / 100))
+      ELSE ${orderAlias}.quantity * ${dayAlias}.price
+    END`;
   }
 
   getTodayInfo(callback) {
@@ -380,7 +394,7 @@ class Database {
                     }
 
                     dbConn.get(
-                      `SELECT id, discount_percent FROM promo_codes WHERE UPPER(code) = ? AND used_by IS NULL`,
+                      `SELECT id, discount_percent, issued_to_user_id FROM promo_codes WHERE UPPER(code) = ? AND used_by IS NULL`,
                       [normalizedPromoCode],
                       (promoErr, promo) => {
                         if (promoErr) {
@@ -390,6 +404,12 @@ class Database {
 
                         if (!promo) {
                           rollback(new Error('Ma khuyen mai khong hop le hoac da duoc su dung'));
+                          return;
+                        }
+
+                        const promoOwnerId = Number(promo.issued_to_user_id || 0);
+                        if (promoOwnerId && promoOwnerId !== Number(finalUserId || 0)) {
+                          rollback(new Error('Ma khuyen mai nay chi danh cho tai khoan duoc tang'));
                           return;
                         }
 
@@ -501,9 +521,11 @@ class Database {
       return;
     }
 
+    const orderAmountSql = this.getOrderAmountSql('o', 'd');
+
     // Lấy tất cả ngày đặt, sắp xếp cũ nhất trước để áp dụng FIFO
     this.db.all(
-      `SELECT d.date, SUM(o.quantity) AS quantity, SUM(o.quantity * d.price * (100 - COALESCE(o.discount_percent, 0)) / 100) AS day_amount,
+      `SELECT d.date, SUM(o.quantity) AS quantity, SUM(${orderAmountSql}) AS day_amount,
               MAX(CASE WHEN o.promo_code IS NOT NULL AND o.promo_code != '' THEN 1 ELSE 0 END) AS has_promo
        FROM orders o JOIN days d ON d.id = o.day_id
        WHERE LOWER(o.name) = LOWER(?)
@@ -569,10 +591,14 @@ class Database {
                     const disc = Number(d.discount_percent || 0);
                     const unitPrice = Number(d.price || 0);
                     const finalPrice = Math.round(unitPrice * (100 - disc) / 100);
+                    const quantity = Number(d.quantity || 0);
+                    const discountQuantity = quantity > 0 ? 1 : 0;
                     promoByDate[d.date].push({
                       promo_code: d.promo_code,
                       discount_percent: disc,
-                      quantity: Number(d.quantity || 0),
+                      quantity,
+                      discount_quantity: discountQuantity,
+                      full_price_quantity: Math.max(0, quantity - discountQuantity),
                       unitPrice,
                       finalPrice
                     });
@@ -748,6 +774,7 @@ class Database {
     const keyword = (searchKeyword || '').trim().toLowerCase();
     const normalizedKeyword = keyword.replace(/['\s]+/g, '');
     const searchParams = [...(normalizedKeyword ? [`%${normalizedKeyword}%`] : [])];
+    const orderAmountSql = this.getOrderAmountSql('o', 'd');
 
     // FIFO waterfall bằng SQL CTE + window function:
     // 1. order_days: tính running_total (cộng dồn từ ngày cũ nhất) theo từng khách
@@ -761,8 +788,8 @@ class Database {
           MIN(o.name)                      AS display_name,
           d.date,
           SUM(o.quantity)                  AS quantity,
-          SUM(o.quantity * d.price * (100 - COALESCE(o.discount_percent, 0)) / 100) AS day_amount,
-          SUM(SUM(o.quantity * d.price * (100 - COALESCE(o.discount_percent, 0)) / 100)) OVER (
+          SUM(${orderAmountSql}) AS day_amount,
+          SUM(SUM(${orderAmountSql})) OVER (
             PARTITION BY LOWER(o.name)
             ORDER BY d.date ASC
             ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
@@ -844,9 +871,11 @@ class Database {
       return;
     }
 
+    const orderAmountSql = this.getOrderAmountSql('o', 'd');
+
     // Bước 1: lấy tổng tiền mỗi ngày (cũ nhất trước) để tính FIFO
     this.db.all(
-      `SELECT d.date, SUM(o.quantity * d.price * (100 - COALESCE(o.discount_percent, 0)) / 100) AS day_amount
+      `SELECT d.date, SUM(${orderAmountSql}) AS day_amount
        FROM orders o JOIN days d ON d.id = o.day_id
        WHERE LOWER(o.name) = LOWER(?)
        GROUP BY d.date ORDER BY d.date ASC`,
@@ -888,6 +917,7 @@ class Database {
             const placeholders = allDates.map(() => '?').join(', ');
             this.db.all(
               `SELECT o.id, o.quantity, o.description, o.created_at, d.price, d.date,
+                      ${orderAmountSql} AS order_amount,
                       COALESCE(o.discount_percent, 0) AS discount_percent, o.promo_code
                FROM orders o JOIN days d ON d.id = o.day_id
                WHERE LOWER(o.name) = LOWER(?) AND d.date IN (${placeholders})
@@ -898,13 +928,12 @@ class Database {
 
                 const mappedRows = orderRows.map((row) => {
                   const disc = Number(row.discount_percent || 0);
-                  const rawAmount = Number(row.quantity || 0) * Number(row.price || 0);
                   return {
                     id: Number(row.id),
                     quantity: Number(row.quantity || 0),
                     description: row.description || '',
                     createdAt: row.created_at || '',
-                    amount: Math.round(rawAmount * (100 - disc) / 100),
+                    amount: Math.round(Number(row.order_amount || 0)),
                     discount_percent: disc,
                     promo_code: row.promo_code || null
                   };
@@ -927,6 +956,8 @@ class Database {
   }
 
   getTodayCustomerPayment(name, callback) {
+    const orderAmountSql = this.getOrderAmountSql('o', 'd');
+
     // Bước 1: Lấy day_id của ngày có đơn gần nhất (không bắt buộc hôm nay)
     this.db.get(
       `SELECT d.id AS day_id
@@ -946,7 +977,7 @@ class Database {
 
         // Bước 2: Tính tổng tiền và số lượng trên TẤT CẢ các ngày (không chỉ hôm nay)
         this.db.get(
-          `SELECT SUM(o.quantity) AS quantity, SUM(o.quantity * d.price * (100 - COALESCE(o.discount_percent, 0)) / 100) AS total_amount
+          `SELECT SUM(o.quantity) AS quantity, SUM(${orderAmountSql}) AS total_amount
            FROM orders o
            JOIN days d ON o.day_id = d.id
            WHERE LOWER(o.name) = LOWER(?)`,
@@ -1028,6 +1059,7 @@ class Database {
   markPaymentPaid(orderCode, paymentData, callback) {
     const normalizedOrderCode = Number(orderCode);
     const dbConn = this.db;
+    const orderAmountSql = this.getOrderAmountSql('o', 'd');
     let finished = false;
 
     const done = (err) => {
@@ -1062,7 +1094,7 @@ class Database {
             }
 
             dbConn.get(
-              `SELECT COALESCE(SUM(o.quantity * d.price * (100 - COALESCE(o.discount_percent, 0)) / 100), 0) AS total_amount
+              `SELECT COALESCE(SUM(${orderAmountSql}), 0) AS total_amount
                FROM orders o
                JOIN days d ON o.day_id = d.id
                WHERE LOWER(o.name) = LOWER(?)`,
@@ -1163,8 +1195,10 @@ class Database {
       return;
     }
 
+    const orderAmountSql = this.getOrderAmountSql('o', 'd');
+
     this.db.get(
-      `SELECT COALESCE(SUM(o.quantity * d.price * (100 - COALESCE(o.discount_percent, 0)) / 100), 0) AS total_amount
+      `SELECT COALESCE(SUM(${orderAmountSql}), 0) AS total_amount
        FROM orders o
        JOIN days d ON o.day_id = d.id
        WHERE LOWER(o.name) = LOWER(?)`,
@@ -1198,6 +1232,7 @@ class Database {
     const normalizedName = (customerName || '').trim().replace(/\s+/g, ' ');
     const requestedAmount = Number(amount || 0);
     const dbConn = this.db;
+    const orderAmountSql = this.getOrderAmountSql('o', 'd');
     let finished = false;
 
     if (!normalizedName) {
@@ -1247,7 +1282,7 @@ class Database {
             const finalName = (dayRow.db_name || normalizedName).trim();
 
             dbConn.get(
-              `SELECT COALESCE(SUM(o.quantity * d.price * (100 - COALESCE(o.discount_percent, 0)) / 100), 0) AS total_amount
+              `SELECT COALESCE(SUM(${orderAmountSql}), 0) AS total_amount
                FROM orders o
                JOIN days d ON o.day_id = d.id
                WHERE LOWER(o.name) = LOWER(?)`,
@@ -1428,8 +1463,10 @@ class Database {
       return;
     }
 
+    const orderAmountSql = this.getOrderAmountSql('o', 'd');
+
     this.db.all(
-      `SELECT d.date, SUM(o.quantity) AS quantity, SUM(o.quantity * d.price * (100 - COALESCE(o.discount_percent, 0)) / 100) AS day_amount, d.price
+      `SELECT d.date, SUM(o.quantity) AS quantity, SUM(${orderAmountSql}) AS day_amount, d.price
        FROM orders o JOIN days d ON d.id = o.day_id
        WHERE LOWER(o.name) = LOWER(?)
        GROUP BY d.date ORDER BY d.date ASC`,
@@ -1461,10 +1498,14 @@ class Database {
                   const disc = Number(d.discount_percent || 0);
                   const unitPrice = Number(d.price || 0);
                   const finalPrice = Math.round(unitPrice * (100 - disc) / 100);
+                  const quantity = Number(d.quantity || 0);
+                  const discountQuantity = quantity > 0 ? 1 : 0;
                   promoByDate[d.date].push({
                     promo_code: d.promo_code,
                     discount_percent: disc,
-                    quantity: Number(d.quantity || 0),
+                    quantity,
+                    discount_quantity: discountQuantity,
+                    full_price_quantity: Math.max(0, quantity - discountQuantity),
                     unitPrice,
                     finalPrice
                   });
@@ -1590,16 +1631,27 @@ class Database {
   // =============================================
   // Promo Codes
   // =============================================
-  createPromoCode(code, discountPercent, callback) {
+  createPromoCode(code, discountPercent, options, callback) {
+    if (typeof options === 'function') {
+      callback = options;
+      options = {};
+    }
+
+    const normalizedOptions = options || {};
     const normalizedCode = String(code || '').trim().toUpperCase();
     const disc = Number(discountPercent || 0);
+    const issuedToUserId = Number(normalizedOptions.issuedToUserId || 0) || null;
+    const issuedToName = String(normalizedOptions.issuedToName || '').trim();
+    const source = issuedToUserId ? 'admin_gift' : 'manual';
     if (!normalizedCode || disc <= 0 || disc > 100) {
       callback(new Error('Mã hoặc phần trăm giảm giá không hợp lệ'));
       return;
     }
     this.db.run(
-      `INSERT INTO promo_codes (code, discount_percent) VALUES (?, ?)`,
-      [normalizedCode, disc],
+      `INSERT INTO promo_codes
+        (code, discount_percent, issued_to_user_id, issued_to_name, source, promo_seen_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [normalizedCode, disc, issuedToUserId, issuedToName || null, source, issuedToUserId ? null : this.formatUtcDateTime()],
       function(err) {
         if (err) {
           if (err.message && err.message.includes('UNIQUE')) {
@@ -1609,7 +1661,14 @@ class Database {
           }
           return;
         }
-        callback(null, { id: this.lastID, code: normalizedCode, discount_percent: disc });
+        callback(null, {
+          id: this.lastID,
+          code: normalizedCode,
+          discount_percent: disc,
+          issued_to_user_id: issuedToUserId,
+          issued_to_name: issuedToName || null,
+          source
+        });
       }
     );
   }
@@ -1750,7 +1809,10 @@ class Database {
 
   getPromoCodes(callback) {
     this.db.all(
-      `SELECT id, code, discount_percent, created_at, used_by, used_at, order_id FROM promo_codes ORDER BY created_at DESC`,
+      `SELECT id, code, discount_percent, created_at, used_by, used_at, order_id,
+              issued_to_user_id, issued_to_name, source, earned_streak_days, promo_seen_at
+       FROM promo_codes
+       ORDER BY created_at DESC`,
       callback
     );
   }
@@ -1768,8 +1830,43 @@ class Database {
     const normalizedCode = String(code || '').trim().toUpperCase();
     if (!normalizedCode) { callback(null, null); return; }
     this.db.get(
-      `SELECT id, code, discount_percent FROM promo_codes WHERE UPPER(code) = ? AND used_by IS NULL`,
+      `SELECT id, code, discount_percent, issued_to_user_id, source FROM promo_codes WHERE UPPER(code) = ? AND used_by IS NULL`,
       [normalizedCode],
+      callback
+    );
+  }
+
+  getPromoWalletForUser(userId, callback) {
+    const normalizedUserId = Number(userId || 0);
+    if (!normalizedUserId) {
+      callback(null, []);
+      return;
+    }
+
+    this.db.all(
+      `SELECT id, code, discount_percent, created_at, used_by, used_at, order_id,
+              issued_to_user_id, issued_to_name, source, earned_streak_days, promo_seen_at
+       FROM promo_codes
+       WHERE issued_to_user_id = ?
+       ORDER BY created_at DESC, id DESC
+       LIMIT 50`,
+      [normalizedUserId],
+      callback
+    );
+  }
+
+  markPromoWalletSeen(userId, callback) {
+    const normalizedUserId = Number(userId || 0);
+    if (!normalizedUserId) {
+      callback(null);
+      return;
+    }
+
+    this.db.run(
+      `UPDATE promo_codes
+       SET promo_seen_at = CURRENT_TIMESTAMP
+       WHERE issued_to_user_id = ? AND promo_seen_at IS NULL`,
+      [normalizedUserId],
       callback
     );
   }
@@ -1929,9 +2026,10 @@ class Database {
   // Kiểm tra nợ suất cơm của khách hàng (trả về số suất chưa thanh toán)
   getCustomerUnpaidServings(name, callback) {
     const normalizedName = String(name || '').trim();
+    const orderAmountSql = this.getOrderAmountSql('o', 'd');
     this.db.get(
       `SELECT COALESCE(SUM(o.quantity), 0) AS total_servings,
-              COALESCE(SUM(o.quantity * d.price * (100 - COALESCE(o.discount_percent, 0)) / 100), 0) AS total_amount
+              COALESCE(SUM(${orderAmountSql}), 0) AS total_amount
        FROM orders o JOIN days d ON d.id = o.day_id
        WHERE LOWER(o.name) = LOWER(?)`,
       [normalizedName],
@@ -1964,6 +2062,7 @@ class Database {
     this.db.all(
       `SELECT DISTINCT d.date FROM orders o JOIN days d ON d.id = o.day_id
        WHERE LOWER(o.name) = LOWER(?)
+         AND strftime('%w', d.date) NOT IN ('0', '6')
        ORDER BY d.date DESC`,
       [normalizedName],
       (err, rows = []) => {
@@ -1972,10 +2071,8 @@ class Database {
 
         let consecutive = 1;
         for (let i = 1; i < rows.length; i++) {
-          const prev = new Date(rows[i - 1].date + 'T00:00:00Z');
-          const curr = new Date(rows[i].date + 'T00:00:00Z');
-          const diffDays = (prev - curr) / 86400000;
-          if (diffDays === 1) {
+          const expectedPrevious = this.getPreviousBusinessDate(rows[i - 1].date);
+          if (rows[i].date === expectedPrevious) {
             consecutive++;
           } else {
             break;
@@ -1986,25 +2083,186 @@ class Database {
     );
   }
 
-  // Tạo mã KM tự động cho khách (consecutive promo)
-  createAutoPromoCode(name, discountPercent, callback) {
-    const code = 'AUTO' + Date.now().toString(36).toUpperCase();
-    this.db.run(
-      `INSERT INTO promo_codes (code, discount_percent) VALUES (?, ?)`,
-      [code, discountPercent],
-      function(err) {
+  getConsecutiveOrderDaysForUser(userId, callback) {
+    const normalizedUserId = Number(userId || 0);
+    if (!normalizedUserId) {
+      callback(null, 0);
+      return;
+    }
+
+    this.db.all(
+      `SELECT DISTINCT d.date
+       FROM orders o
+       JOIN days d ON d.id = o.day_id
+       WHERE o.user_id = ?
+         AND strftime('%w', d.date) NOT IN ('0', '6')
+       ORDER BY d.date DESC`,
+      [normalizedUserId],
+      (err, rows = []) => {
         if (err) { callback(err); return; }
-        callback(null, { id: this.lastID, code, discountPercent });
+        callback(null, this.countActiveConsecutiveBusinessDates(rows.map((row) => row.date)));
       }
     );
   }
 
-  // Bảng xếp hạng theo tháng — đếm số ngày đặt cơm (không phải số suất)
-  getMonthlyLeaderboard(callback) {
-    const now = new Date();
-    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  countConsecutiveBusinessDates(dateRows) {
+    const dates = Array.isArray(dateRows) ? dateRows : [];
+    if (!dates.length) return 0;
 
-    // Đếm số ngày phân biệt (distinct) mà mỗi người đặt cơm trong tháng hiện tại
+    let consecutive = 1;
+    for (let i = 1; i < dates.length; i++) {
+      const expectedPrevious = this.getPreviousBusinessDate(dates[i - 1]);
+      if (dates[i] === expectedPrevious) {
+        consecutive++;
+      } else {
+        break;
+      }
+    }
+    return consecutive;
+  }
+
+  countActiveConsecutiveBusinessDates(dateRows, referenceDate = new Date()) {
+    const dates = Array.isArray(dateRows) ? dateRows : [];
+    if (!dates.length) return 0;
+
+    const latestOrderDate = dates[0];
+    const currentBusinessDate = this.getCurrentBusinessDateString(referenceDate);
+    const previousBusinessDate = this.getPreviousBusinessDate(currentBusinessDate);
+
+    if (latestOrderDate !== currentBusinessDate && latestOrderDate !== previousBusinessDate) {
+      return 0;
+    }
+
+    return this.countConsecutiveBusinessDates(dates);
+  }
+
+  getCurrentBusinessDateString(date = new Date()) {
+    const current = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    while (current.getUTCDay() === 0 || current.getUTCDay() === 6) {
+      current.setUTCDate(current.getUTCDate() - 1);
+    }
+
+    const year = current.getUTCFullYear();
+    const month = String(current.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(current.getUTCDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  getPreviousBusinessDate(dateString) {
+    const date = new Date(dateString + 'T00:00:00Z');
+    do {
+      date.setUTCDate(date.getUTCDate() - 1);
+    } while (date.getUTCDay() === 0 || date.getUTCDay() === 6);
+
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  getAutoPromoCodeByStreak(userId, streakDays, callback) {
+    this.db.get(
+      `SELECT id, code, discount_percent, created_at, used_by, used_at, order_id,
+              issued_to_user_id, issued_to_name, source, earned_streak_days
+       FROM promo_codes
+       WHERE source = 'auto_consecutive'
+         AND issued_to_user_id = ?
+         AND earned_streak_days = ?
+       ORDER BY created_at DESC, id DESC
+       LIMIT 1`,
+      [Number(userId || 0), Number(streakDays || 0)],
+      callback
+    );
+  }
+
+  getAutoPromoCodesForUser(userId, callback) {
+    this.db.all(
+      `SELECT id, code, discount_percent, created_at, used_by, used_at, order_id,
+              issued_to_user_id, issued_to_name, source, earned_streak_days
+       FROM promo_codes
+       WHERE source = 'auto_consecutive'
+         AND issued_to_user_id = ?
+       ORDER BY created_at DESC, id DESC
+       LIMIT 20`,
+      [Number(userId || 0)],
+      callback
+    );
+  }
+
+  // Tạo mã KM tự động cho khách (consecutive promo)
+  createAutoPromoCode(name, discountPercent, userId, earnedStreakDays, callback) {
+    if (typeof userId === 'function') {
+      callback = userId;
+      userId = null;
+      earnedStreakDays = null;
+    } else if (typeof earnedStreakDays === 'function') {
+      callback = earnedStreakDays;
+      earnedStreakDays = null;
+    }
+
+    const normalizedUserId = Number(userId || 0) || null;
+    const normalizedStreak = Number(earnedStreakDays || 0) || null;
+
+    const insertNewCode = () => {
+      const code = 'AUTO' + Date.now().toString(36).toUpperCase();
+      this.db.run(
+        `INSERT INTO promo_codes
+          (code, discount_percent, issued_to_user_id, issued_to_name, source, earned_streak_days)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          code,
+          Number(discountPercent || 0),
+          normalizedUserId,
+          String(name || '').trim(),
+          normalizedUserId ? 'auto_consecutive' : 'manual',
+          normalizedStreak
+        ],
+        function(err) {
+          if (err) { callback(err); return; }
+          callback(null, { id: this.lastID, code, discountPercent: Number(discountPercent || 0) });
+        }
+      );
+    };
+
+    if (!normalizedUserId || !normalizedStreak) {
+      insertNewCode();
+      return;
+    }
+
+    this.getAutoPromoCodeByStreak(normalizedUserId, normalizedStreak, (err, existing) => {
+      if (err) {
+        callback(err);
+        return;
+      }
+      if (existing) {
+        callback(null, {
+          id: existing.id,
+          code: existing.code,
+          discountPercent: Number(existing.discount_percent || discountPercent || 0),
+          existing: true
+        });
+        return;
+      }
+      insertNewCode();
+    });
+  }
+
+  // Bảng xếp hạng theo tháng — đếm số ngày đặt cơm (không phải số suất)
+  getMonthlyLeaderboard(month, callback) {
+    let selectedMonth = String(month || '').trim();
+    let finalCallback = callback;
+
+    if (typeof month === 'function') {
+      finalCallback = month;
+      selectedMonth = '';
+    }
+
+    if (!/^\d{4}-\d{2}$/.test(selectedMonth)) {
+      const now = new Date();
+      selectedMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    }
+
+    // Đếm số ngày phân biệt (distinct) mà mỗi người đặt cơm trong tháng đã chọn
     const sql = `
       SELECT
         o.name,
@@ -2016,8 +2274,8 @@ class Database {
       ORDER BY days DESC, MIN(o.name) ASC
     `;
 
-    this.db.all(sql, [currentMonth], (err, rows = []) => {
-      if (err) { callback(err); return; }
+    this.db.all(sql, [selectedMonth], (err, rows = []) => {
+      if (err) { finalCallback(err); return; }
 
       // Tổng số ngày có phát sinh đơn hàng trong tháng (để tính %)
       this.db.get(
@@ -2025,9 +2283,9 @@ class Database {
          FROM days d
          JOIN orders o ON o.day_id = d.id
          WHERE strftime('%Y-%m', d.date) = ?`,
-        [currentMonth],
+        [selectedMonth],
         (err2, totalRow) => {
-          if (err2) { callback(err2); return; }
+          if (err2) { finalCallback(err2); return; }
 
           const totalDays = Number(totalRow?.total_days || 0);
 
@@ -2045,7 +2303,7 @@ class Database {
             };
           });
 
-          callback(null, { month: currentMonth, leaders });
+          finalCallback(null, { month: selectedMonth, leaders });
         }
       );
     });

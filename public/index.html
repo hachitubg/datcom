@@ -33,7 +33,12 @@
         </div>
         <div id="userAuthLoggedIn" class="user-auth-state" style="display:none;">
             <span class="user-auth-name" id="userAuthName"></span>
-            <button class="user-auth-btn user-auth-btn-logout" id="btnUserLogout">Đăng suất</button>
+            <button class="user-auth-btn streak-status-btn" id="btnStreakStatus" type="button" title="Chuỗi đặt cơm" style="display:none;">🔥</button>
+            <button class="user-auth-btn promo-wallet-btn" id="btnPromoWallet" type="button" title="Mã khuyến mãi" style="display:none;">
+                🎁
+                <span class="promo-wallet-badge" id="promoWalletBadge" style="display:none;">0</span>
+            </button>
+            <button class="user-auth-btn user-auth-btn-logout" id="btnUserLogout">Đăng xuất</button>
         </div>
     </div>
 
@@ -83,6 +88,73 @@
                     <div class="auth-switch">
                         Đã có tài khoản? <a href="#" id="btnSwitchToLogin">Đăng nhập</a>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="streakIntroModal" class="modal">
+        <div class="modal-content streak-modal-content">
+            <div class="modal-header">
+                <h2>Chuỗi đặt cơm nhận mã giảm</h2>
+                <button type="button" class="modal-close" id="closeStreakIntro">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="streak-hero-card">
+                    <div class="streak-hero-icon">🔥</div>
+                    <div>
+                        <h3>Đặt đều, nhận mã tự động</h3>
+                        <p id="streakIntroText">Đăng nhập và đặt cơm đủ số ngày liên tục để nhận mã giảm giá cho lần đặt sau.</p>
+                    </div>
+                </div>
+                <div class="streak-rule-list">
+                    <div class="streak-rule-item">
+                        <span>1</span>
+                        <p>Chỉ tính các đơn được đặt khi đã đăng nhập.</p>
+                    </div>
+                    <div class="streak-rule-item">
+                        <span>2</span>
+                        <p>Thứ 7 và Chủ nhật được bỏ qua nếu quán không bán.</p>
+                    </div>
+                    <div class="streak-rule-item">
+                        <span>3</span>
+                        <p>Mỗi mã được tặng chỉ giảm cho 1 suất và chỉ tài khoản được tặng mới dùng được.</p>
+                    </div>
+                </div>
+                <label class="streak-dismiss-row">
+                    <input type="checkbox" id="streakIntroDontShow">
+                    <span>Lần sau không hiển thị trên thiết bị này</span>
+                </label>
+                <div class="form-buttons">
+                    <button type="button" class="btn-submit" id="btnStreakIntroOk">ĐÃ HIỂU</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="streakStatusModal" class="modal">
+        <div class="modal-content streak-modal-content">
+            <div class="modal-header">
+                <h2>Chuỗi đặt cơm</h2>
+                <button type="button" class="modal-close" id="closeStreakStatus">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="streakStatusContent">
+                    <div class="loading-text">Đang tải...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="promoWalletModal" class="modal">
+        <div class="modal-content promo-wallet-modal-content">
+            <div class="modal-header">
+                <h2>Mã khuyến mãi của tôi</h2>
+                <button type="button" class="modal-close" id="closePromoWallet">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="promoWalletContent">
+                    <div class="loading-text">Đang tải...</div>
                 </div>
             </div>
         </div>
@@ -378,6 +450,10 @@
                 <button type="button" class="modal-close" id="closeLeaderboard">&times;</button>
             </div>
             <div class="modal-body">
+                <div class="leaderboard-filter">
+                    <label for="leaderboardMonth">Xem tháng</label>
+                    <input type="month" id="leaderboardMonth">
+                </div>
                 <div id="leaderboardContent">
                     <div class="loading-text">Đang tải...</div>
                 </div>
