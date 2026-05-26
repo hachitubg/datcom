@@ -1,6 +1,7 @@
 # Các file không cần commit lên server
 node_modules/
 datcom.db
+sites/
 .env
 *.log
 .DS_Store

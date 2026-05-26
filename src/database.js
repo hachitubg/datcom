@@ -1,16 +1,19 @@
 const sqlite3 = require('sqlite3').verbose();
+const fs = require('fs');
 const path = require('path');
 
 class Database {
-  constructor() {
-    this.db = new sqlite3.Database(path.join(__dirname, '../datcom.db'), (err) => {
+  constructor(dbPath = path.join(__dirname, '../datcom.db')) {
+    this.dbPath = path.resolve(dbPath);
+    fs.mkdirSync(path.dirname(this.dbPath), { recursive: true });
+    this.db = new sqlite3.Database(this.dbPath, (err) => {
       if (err) {
         console.error('Lỗi mở database:', err);
       } else {
-        console.log('Kết nối database thành công');
-        this.init();
+        console.log(`Kết nối database thành công: ${this.dbPath}`);
       }
     });
+    this.init();
   }
 
   init() {

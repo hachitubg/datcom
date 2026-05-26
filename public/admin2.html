@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quản lý site công ty</title>
+  <link rel="icon" type="image/png" href="/images/datcom_icon.png">
+  <link rel="apple-touch-icon" href="/images/datcom_icon.png">
+  <link rel="stylesheet" href="/assets/styles/admin.css">
+  <style>
+    body {
+      padding: 0;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.72), rgba(244,244,240,0.96)),
+        var(--surface-container-low);
+    }
+
+    .site-admin-shell {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 24px 0 40px;
+    }
+
+    .site-admin-hero {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 18px;
+      align-items: center;
+      margin-bottom: 18px;
+      padding: 24px;
+      border-radius: 8px;
+      background: var(--surface-container-lowest);
+      border: 1px solid rgba(212,195,190,0.78);
+      box-shadow: 0 16px 42px -28px rgba(80,68,65,0.42);
+    }
+
+    .site-brand {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .site-brand img {
+      width: 58px;
+      height: 58px;
+      border-radius: 8px;
+      object-fit: cover;
+      box-shadow: 0 8px 18px -12px rgba(80,68,65,0.5);
+    }
+
+    .site-kicker {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--tertiary);
+      font-size: 0.76rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0;
+    }
+
+    .site-admin-hero h1 {
+      color: var(--primary);
+      font-size: 1.7rem;
+      line-height: 1.2;
+      letter-spacing: 0;
+      margin-bottom: 5px;
+    }
+
+    .site-admin-hero p {
+      color: var(--on-surface-variant);
+      line-height: 1.5;
+      max-width: 680px;
+      font-size: 0.92rem;
+    }
+
+    .site-hero-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .site-admin-shell .btn-primary,
+    .site-admin-shell .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 38px;
+      padding: 9px 14px;
+      border: 0;
+      border-radius: 8px;
+      font-family: 'Be Vietnam Pro', sans-serif;
+      font-size: 0.82rem;
+      font-weight: 800;
+      line-height: 1;
+      text-decoration: none;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+    }
+
+    .site-admin-shell .btn-primary {
+      background: linear-gradient(135deg, var(--primary), var(--primary-container));
+      color: var(--on-primary);
+      box-shadow: 0 8px 18px -14px rgba(80,68,65,0.6);
+    }
+
+    .site-admin-shell .btn-secondary {
+      background: var(--secondary-container);
+      color: var(--on-secondary-container);
+    }
+
+    .site-admin-shell .btn-primary:hover,
+    .site-admin-shell .btn-secondary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 10px 20px -16px rgba(80,68,65,0.65);
+    }
+
+    .site-admin-shell .btn-secondary:hover {
+      background: var(--primary-fixed-dim);
+    }
+
+    .site-admin-shell .btn-primary:disabled {
+      opacity: 0.68;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .site-admin-shell .btn-danger {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 38px;
+      padding: 9px 14px;
+      border: 0;
+      border-radius: 8px;
+      background: var(--tertiary);
+      color: var(--on-primary);
+      font-family: 'Be Vietnam Pro', sans-serif;
+      font-size: 0.82rem;
+      font-weight: 800;
+      line-height: 1;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: opacity 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+    }
+
+    .site-admin-shell .btn-danger:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
+      box-shadow: 0 10px 20px -16px rgba(80,68,65,0.65);
+    }
+
+    .site-admin-grid {
+      display: grid;
+      grid-template-columns: minmax(300px, 0.9fr) minmax(0, 1.35fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .site-panel {
+      background: var(--surface-container-lowest);
+      border: 1px solid rgba(212,195,190,0.8);
+      border-radius: 8px;
+      box-shadow: 0 14px 38px -30px rgba(80,68,65,0.45);
+      overflow: hidden;
+    }
+
+    .site-panel-header {
+      padding: 18px 20px 12px;
+      border-bottom: 1px solid rgba(212,195,190,0.52);
+    }
+
+    .site-panel-header h2 {
+      color: var(--primary);
+      font-size: 1.05rem;
+      margin-bottom: 4px;
+    }
+
+    .site-panel-header p {
+      color: var(--on-surface-variant);
+      font-size: 0.82rem;
+      line-height: 1.45;
+    }
+
+    .site-panel-body {
+      padding: 18px 20px 20px;
+    }
+
+    .site-field {
+      margin-bottom: 14px;
+    }
+
+    .site-field label {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 7px;
+      color: var(--on-surface);
+      font-size: 0.82rem;
+      font-weight: 800;
+    }
+
+    .site-field small {
+      color: var(--on-surface-variant);
+      font-weight: 600;
+    }
+
+    .site-field input {
+      width: 100%;
+      min-height: 44px;
+      padding: 10px 12px;
+      border: 1px solid var(--outline-variant);
+      border-radius: 8px;
+      background: var(--surface-container-low);
+      color: var(--on-surface);
+      font: inherit;
+      transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .site-field input:focus {
+      outline: none;
+      border-color: var(--primary);
+      background: var(--surface-container-lowest);
+      box-shadow: 0 0 0 3px rgba(109,88,80,0.12);
+    }
+
+    .site-url-preview {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 2px 0 16px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: var(--surface-container-low);
+      color: var(--on-surface-variant);
+      font-size: 0.82rem;
+      overflow-wrap: anywhere;
+    }
+
+    .site-url-preview strong {
+      color: var(--primary);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: 0;
+    }
+
+    .site-message {
+      margin-top: 12px;
+    }
+
+    .site-summary {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+
+    .site-summary-item {
+      padding: 13px;
+      border-radius: 8px;
+      background: var(--surface-container-lowest);
+      border: 1px solid rgba(212,195,190,0.8);
+    }
+
+    .site-summary-item span {
+      display: block;
+      color: var(--on-surface-variant);
+      font-size: 0.72rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0;
+      margin-bottom: 5px;
+    }
+
+    .site-summary-item strong {
+      color: var(--primary);
+      font-size: 1.12rem;
+      line-height: 1.2;
+      overflow-wrap: anywhere;
+    }
+
+    .site-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .site-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      padding: 14px;
+      border: 1px solid var(--outline-variant);
+      border-radius: 8px;
+      background: var(--surface-container-lowest);
+      transition: border-color 0.2s ease, transform 0.2s ease;
+    }
+
+    .site-row:hover {
+      border-color: var(--primary-fixed-dim);
+      transform: translateY(-1px);
+    }
+
+    .site-row-title {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+
+    .site-row-title strong {
+      color: var(--on-surface);
+      font-size: 0.98rem;
+      overflow-wrap: anywhere;
+    }
+
+    .site-pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 4px 8px;
+      border-radius: 8px;
+      background: #e7f6ea;
+      color: #2f6b3d;
+      font-size: 0.72rem;
+      font-weight: 800;
+    }
+
+    .site-pill-off {
+      background: var(--secondary-container);
+      color: var(--on-secondary-container);
+    }
+
+    .site-code {
+      display: inline-block;
+      color: var(--primary);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.82rem;
+      font-weight: 800;
+      overflow-wrap: anywhere;
+    }
+
+    .site-db-path {
+      color: var(--on-surface-variant);
+      font-size: 0.75rem;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+
+    .site-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .site-empty,
+    .site-loading {
+      padding: 26px 14px;
+      border-radius: 8px;
+      background: var(--surface-container-low);
+      color: var(--on-surface-variant);
+      text-align: center;
+      line-height: 1.5;
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 860px) {
+      .site-admin-hero,
+      .site-admin-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .site-hero-actions {
+        justify-content: flex-start;
+      }
+
+      .site-summary {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 600px) {
+      .site-admin-shell {
+        width: min(100% - 20px, 1180px);
+        padding-top: 10px;
+      }
+
+      .site-brand {
+        align-items: flex-start;
+      }
+
+      .site-brand img {
+        width: 46px;
+        height: 46px;
+      }
+
+      .site-admin-hero,
+      .site-panel-body,
+      .site-panel-header {
+        padding-left: 14px;
+        padding-right: 14px;
+      }
+
+      .site-row {
+        grid-template-columns: 1fr;
+      }
+
+      .site-actions {
+        justify-content: flex-start;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="site-admin-shell">
+    <section class="site-admin-hero">
+      <div class="site-brand">
+        <img src="/images/datcom_icon.png" alt="Cơm Cô Giang">
+        <div>
+          <span class="site-kicker">Quản trị nhiều công ty</span>
+          <h1>Quản lý site công ty</h1>
+          <p>Tạo site phụ dùng chung code và PayOS, mỗi site có file SQLite riêng để dữ liệu không trộn với site chính.</p>
+        </div>
+      </div>
+      <div class="site-hero-actions">
+        <a class="btn-secondary" href="/">Trang chủ</a>
+        <a class="btn-primary" href="/admin">Admin chính</a>
+      </div>
+    </section>
+
+    <section class="site-summary" aria-label="Tổng quan site">
+      <div class="site-summary-item">
+        <span>Site phụ</span>
+        <strong id="siteCount">0</strong>
+      </div>
+      <div class="site-summary-item">
+        <span>Database</span>
+        <strong>SQLite riêng</strong>
+      </div>
+      <div class="site-summary-item">
+        <span>Thanh toán</span>
+        <strong>PayOS chung</strong>
+      </div>
+    </section>
+
+    <section class="site-admin-grid">
+      <div class="site-panel">
+        <div class="site-panel-header">
+          <h2>Tạo site mới</h2>
+          <p>Slug sẽ trở thành đường dẫn công ty, ví dụ <strong>/thanhcong</strong>.</p>
+        </div>
+        <div class="site-panel-body">
+          <div class="site-field">
+            <label for="siteName">
+              <span>Tên công ty</span>
+              <small>Hiển thị trong quản trị</small>
+            </label>
+            <input id="siteName" placeholder="VD: Công ty Thành Công" autocomplete="organization">
+          </div>
+
+          <div class="site-field">
+            <label for="siteSlug">
+              <span>Slug URL</span>
+              <small>chữ thường, số, dấu -</small>
+            </label>
+            <input id="siteSlug" placeholder="VD: thanhcong" autocomplete="off">
+          </div>
+
+          <div class="site-url-preview">
+            Link site: <strong id="siteUrlPreview">/ten-cong-ty</strong>
+          </div>
+
+          <div class="site-field">
+            <label for="siteAdminPassword">
+              <span>Mật khẩu admin site</span>
+              <small>tối thiểu 6 ký tự</small>
+            </label>
+            <input id="siteAdminPassword" type="password" placeholder="Nhập mật khẩu admin site" autocomplete="new-password">
+          </div>
+
+          <div class="button-group">
+            <button class="btn-primary" id="btnCreateSite" type="button">Tạo site</button>
+          </div>
+          <div class="site-message" id="siteMessage"></div>
+        </div>
+      </div>
+
+      <div class="site-panel">
+        <div class="site-panel-header">
+          <h2>Danh sách site</h2>
+          <p>Mở trang công ty hoặc vào khu vực admin riêng của từng site.</p>
+        </div>
+        <div class="site-panel-body">
+          <div id="siteList" class="site-list">
+            <div class="site-loading">Đang tải danh sách site...</div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const escapeHtml = (value) => String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
+    const escapeAttr = escapeHtml;
+
+    async function fetchJson(url, options) {
+      const res = await fetch(url, options);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Yêu cầu thất bại');
+      return data;
+    }
+
+    function normalizeSlug(value) {
+      return String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9-]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .replace(/-{2,}/g, '-');
+    }
+
+    function updateSlugPreview() {
+      const slug = normalizeSlug(document.getElementById('siteSlug').value) || 'ten-cong-ty';
+      document.getElementById('siteUrlPreview').textContent = `/${slug}`;
+    }
+
+    function renderSiteRow(site) {
+      const active = Boolean(site.active);
+      const statusLabel = active ? 'Đang bật' : 'Đã tắt';
+      const toggleLabel = active ? 'Tắt site' : 'Bật site';
+      const toggleClass = active ? 'btn-danger' : 'btn-secondary';
+      return `
+        <div class="site-row">
+          <div>
+            <div class="site-row-title">
+              <strong>${escapeHtml(site.name)}</strong>
+              <span class="site-pill ${active ? '' : 'site-pill-off'}">${statusLabel}</span>
+            </div>
+            <div class="site-code">/${escapeHtml(site.slug)}</div>
+            <div class="site-db-path">DB: ${escapeHtml(site.db_path || '')}</div>
+          </div>
+          <div class="site-actions">
+            ${active ? `<a class="btn-secondary" href="${escapeAttr(site.url_path)}" target="_blank" rel="noopener">Mở site</a>` : ''}
+            ${active ? `<a class="btn-primary" href="${escapeAttr(site.admin_path)}" target="_blank" rel="noopener">Admin site</a>` : ''}
+            <button class="${toggleClass} site-toggle-btn" type="button" data-slug="${escapeAttr(site.slug)}" data-active="${active ? '1' : '0'}">${toggleLabel}</button>
+          </div>
+        </div>
+      `;
+    }
+
+    async function updateSiteStatus(slug, active) {
+      await fetchJson(`/api/admin2/sites/${encodeURIComponent(slug)}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active })
+      });
+      loadSites();
+    }
+
+    async function loadSites() {
+      const list = document.getElementById('siteList');
+      list.innerHTML = '<div class="site-loading">Đang tải danh sách site...</div>';
+      try {
+        const sites = await fetchJson('/api/admin2/sites');
+        document.getElementById('siteCount').textContent = String(sites.length || 0);
+        if (!sites.length) {
+          list.innerHTML = '<div class="site-empty">Chưa có site phụ nào. Tạo site đầu tiên ở form bên trái.</div>';
+          return;
+        }
+        list.innerHTML = sites.map(renderSiteRow).join('');
+      } catch (error) {
+        list.innerHTML = `<div class="error-message">${escapeHtml(error.message)}</div>`;
+      }
+    }
+
+    document.getElementById('siteSlug').addEventListener('input', (event) => {
+      event.target.value = normalizeSlug(event.target.value);
+      updateSlugPreview();
+    });
+
+    document.getElementById('siteName').addEventListener('input', () => {
+      const slugInput = document.getElementById('siteSlug');
+      if (!slugInput.value.trim()) {
+        slugInput.value = normalizeSlug(document.getElementById('siteName').value);
+        updateSlugPreview();
+      }
+    });
+
+    document.getElementById('btnCreateSite').addEventListener('click', async () => {
+      const button = document.getElementById('btnCreateSite');
+      const message = document.getElementById('siteMessage');
+      message.innerHTML = '';
+      const name = document.getElementById('siteName').value.trim();
+      const slug = normalizeSlug(document.getElementById('siteSlug').value);
+      const adminPassword = document.getElementById('siteAdminPassword').value;
+
+      button.disabled = true;
+      button.textContent = 'Đang tạo...';
+      try {
+        const site = await fetchJson('/api/admin2/sites', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, slug, adminPassword })
+        });
+        message.innerHTML = `<div class="success-message">Đã tạo site /${escapeHtml(site.slug)}. Admin riêng: /${escapeHtml(site.slug)}/admin</div>`;
+        document.getElementById('siteName').value = '';
+        document.getElementById('siteSlug').value = '';
+        document.getElementById('siteAdminPassword').value = '';
+        updateSlugPreview();
+        loadSites();
+      } catch (error) {
+        message.innerHTML = `<div class="error-message">${escapeHtml(error.message)}</div>`;
+      } finally {
+        button.disabled = false;
+        button.textContent = 'Tạo site';
+      }
+    });
+
+    document.getElementById('siteList').addEventListener('click', async (event) => {
+      const button = event.target.closest('.site-toggle-btn');
+      if (!button) return;
+
+      const slug = button.dataset.slug;
+      const isActive = button.dataset.active === '1';
+      button.disabled = true;
+      button.textContent = isActive ? 'Đang tắt...' : 'Đang bật...';
+      try {
+        await updateSiteStatus(slug, !isActive);
+      } catch (error) {
+        button.disabled = false;
+        button.textContent = isActive ? 'Tắt site' : 'Bật site';
+        document.getElementById('siteMessage').innerHTML = `<div class="error-message">${escapeHtml(error.message)}</div>`;
+      }
+    });
+
+    updateSlugPreview();
+    loadSites();
+  </script>
+</body>
+</html>

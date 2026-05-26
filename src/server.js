@@ -4,8 +4,10 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const path = require('path');
 const crypto = require('crypto');
+const { AsyncLocalStorage } = require('async_hooks');
 const Database = require('./database');
 const PayOSService = require('./payos');
+const SiteRegistry = require('./site-registry');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -45,7 +47,7 @@ app.post('/api/payments/webhook/payos',
       const orderCode = Number(data.orderCode);
       const amount = Number(data.amount || 0);
 
-      db.markPaymentPaid(orderCode, { amount, raw: parsedBody }, (err) => {
+      markPaymentPaidAcrossSites(orderCode, { amount, raw: parsedBody }, (err) => {
         if (err) {
           console.error("DB error:", err);
           return res.status(500).json({ error: err.message });
@@ -63,6 +65,7 @@ app.post('/api/payments/webhook/payos',
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
+app.use(sitePrefixMiddleware);
 app.use((req, res, next) => {
   if (req.path === '/admin.html') {
     return requireAdminPageAuth(req, res, next);
@@ -72,8 +75,98 @@ app.use((req, res, next) => {
 app.use(express.static('public'));
 
 // Khởi tạo database
-const db = new Database();
+const mainDb = new Database();
+const siteRegistry = new SiteRegistry();
+const siteDbBySlug = new Map();
+const siteContext = new AsyncLocalStorage();
+const db = new Proxy({}, {
+  get(_target, prop) {
+    const activeDb = getActiveDb();
+    const value = activeDb[prop];
+    return typeof value === 'function' ? value.bind(activeDb) : value;
+  }
+});
 const payos = new PayOSService();
+
+function getActiveDb() {
+  return siteContext.getStore()?.db || mainDb;
+}
+
+function getSiteDb(site) {
+  if (!site || !site.slug) {
+    return mainDb;
+  }
+
+  if (!siteDbBySlug.has(site.slug)) {
+    siteDbBySlug.set(site.slug, new Database(site.db_path));
+  }
+
+  return siteDbBySlug.get(site.slug);
+}
+
+function getAllSiteDatabases() {
+  const databases = [mainDb];
+  siteRegistry.listSites()
+    .filter((site) => site.active)
+    .forEach((site) => databases.push(getSiteDb(site)));
+  return databases;
+}
+
+function getSiteBasePath(req) {
+  const slug = req.site?.slug || siteContext.getStore()?.slug || '';
+  return slug ? `/${slug}` : '';
+}
+
+function sitePrefixMiddleware(req, res, next) {
+  const match = req.url.match(/^\/([a-z0-9-]+)(?=\/|\?|$)/i);
+  if (!match) {
+    return next();
+  }
+
+  const slug = siteRegistry.normalizeSlug(match[1]);
+  const site = siteRegistry.getSite(slug);
+  if (!site || !site.active) {
+    return next();
+  }
+
+  const originalUrl = req.url;
+  const siteBasePath = `/${site.slug}`;
+  let rewrittenUrl = originalUrl.slice(siteBasePath.length) || '/';
+  if (rewrittenUrl.startsWith('?')) {
+    rewrittenUrl = `/${rewrittenUrl}`;
+  }
+
+  req.originalSiteUrl = originalUrl;
+  req.site = site;
+  req.siteBasePath = siteBasePath;
+  req.url = rewrittenUrl;
+
+  siteContext.run({ db: getSiteDb(site), slug: site.slug }, () => next());
+}
+
+function sitePath(req, targetPath) {
+  return `${getSiteBasePath(req)}${targetPath}`;
+}
+
+function requireMainSite(req, res, next) {
+  if (req.site) {
+    return res.status(404).json({ error: 'NOT_FOUND' });
+  }
+  next();
+}
+
+function setSessionCookieForRequest(req, res, cookieName, token, maxAgeSeconds) {
+  setSessionCookie(res, getScopedCookieName(req, cookieName), token, maxAgeSeconds);
+}
+
+function clearSessionCookieForRequest(req, res, cookieName) {
+  clearSessionCookie(res, getScopedCookieName(req, cookieName));
+}
+
+function getScopedCookieName(req, cookieName) {
+  const slug = req.site?.slug || '';
+  return slug ? `${cookieName}_${slug}` : cookieName;
+}
 
 function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString('hex');
@@ -171,12 +264,12 @@ function parseCookies(req) {
 
 function getAdminSessionToken(req) {
   const cookies = parseCookies(req);
-  return cookies.admin_session || '';
+  return cookies[getScopedCookieName(req, 'admin_session')] || '';
 }
 
 function getUserSessionToken(req) {
   const cookies = parseCookies(req);
-  return cookies.user_session || '';
+  return cookies[getScopedCookieName(req, 'user_session')] || '';
 }
 
 function loadSessionUser(req, cookieName, expectedRole, callback) {
@@ -244,10 +337,10 @@ function requireAdminApiAuth(req, res, next) {
 function requireAdminPageAuth(req, res, next) {
   loadSessionUser(req, 'admin_session', 'admin', (err, adminUser) => {
     if (err) {
-      return res.redirect('/admin-login');
+      return res.redirect(sitePath(req, '/admin-login'));
     }
     if (!adminUser) {
-      return res.redirect('/admin-login');
+      return res.redirect(sitePath(req, '/admin-login'));
     }
     req.adminSession = adminUser;
     next();
@@ -281,10 +374,44 @@ function buildOrderCode() {
 }
 
 function getPublicBaseUrl(req) {
-  return process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get('host')}`;
+  const baseUrl = process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get('host')}`;
+  return `${baseUrl.replace(/\/+$/, '')}${getSiteBasePath(req)}`;
 }
 
-async function syncOrderCodeFromPayOS(orderCode) {
+function isPaymentRequestNotFoundError(error) {
+  return error && String(error.message || '').includes('Khong tim thay yeu cau thanh toan');
+}
+
+function markPaymentPaidAcrossSites(orderCode, paymentData, callback) {
+  const databases = getAllSiteDatabases();
+  let index = 0;
+  let lastError = null;
+
+  const next = () => {
+    if (index >= databases.length) {
+      callback(lastError || new Error('Khong tim thay yeu cau thanh toan tuong ung'));
+      return;
+    }
+
+    const database = databases[index++];
+    database.markPaymentPaid(orderCode, paymentData, (err) => {
+      if (!err) {
+        callback(null);
+        return;
+      }
+      lastError = err;
+      if (isPaymentRequestNotFoundError(err)) {
+        next();
+        return;
+      }
+      callback(err);
+    });
+  };
+
+  next();
+}
+
+async function syncOrderCodeFromPayOS(orderCode, database = getActiveDb()) {
   const paymentInfo = await payos.getPaymentLinkInformation(orderCode);
   const paidAmount = Number(paymentInfo.amountPaid || 0);
   const amount = Number(paymentInfo.amount || paidAmount || 0);
@@ -293,7 +420,7 @@ async function syncOrderCodeFromPayOS(orderCode) {
 
   if (paidStatuses.has(status) || paidAmount > 0) {
     return new Promise((resolve, reject) => {
-      db.markPaymentPaid(
+      database.markPaymentPaid(
         orderCode,
         {
           amount: paidAmount > 0 ? paidAmount : amount,
@@ -317,7 +444,7 @@ async function syncOrderCodeFromPayOS(orderCode) {
 
   if (status === 'CANCELLED' || status === 'EXPIRED') {
     await new Promise((resolve, reject) => {
-      db.updatePaymentRequestStatus(orderCode, status, (err) => {
+      database.updatePaymentRequestStatus(orderCode, status, (err) => {
         if (err) {
           reject(err);
           return;
@@ -345,27 +472,29 @@ async function syncPendingPaymentsFromPayOS() {
 
   isSyncingPendingPayOS = true;
   try {
-    const pendingRows = await new Promise((resolve, reject) => {
-      db.getPendingPaymentRequests(50, (err, rows = []) => {
-        if (err) {
-          reject(err);
-          return;
-        }
-
-        resolve(rows);
-      });
-    });
-
     let updatedCount = 0;
-    for (const row of pendingRows) {
-      try {
-        const result = await syncOrderCodeFromPayOS(Number(row.order_code));
-        if (result && result.updated) {
-          updatedCount += 1;
-          console.log(`[PayOS Sync] Updated PAID for orderCode=${row.order_code}`);
+    for (const database of getAllSiteDatabases()) {
+      const pendingRows = await new Promise((resolve, reject) => {
+        database.getPendingPaymentRequests(50, (err, rows = []) => {
+          if (err) {
+            reject(err);
+            return;
+          }
+
+          resolve(rows);
+        });
+      });
+
+      for (const row of pendingRows) {
+        try {
+          const result = await syncOrderCodeFromPayOS(Number(row.order_code), database);
+          if (result && result.updated) {
+            updatedCount += 1;
+            console.log(`[PayOS Sync] Updated PAID for orderCode=${row.order_code}`);
+          }
+        } catch (orderErr) {
+          console.error(`[PayOS Sync] Failed orderCode=${row.order_code}:`, orderErr.message);
         }
-      } catch (orderErr) {
-        console.error(`[PayOS Sync] Failed orderCode=${row.order_code}:`, orderErr.message);
       }
     }
 
@@ -1085,6 +1214,58 @@ app.get('/api/leaderboard/monthly', (req, res) => {
   });
 });
 
+// Super admin: quản lý các site phụ
+app.get('/admin2', requireMainSite, requireAdminPageAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/admin2.html'));
+});
+
+app.get('/api/admin2/sites', requireMainSite, requireAdminApiAuth, (req, res) => {
+  res.json(siteRegistry.listSites());
+});
+
+app.post('/api/admin2/sites', requireMainSite, requireAdminApiAuth, (req, res) => {
+  const name = String(req.body.name || '').trim();
+  const slug = String(req.body.slug || '').trim();
+  const adminPassword = String(req.body.adminPassword || '');
+
+  if (!name || !slug || adminPassword.length < 6) {
+    return res.status(400).json({ error: 'Vui lòng nhập tên site, slug và mật khẩu admin tối thiểu 6 ký tự' });
+  }
+
+  let site;
+  try {
+    site = siteRegistry.createSite({ name, slug });
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
+
+  const siteDb = getSiteDb(site);
+  const { hash, salt } = hashPassword(adminPassword);
+  siteDb.createUser('admin', 'Admin', hash, salt, 'admin', (err) => {
+    if (err) {
+      return res.status(500).json({ error: `Đã tạo site nhưng chưa tạo được admin: ${err.message}` });
+    }
+    res.json({
+      ...site,
+      url_path: `/${site.slug}`,
+      admin_path: `/${site.slug}/admin`
+    });
+  });
+});
+
+app.put('/api/admin2/sites/:slug/status', requireMainSite, requireAdminApiAuth, (req, res) => {
+  try {
+    const site = siteRegistry.updateSiteStatus(req.params.slug, Boolean(req.body.active));
+    res.json({
+      ...site,
+      url_path: `/${site.slug}`,
+      admin_path: `/${site.slug}/admin`
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
 // Serve trang chủ
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/index.html'));
@@ -1098,7 +1279,7 @@ app.get('/admin', requireAdminPageAuth, (req, res) => {
 app.get('/admin-login', (req, res) => {
   loadSessionUser(req, 'admin_session', 'admin', (err, adminUser) => {
     if (!err && adminUser) {
-      return res.redirect('/admin');
+      return res.redirect(sitePath(req, '/admin'));
     }
     res.sendFile(path.join(__dirname, '../public/admin-login.html'));
   });
@@ -1128,13 +1309,13 @@ app.post('/api/admin/login', (req, res) => {
       sv: Number(adminUser.session_version || 1),
       exp: Date.now() + maxAgeSeconds * 1000
     });
-    setSessionCookie(res, 'admin_session', sessionToken, maxAgeSeconds);
+    setSessionCookieForRequest(req, res, 'admin_session', sessionToken, maxAgeSeconds);
     res.json({ success: true });
   });
 });
 
 app.post('/api/admin/logout', (req, res) => {
-  clearSessionCookie(res, 'admin_session');
+  clearSessionCookieForRequest(req, res, 'admin_session');
   res.json({ success: true });
 });
 
@@ -1361,7 +1542,7 @@ app.post('/api/auth/register', (req, res) => {
       sv: Number(user.session_version || 1),
       exp: Date.now() + maxAgeSeconds * 1000
     });
-    setSessionCookie(res, 'user_session', sessionToken, maxAgeSeconds);
+    setSessionCookieForRequest(req, res, 'user_session', sessionToken, maxAgeSeconds);
     res.json({ success: true, user: { id: user.id, name: user.name, phone: user.phone } });
   });
 });
@@ -1387,13 +1568,13 @@ app.post('/api/auth/login', (req, res) => {
       sv: Number(user.session_version || 1),
       exp: Date.now() + maxAgeSeconds * 1000
     });
-    setSessionCookie(res, 'user_session', sessionToken, maxAgeSeconds);
+    setSessionCookieForRequest(req, res, 'user_session', sessionToken, maxAgeSeconds);
     res.json({ success: true, user: { id: user.id, name: user.name, phone: user.phone, role: user.role } });
   });
 });
 
 app.post('/api/auth/logout', (req, res) => {
-  clearSessionCookie(res, 'user_session');
+  clearSessionCookieForRequest(req, res, 'user_session');
   res.json({ success: true });
 });
 

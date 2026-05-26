@@ -1,4 +1,13 @@
-const API_BASE = '';
+const SITE_BASE_PATH = (() => {
+    const firstSegment = window.location.pathname.split('/').filter(Boolean)[0] || '';
+    const rootPaths = new Set(['admin', 'admin2', 'admin-login', 'admin.html', 'api', 'assets', 'images', 'game.html']);
+    return firstSegment && !rootPaths.has(firstSegment) ? `/${firstSegment}` : '';
+})();
+const API_BASE = SITE_BASE_PATH;
+document.addEventListener('DOMContentLoaded', () => {
+    const backBtn = document.querySelector('.back-btn');
+    if (backBtn) backBtn.setAttribute('href', SITE_BASE_PATH || '/');
+});
 let currentHistoryDetailDate = '';
 let currentPaymentView = 'debt';
 let editingOrderId = 0;
