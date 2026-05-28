@@ -53,10 +53,10 @@ function updateHistoryNameSuggestions() {
     const dropdown = document.getElementById('historyNameSuggestions');
     if (!query) { dropdown.style.display = 'none'; return; }
 
-    const normalized = query.replace(/\s+/g, '');
+    const normalized = AppUtils.getSearchKey(query);
     const matches = allCustomerNames.filter(n =>
         n.toLowerCase().includes(query) ||
-        n.toLowerCase().replace(/\s+/g, '').includes(normalized)
+        AppUtils.getSearchKey(n).includes(normalized)
     );
     if (!matches.length) { dropdown.style.display = 'none'; return; }
 
@@ -239,6 +239,10 @@ function loadTodayInfo() {
                 document.getElementById('alternativeItems').value = data.menu.alternatives || '';
             }
             document.getElementById('dailyQuantity').value = data.quantity;
+            const cutoffInput = document.getElementById('dailyCutoffTime');
+            if (cutoffInput) {
+                cutoffInput.value = data.orderCutoffTime || (data.orderCutoff && data.orderCutoff.cutoffTime) || '10:45';
+            }
         })
         .catch(err => console.error('Lỗi:', err));
 }
@@ -308,22 +312,27 @@ function updateMenu() {
 
 function updateQuantity() {
     const quantity = parseInt(document.getElementById('dailyQuantity').value);
+    const cutoffTime = (document.getElementById('dailyCutoffTime')?.value || '10:45').trim();
     if (!quantity || quantity < 1) {
         showMessage('todayMessage', 'Vui lòng nhập số lượng hợp lệ', 'error');
+        return;
+    }
+    if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(cutoffTime)) {
+        showMessage('todayMessage', 'Giờ chốt không hợp lệ', 'error');
         return;
     }
 
     fetch(`${API_BASE}/api/admin/quantity`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ quantity })
+        body: JSON.stringify({ quantity, cutoffTime })
     })
     .then(res => res.json())
     .then(data => {
         if (data.error) {
             showMessage('todayMessage', data.error, 'error');
         } else {
-            showMessage('todayMessage', 'Cập nhật số lượng thành công! ✅', 'success');
+            showMessage('todayMessage', 'Cập nhật số lượng và giờ chốt thành công! ✅', 'success');
         }
     })
     .catch(err => showMessage('todayMessage', 'Lỗi: ' + err.message, 'error'));

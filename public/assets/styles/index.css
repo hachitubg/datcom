@@ -203,6 +203,27 @@ body {
     line-height: 1;
 }
 
+.cutoff-note {
+    margin-top: 10px;
+    text-align: center;
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: var(--on-surface-variant);
+}
+
+.cutoff-note strong {
+    color: var(--primary);
+    font-weight: 700;
+}
+
+.cutoff-note.cutoff-closed {
+    color: #a33a2c;
+}
+
+.cutoff-note.cutoff-closed strong {
+    color: #a33a2c;
+}
+
 .remaining-divider {
     width: 1px;
     height: 40px;
@@ -397,6 +418,13 @@ body {
 .btn-order:hover:not(.disabled) {
     transform: translateY(-3px);
     box-shadow: 0 16px 40px rgba(109, 88, 80, 0.3);
+}
+
+.btn-order.disabled,
+.btn-order:disabled {
+    cursor: not-allowed;
+    opacity: 0.68;
+    transform: none;
 }
 
 .btn-action {
@@ -1571,6 +1599,11 @@ textarea {
         font-size: 2rem;
     }
 
+    .cutoff-note {
+        font-size: 0.78rem;
+        margin-top: 8px;
+    }
+
     /* Menu card */
     .menu-card {
         padding: 20px;
@@ -1642,6 +1675,12 @@ textarea {
 
     .mobile-btn:active {
         transform: scale(0.95);
+    }
+
+    .mobile-btn:disabled {
+        cursor: not-allowed;
+        opacity: 0.6;
+        transform: none;
     }
 
     .mobile-btn-primary {
@@ -1812,6 +1851,11 @@ textarea {
     .remaining-number,
     .remaining-ordered {
         font-size: 1.75rem;
+    }
+
+    .cutoff-note {
+        font-size: 0.72rem;
+        margin-top: 8px;
     }
 
     .remaining-label {

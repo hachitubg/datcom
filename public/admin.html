@@ -95,8 +95,14 @@
                     <input type="number" id="dailyQuantity" min="1" placeholder="Nhập số lượng...">
                 </div>
 
+                <div class="form-group">
+                    <label for="dailyCutoffTime">GIỜ CHỐT ĐẶT CƠM HẰNG NGÀY</label>
+                    <input type="time" id="dailyCutoffTime" value="10:45">
+                    <small class="form-hint">Sau giờ này nút đặt cơm sẽ bị khóa.</small>
+                </div>
+
                 <div class="button-group">
-                    <button class="btn-primary" onclick="updateQuantity()">CẬP NHẬT SỐ LƯỢNG</button>
+                    <button class="btn-primary" onclick="updateQuantity()">CẬP NHẬT SỐ LƯỢNG & GIỜ CHỐT</button>
                 </div>
             </div>
         </div>

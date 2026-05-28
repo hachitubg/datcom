@@ -13,6 +13,10 @@ const escapeHtml = AppUtils.escapeHtml;
 const escapeAttr = AppUtils.escapeAttribute;
 let consecutivePromoStatus = null;
 let promoWalletStatus = null;
+let orderCutoffState = {
+    cutoffTime: '10:45',
+    isOrderClosed: false
+};
 const STREAK_INTRO_STORAGE_KEY = 'datcom_streak_intro_dismissed_v1';
 
 function checkUserAuth() {
@@ -182,7 +186,9 @@ document.getElementById('btnPayment').addEventListener('click', () => {
 });
 
 document.getElementById('mobileBtnOrder').addEventListener('click', () => {
-    document.getElementById('btnOrder').click();
+    const orderBtn = document.getElementById('btnOrder');
+    if (orderBtn.disabled) return;
+    orderBtn.click();
 });
 
 document.getElementById('mobileBtnPayment').addEventListener('click', () => {
@@ -929,6 +935,9 @@ document.getElementById('btnCheckPromo').addEventListener('click', () => {
 });
 
 document.getElementById('btnOrder').addEventListener('click', () => {
+    if (document.getElementById('btnOrder').disabled) {
+        return;
+    }
     document.getElementById('orderMessage').innerHTML = '';
     document.getElementById('orderForm').reset();
     document.getElementById('promoMessage').innerHTML = '';
@@ -994,6 +1003,59 @@ window.addEventListener('click', (e) => {
     }
 });
 
+function normalizeOrderCutoffState(data) {
+    const cutoff = data.orderCutoff || {};
+    const cutoffTime = data.orderCutoffTime || cutoff.cutoffTime || '10:45';
+    return {
+        cutoffTime,
+        isOrderClosed: Boolean(cutoff.isOrderClosed)
+    };
+}
+
+function renderOrderCutoff() {
+    const cutoffInfoEl = document.getElementById('orderCutoffInfo');
+    if (!cutoffInfoEl) return;
+
+    cutoffInfoEl.classList.toggle('cutoff-closed', orderCutoffState.isOrderClosed);
+    if (orderCutoffState.isOrderClosed) {
+        cutoffInfoEl.textContent = 'Đã quá giờ đặt cơm, nếu muốn đặt thêm vui lòng liên hệ admin. Cảm ơn bạn ^^';
+        return;
+    }
+
+    cutoffInfoEl.innerHTML = `Thời gian cuối cùng nhận đơn là <strong id="orderCutoffTimeLabel">${orderCutoffState.cutoffTime || '10:45'}</strong>`;
+}
+
+function applyOrderButtonState(data) {
+    const orderBtn = document.getElementById('btnOrder');
+    const mobileOrderBtn = document.getElementById('mobileBtnOrder');
+    const mobileText = mobileOrderBtn ? mobileOrderBtn.querySelector('.mobile-btn-text') : null;
+    const remaining = Number(data.remaining || 0);
+
+    if (orderCutoffState.isOrderClosed) {
+        orderBtn.disabled = true;
+        orderBtn.classList.add('disabled');
+        orderBtn.innerHTML = '<span class="btn-icon">⏰</span><span>ĐÃ CHỐT</span>';
+        if (mobileOrderBtn) mobileOrderBtn.disabled = true;
+        if (mobileText) mobileText.textContent = 'Đã chốt';
+        return;
+    }
+
+    if (remaining <= 0) {
+        orderBtn.disabled = true;
+        orderBtn.classList.add('disabled');
+        orderBtn.innerHTML = '<span class="btn-icon">❌</span><span>HẾT SUẤT</span>';
+        if (mobileOrderBtn) mobileOrderBtn.disabled = true;
+        if (mobileText) mobileText.textContent = 'Hết suất';
+        return;
+    }
+
+    orderBtn.disabled = false;
+    orderBtn.classList.remove('disabled');
+    orderBtn.innerHTML = '<span class="btn-icon">🍚</span><span>ĐẶT CƠM</span>';
+    if (mobileOrderBtn) mobileOrderBtn.disabled = false;
+    if (mobileText) mobileText.textContent = 'Đặt cơm';
+}
+
 // Load today info
 function loadTodayInfo() {
     fetch(`${API_BASE}/api/today`)
@@ -1024,20 +1086,10 @@ function loadTodayInfo() {
             
             document.getElementById('remainingCount').textContent = data.remaining;
             document.getElementById('orderedCount').textContent = data.ordered;
+            orderCutoffState = normalizeOrderCutoffState(data);
+            renderOrderCutoff();
 
-            // Update button state
-            const orderBtn = document.getElementById('btnOrder');
-            if (data.remaining <= 0) {
-                orderBtn.disabled = true;
-                orderBtn.classList.add('disabled');
-                orderBtn.textContent = '❌ Hết suất';
-                document.getElementById('mobileBtnOrder').disabled = true;
-            } else {
-                orderBtn.disabled = false;
-                orderBtn.classList.remove('disabled');
-                orderBtn.textContent = 'ĐẶT CƠM';
-                document.getElementById('mobileBtnOrder').disabled = false;
-            }
+            applyOrderButtonState(data);
 
             // Update max quantity
             const quantityInput = document.getElementById('quantity');

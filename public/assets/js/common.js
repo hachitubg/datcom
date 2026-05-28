@@ -39,6 +39,17 @@
     return escapeHtml(value).replace(/`/g, '&#96;');
   }
 
+  function getSearchKey(value) {
+    return String(value || '')
+      .trim()
+      .replace(/\s+/g, ' ')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[đĐ]/g, 'd')
+      .toLowerCase()
+      .replace(/['\s]+/g, '');
+  }
+
   // SQLite lưu CURRENT_TIMESTAMP theo UTC (không có ký hiệu timezone).
   // PayOS có thể trả về chuỗi đã có timezone (+07:00 hoặc Z).
   // Hàm này xử lý cả hai trường hợp: nếu chưa có timezone thì coi là UTC rồi convert sang giờ địa phương.
@@ -138,6 +149,7 @@
     formatDateTime,
     escapeHtml,
     escapeAttribute,
+    getSearchKey,
     showPopup
   };
 }(window));

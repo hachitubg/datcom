@@ -179,6 +179,23 @@ class Database {
     return `${year}-${month}-${day}`;
   }
 
+  getSearchKey(value) {
+    return String(value || '')
+      .trim()
+      .replace(/\s+/g, ' ')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[đĐ]/g, 'd')
+      .toLowerCase()
+      .replace(/['\s]+/g, '');
+  }
+
+  matchesNameSearch(name, searchKeyword) {
+    const keyword = this.getSearchKey(searchKeyword);
+    if (!keyword) return true;
+    return this.getSearchKey(name).includes(keyword);
+  }
+
   getOrderAmountSql(orderAlias = 'o', dayAlias = 'd') {
     return `CASE
       WHEN COALESCE(${orderAlias}.discount_percent, 0) > 0 AND COALESCE(${orderAlias}.promo_code, '') != ''
@@ -517,10 +534,18 @@ class Database {
     );
   }
 
-  getCustomerOrderDetails(name, callback) {
+  getCustomerOrderDetails(name, callback, resolved = false) {
     const normalizedName = String(name || '').trim();
     if (!normalizedName) {
       callback(new Error('Thiếu tên khách hàng'));
+      return;
+    }
+
+    if (!resolved) {
+      this.resolveCustomerName(normalizedName, (resolveErr, resolvedName) => {
+        if (resolveErr) { callback(resolveErr); return; }
+        this.getCustomerOrderDetails(resolvedName, callback, true);
+      });
       return;
     }
 
@@ -703,7 +728,7 @@ class Database {
       rows.forEach((row) => {
         const originalName = (row.name || '').trim().replace(/\s+/g, ' ');
         if (!originalName) return;
-        const normalizedName = originalName.toLowerCase();
+        const normalizedName = this.getSearchKey(originalName);
         if (!uniqueMap.has(normalizedName)) {
           uniqueMap.set(normalizedName, originalName);
         }
@@ -711,6 +736,25 @@ class Database {
 
       const names = Array.from(uniqueMap.values()).sort((a, b) => a.localeCompare(b, 'vi'));
       callback(null, names);
+    });
+  }
+
+  resolveCustomerName(name, callback) {
+    const normalizedName = String(name || '').trim().replace(/\s+/g, ' ');
+    const searchKey = this.getSearchKey(normalizedName);
+    if (!searchKey) {
+      callback(null, normalizedName);
+      return;
+    }
+
+    this.getKnownCustomerNames((err, names = []) => {
+      if (err) {
+        callback(err);
+        return;
+      }
+
+      const exactMatch = names.find((candidate) => this.getSearchKey(candidate) === searchKey);
+      callback(null, exactMatch || normalizedName);
     });
   }
 
@@ -774,9 +818,7 @@ class Database {
   }
 
   getTodayPaymentSummary(searchKeyword, callback) {
-    const keyword = (searchKeyword || '').trim().toLowerCase();
-    const normalizedKeyword = keyword.replace(/['\s]+/g, '');
-    const searchParams = [...(normalizedKeyword ? [`%${normalizedKeyword}%`] : [])];
+    const normalizedKeyword = this.getSearchKey(searchKeyword);
     const orderAmountSql = this.getOrderAmountSql('o', 'd');
 
     // FIFO waterfall bằng SQL CTE + window function:
@@ -800,7 +842,6 @@ class Database {
           MAX(o.created_at)                AS last_order_time
         FROM orders o
         JOIN days d ON o.day_id = d.id
-        ${normalizedKeyword ? "WHERE LOWER(REPLACE(REPLACE(o.name, '''', ''), ' ', '')) LIKE ?" : ''}
         GROUP BY LOWER(o.name), d.date
       ),
       customer_paid AS (
@@ -840,13 +881,17 @@ class Database {
       ORDER BY SUM(rem) DESC, MIN(display_name) COLLATE NOCASE ASC
     `;
 
-    this.db.all(sql, searchParams, (err, rows = []) => {
+    this.db.all(sql, [], (err, rows = []) => {
       if (err) {
         callback(err);
         return;
       }
 
-      const summary = rows.map((row) => {
+      const filteredRows = normalizedKeyword
+        ? rows.filter((row) => this.matchesNameSearch(row.name, searchKeyword))
+        : rows;
+
+      const summary = filteredRows.map((row) => {
         const totalAmount = row.total_amount || 0;
         const remainingAmount = row.remaining_amount || 0;
         return {
@@ -867,10 +912,18 @@ class Database {
   }
 
 
-  getTodayCustomerOrderDetails(name, callback) {
+  getTodayCustomerOrderDetails(name, callback, resolved = false) {
     const normalizedName = String(name || '').trim();
     if (!normalizedName) {
       callback(new Error('Thiếu tên khách hàng'));
+      return;
+    }
+
+    if (!resolved) {
+      this.resolveCustomerName(normalizedName, (resolveErr, resolvedName) => {
+        if (resolveErr) { callback(resolveErr); return; }
+        this.getTodayCustomerOrderDetails(resolvedName, callback, true);
+      });
       return;
     }
 
@@ -958,7 +1011,15 @@ class Database {
     );
   }
 
-  getTodayCustomerPayment(name, callback) {
+  getTodayCustomerPayment(name, callback, resolved = false) {
+    if (!resolved) {
+      this.resolveCustomerName(name, (resolveErr, resolvedName) => {
+        if (resolveErr) { callback(resolveErr); return; }
+        this.getTodayCustomerPayment(resolvedName, callback, true);
+      });
+      return;
+    }
+
     const orderAmountSql = this.getOrderAmountSql('o', 'd');
 
     // Bước 1: Lấy day_id của ngày có đơn gần nhất (không bắt buộc hôm nay)
@@ -1191,10 +1252,18 @@ class Database {
   }
 
 
-  getCustomerRemainingDebt(name, callback) {
+  getCustomerRemainingDebt(name, callback, resolved = false) {
     const normalizedName = String(name || '').trim();
     if (!normalizedName) {
       callback(new Error('Thiếu tên khách hàng'));
+      return;
+    }
+
+    if (!resolved) {
+      this.resolveCustomerName(normalizedName, (resolveErr, resolvedName) => {
+        if (resolveErr) { callback(resolveErr); return; }
+        this.getCustomerRemainingDebt(resolvedName, callback, true);
+      });
       return;
     }
 
@@ -1231,7 +1300,7 @@ class Database {
     );
   }
 
-  markCustomerCashPaid(customerName, amount, callback) {
+  markCustomerCashPaid(customerName, amount, callback, resolved = false) {
     const normalizedName = (customerName || '').trim().replace(/\s+/g, ' ');
     const requestedAmount = Number(amount || 0);
     const dbConn = this.db;
@@ -1240,6 +1309,14 @@ class Database {
 
     if (!normalizedName) {
       callback(new Error('Ten khach hang khong hop le'));
+      return;
+    }
+
+    if (!resolved) {
+      this.resolveCustomerName(normalizedName, (resolveErr, resolvedName) => {
+        if (resolveErr) { callback(resolveErr); return; }
+        this.markCustomerCashPaid(resolvedName, amount, callback, true);
+      });
       return;
     }
 
@@ -1459,10 +1536,18 @@ class Database {
     );
   }
 
-  getCustomerFullOrderHistory(name, callback) {
+  getCustomerFullOrderHistory(name, callback, resolved = false) {
     const normalizedName = String(name || '').trim();
     if (!normalizedName) {
       callback(new Error('Thiếu tên khách hàng'));
+      return;
+    }
+
+    if (!resolved) {
+      this.resolveCustomerName(normalizedName, (resolveErr, resolvedName) => {
+        if (resolveErr) { callback(resolveErr); return; }
+        this.getCustomerFullOrderHistory(resolvedName, callback, true);
+      });
       return;
     }
 
@@ -1564,8 +1649,7 @@ class Database {
     }
 
     const searchKeyword = (normalizedFilters && normalizedFilters.search) || '';
-    const keyword = String(searchKeyword).trim().toLowerCase();
-    const normalizedKeyword = keyword.replace(/['\s]+/g, '');
+    const normalizedKeyword = this.getSearchKey(searchKeyword);
     const period = String((normalizedFilters && normalizedFilters.period) || 'all').toLowerCase();
     const status = String((normalizedFilters && normalizedFilters.status) || 'all').toUpperCase();
     const selectedDate = String((normalizedFilters && normalizedFilters.date) || '').trim();
@@ -1575,11 +1659,6 @@ class Database {
 
     const whereClauses = ['1 = 1'];
     const params = [];
-
-    if (normalizedKeyword) {
-      whereClauses.push("LOWER(REPLACE(REPLACE(pr.customer_name, '''', ''), ' ', '')) LIKE ?");
-      params.push(`%${normalizedKeyword}%`);
-    }
 
     if (period === 'today') {
       whereClauses.push("d.date = DATE('now', 'localtime')");
@@ -1629,7 +1708,17 @@ class Database {
       LIMIT 500
     `;
 
-    this.db.all(query, params, callback);
+    this.db.all(query, params, (err, rows = []) => {
+      if (err) {
+        callback(err);
+        return;
+      }
+
+      const filteredRows = normalizedKeyword
+        ? rows.filter((row) => this.matchesNameSearch(row.customer_name, searchKeyword))
+        : rows;
+      callback(null, filteredRows);
+    });
   }
   // =============================================
   // Promo Codes
@@ -1974,7 +2063,8 @@ class Database {
       { key: 'debt_limit_message', value: 'Bạn thông cảm nhé, mình cần xoay vốn nên vui lòng thanh toán để tiếp tục đặt cơm.', description: 'Thông báo khi vượt giới hạn nợ' },
       { key: 'consecutive_promo_enabled', value: '0', description: 'Bật/tắt tặng mã KM khi đặt liên tục' },
       { key: 'consecutive_promo_days', value: '5', description: 'Số ngày đặt liên tục để được tặng mã' },
-      { key: 'consecutive_promo_discount', value: '50', description: 'Phần trăm giảm giá của mã tặng' }
+      { key: 'consecutive_promo_discount', value: '50', description: 'Phần trăm giảm giá của mã tặng' },
+      { key: 'order_cutoff_time', value: '10:45', description: 'Giờ chốt đặt cơm hằng ngày (HH:mm)' }
     ];
     const stmt = this.db.prepare(`INSERT OR IGNORE INTO app_settings (key, value, description) VALUES (?, ?, ?)`);
     for (const d of defaults) {

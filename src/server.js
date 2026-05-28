@@ -369,6 +369,26 @@ function normalizeName(name) {
     .join(' ');
 }
 
+function normalizeCutoffTime(value) {
+  const raw = String(value || '').trim();
+  return /^([01]\d|2[0-3]):([0-5]\d)$/.test(raw) ? raw : '10:45';
+}
+
+function getOrderCutoffInfo(cutoffTime, now = new Date()) {
+  const normalized = normalizeCutoffTime(cutoffTime);
+  const [hours, minutes] = normalized.split(':').map(Number);
+  const cutoff = new Date(now);
+  cutoff.setHours(hours, minutes, 0, 0);
+
+  const remainingSeconds = Math.max(0, Math.floor((cutoff.getTime() - now.getTime()) / 1000));
+  return {
+    cutoffTime: normalized,
+    cutoffAt: cutoff.toISOString(),
+    isOrderClosed: now.getTime() >= cutoff.getTime(),
+    remainingSeconds
+  };
+}
+
 function buildOrderCode() {
   return Number(`${Date.now().toString().slice(-10)}${Math.floor(Math.random() * 90 + 10)}`);
 }
@@ -515,7 +535,18 @@ app.get('/api/today', (req, res) => {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
-    res.json(data);
+    db.getSettings(['order_cutoff_time'], (settingsErr, settings) => {
+      if (settingsErr) {
+        return res.status(500).json({ error: settingsErr.message });
+      }
+
+      const cutoffTime = normalizeCutoffTime(settings.order_cutoff_time);
+      res.json({
+        ...data,
+        orderCutoffTime: cutoffTime,
+        orderCutoff: getOrderCutoffInfo(cutoffTime)
+      });
+    });
   });
 });
 
@@ -546,9 +577,16 @@ app.post('/api/orders', (req, res) => {
 
     const userId = user ? user.id : null;
 
-    db.getSettings(['debt_limit_enabled', 'debt_limit_servings', 'debt_limit_message'], (settingsErr, settings) => {
+    db.getSettings(['order_cutoff_time', 'debt_limit_enabled', 'debt_limit_servings', 'debt_limit_message'], (settingsErr, settings) => {
       if (settingsErr) {
         return res.status(500).json({ error: settingsErr.message });
+      }
+
+      const cutoffTime = normalizeCutoffTime(settings.order_cutoff_time);
+      if (getOrderCutoffInfo(cutoffTime).isOrderClosed) {
+        return res.status(400).json({
+          error: `Đã quá giờ đặt cơm hôm nay (${cutoffTime}). Vui lòng đặt trước giờ chốt.`
+        });
       }
 
       const debtEnabled = settings.debt_limit_enabled === '1';
@@ -727,15 +765,31 @@ app.post('/api/admin/menu', (req, res) => {
 
 // Cập nhật số lượng có thể đặt
 app.post('/api/admin/quantity', (req, res) => {
-  const { quantity } = req.body;
+  const { quantity, cutoffTime } = req.body;
   if (!quantity || quantity < 1) {
     return res.status(400).json({ error: 'Số lượng không hợp lệ' });
   }
+
+  const normalizedCutoffTime = cutoffTime ? normalizeCutoffTime(cutoffTime) : null;
+  if (cutoffTime && normalizedCutoffTime !== String(cutoffTime).trim()) {
+    return res.status(400).json({ error: 'Giờ chốt không hợp lệ' });
+  }
+
   db.updateTodayQuantity(quantity, (err) => {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
-    res.json({ success: true });
+
+    if (!normalizedCutoffTime) {
+      return res.json({ success: true });
+    }
+
+    db.updateSetting('order_cutoff_time', normalizedCutoffTime, (settingErr) => {
+      if (settingErr) {
+        return res.status(500).json({ error: settingErr.message });
+      }
+      res.json({ success: true, orderCutoffTime: normalizedCutoffTime });
+    });
   });
 });
 
