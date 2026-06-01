@@ -64,6 +64,7 @@ function updatePromoAccess() {
 }
 
 const authModal = document.getElementById('authModal');
+const editNameModal = document.getElementById('editNameModal');
 
 document.getElementById('btnShowLogin').addEventListener('click', () => {
     document.getElementById('authMessage').innerHTML = '';
@@ -144,12 +145,60 @@ document.getElementById('btnUserLogout').addEventListener('click', () => {
     fetch(`${API_BASE}/api/auth/logout`, { method: 'POST' })
         .finally(() => {
             currentUser = null;
+            document.getElementById('userMenuDropdown').classList.remove('show');
             document.getElementById('userAuthLoggedOut').style.display = 'flex';
             document.getElementById('userAuthLoggedIn').style.display = 'none';
             updatePromoAccess();
             loadConsecutivePromoStatus();
             updatePromoWalletButton(null);
         });
+});
+
+document.getElementById('btnUserMenu').addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.getElementById('userMenuDropdown').classList.toggle('show');
+});
+
+document.getElementById('btnEditUserName').addEventListener('click', () => {
+    document.getElementById('userMenuDropdown').classList.remove('show');
+    document.getElementById('editNameMessage').innerHTML = '';
+    document.getElementById('editUserNameInput').value = currentUser?.name || '';
+    editNameModal.style.display = 'flex';
+    setTimeout(() => document.getElementById('editUserNameInput').focus(), 0);
+});
+
+document.getElementById('closeEditName').addEventListener('click', () => {
+    editNameModal.style.display = 'none';
+});
+
+document.getElementById('btnSaveUserName').addEventListener('click', () => {
+    const name = document.getElementById('editUserNameInput').value.trim();
+    const messageEl = document.getElementById('editNameMessage');
+    if (!name) {
+        messageEl.innerHTML = '<div class="error-message">Vui lòng nhập họ và tên</div>';
+        return;
+    }
+
+    fetch(`${API_BASE}/api/auth/me/name`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+    })
+    .then(res => res.json().then(data => ({ ok: res.ok, data })))
+    .then(({ ok, data }) => {
+        if (!ok) throw new Error(data.error || 'Không thể cập nhật tên');
+        currentUser = data.user;
+        document.getElementById('userAuthName').textContent = data.user.name;
+        const customerNameInput = document.getElementById('customerName');
+        if (customerNameInput && customerNameInput.value.trim()) {
+            customerNameInput.value = data.user.name;
+        }
+        editNameModal.style.display = 'none';
+        loadPromoWalletSummary();
+    })
+    .catch(err => {
+        messageEl.innerHTML = `<div class="error-message">${escapeHtml(err.message)}</div>`;
+    });
 });
 
 // Auth help tooltip
@@ -159,6 +208,7 @@ document.getElementById('btnAuthHelp').addEventListener('click', (e) => {
 });
 document.addEventListener('click', () => {
     document.getElementById('authHelpTooltip').classList.remove('show');
+    document.getElementById('userMenuDropdown').classList.remove('show');
 });
 
 // Modal controls
@@ -988,6 +1038,9 @@ window.addEventListener('click', (e) => {
     }
     if (e.target === authModal) {
         authModal.style.display = 'none';
+    }
+    if (e.target === editNameModal) {
+        editNameModal.style.display = 'none';
     }
     if (e.target === streakIntroModal) {
         closeStreakIntroModal();

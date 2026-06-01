@@ -1632,6 +1632,29 @@ app.post('/api/auth/logout', (req, res) => {
   res.json({ success: true });
 });
 
+app.put('/api/auth/me/name', (req, res) => {
+  const newName = normalizeName(req.body.name);
+  if (!newName) {
+    return res.status(400).json({ error: 'Vui lòng nhập họ và tên' });
+  }
+
+  getUserSessionInfo(req, (sessionErr, user) => {
+    if (sessionErr) {
+      return res.status(500).json({ error: sessionErr.message });
+    }
+    if (!user) {
+      return res.status(401).json({ error: 'Vui lòng đăng nhập lại' });
+    }
+
+    db.updateUserName(user.id, newName, (updateErr, result) => {
+      if (updateErr) {
+        return res.status(500).json({ error: updateErr.message });
+      }
+      res.json({ success: true, ...result });
+    });
+  });
+});
+
 app.get('/api/auth/me', (req, res) => {
   getUserSessionInfo(req, (err, user) => {
     if (err) return res.status(500).json({ error: err.message });

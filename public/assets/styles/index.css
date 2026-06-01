@@ -1183,6 +1183,65 @@ textarea {
     font-size: 0.7rem;
 }
 
+.user-menu-wrap {
+    position: relative;
+}
+
+.user-menu-trigger {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--surface-container-lowest);
+    box-shadow: 0 4px 16px var(--shadow-warm);
+}
+
+.user-menu-caret {
+    color: var(--on-surface-variant);
+    font-size: 0.75rem;
+    line-height: 1;
+}
+
+.user-menu-dropdown {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    z-index: 950;
+    min-width: 150px;
+    display: none;
+    padding: 6px;
+    border: 1px solid var(--outline-variant);
+    border-radius: var(--radius-md);
+    background: var(--surface-container-lowest);
+    box-shadow: 0 12px 32px -4px var(--shadow-warm-md);
+}
+
+.user-menu-dropdown.show {
+    display: block;
+}
+
+.user-menu-item {
+    width: 100%;
+    padding: 9px 10px;
+    border: none;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--on-surface-variant);
+    font-family: 'Be Vietnam Pro', sans-serif;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+}
+
+.user-menu-item:hover {
+    background: var(--primary-fixed);
+    color: var(--primary);
+}
+
+.user-menu-item-danger {
+    color: #a33a2c;
+}
+
 /* Auth Help Tooltip */
 .auth-help-wrap {
     position: relative;

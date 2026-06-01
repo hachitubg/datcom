@@ -2053,6 +2053,113 @@ class Database {
       callback
     );
   }
+
+  updateUserName(id, newName, callback) {
+    const userId = Number(id);
+    const normalizedNewName = String(newName || '').trim().replace(/\s+/g, ' ');
+    if (!Number.isInteger(userId) || userId <= 0 || !normalizedNewName) {
+      callback(new Error('Tên người dùng không hợp lệ'));
+      return;
+    }
+
+    this.getUserById(userId, (userErr, user) => {
+      if (userErr) {
+        callback(userErr);
+        return;
+      }
+      if (!user) {
+        callback(new Error('Người dùng không tồn tại'));
+        return;
+      }
+
+      const oldName = String(user.name || '').trim().replace(/\s+/g, ' ');
+      const dbConn = this.db;
+
+      dbConn.serialize(() => {
+        dbConn.run('BEGIN IMMEDIATE TRANSACTION');
+        dbConn.run(
+          `UPDATE users SET name = ? WHERE id = ?`,
+          [normalizedNewName, userId],
+          function onUserUpdated(updateUserErr) {
+            if (updateUserErr) {
+              dbConn.run('ROLLBACK', () => callback(updateUserErr));
+              return;
+            }
+
+            dbConn.run(
+              `UPDATE orders SET name = ? WHERE user_id = ? OR name = ?`,
+              [normalizedNewName, userId, oldName],
+              function onOrdersUpdated(ordersErr) {
+                if (ordersErr) {
+                  dbConn.run('ROLLBACK', () => callback(ordersErr));
+                  return;
+                }
+                const updatedOrders = this.changes || 0;
+
+                dbConn.run(
+                  `UPDATE payment_requests SET customer_name = ? WHERE customer_name = ?`,
+                  [normalizedNewName, oldName],
+                  function onPaymentRequestsUpdated(paymentRequestsErr) {
+                    if (paymentRequestsErr) {
+                      dbConn.run('ROLLBACK', () => callback(paymentRequestsErr));
+                      return;
+                    }
+                    const updatedPaymentRequests = this.changes || 0;
+
+                    dbConn.run(
+                      `UPDATE payment_transactions SET customer_name = ? WHERE customer_name = ?`,
+                      [normalizedNewName, oldName],
+                      function onPaymentTransactionsUpdated(paymentTransactionsErr) {
+                        if (paymentTransactionsErr) {
+                          dbConn.run('ROLLBACK', () => callback(paymentTransactionsErr));
+                          return;
+                        }
+                        const updatedPaymentTransactions = this.changes || 0;
+
+                        dbConn.run(
+                          `UPDATE promo_codes
+                           SET issued_to_name = CASE WHEN issued_to_user_id = ? THEN ? ELSE issued_to_name END,
+                               used_by = CASE WHEN used_by = ? THEN ? ELSE used_by END
+                           WHERE issued_to_user_id = ? OR used_by = ?`,
+                          [userId, normalizedNewName, oldName, normalizedNewName, userId, oldName],
+                          function onPromoCodesUpdated(promoCodesErr) {
+                            if (promoCodesErr) {
+                              dbConn.run('ROLLBACK', () => callback(promoCodesErr));
+                              return;
+                            }
+                            const updatedPromoCodes = this.changes || 0;
+
+                            dbConn.run('COMMIT', (commitErr) => {
+                              if (commitErr) {
+                                callback(commitErr);
+                                return;
+                              }
+                              callback(null, {
+                                user: {
+                                  id: user.id,
+                                  phone: user.phone,
+                                  name: normalizedNewName,
+                                  role: user.role
+                                },
+                                updatedOrders,
+                                updatedPaymentRequests,
+                                updatedPaymentTransactions,
+                                updatedPromoCodes
+                              });
+                            });
+                          }
+                        );
+                      }
+                    );
+                  }
+                );
+              }
+            );
+          }
+        );
+      });
+    });
+  }
   // =============================================
   // App Settings
   // =============================================
