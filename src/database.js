@@ -929,17 +929,20 @@ class Database {
 
     const orderAmountSql = this.getOrderAmountSql('o', 'd');
 
-    // Bước 1: lấy tổng tiền mỗi ngày (cũ nhất trước) để tính FIFO
+    // Lấy từng đơn theo thứ tự cũ nhất trước để tính chính xác phần còn nợ.
     this.db.all(
-      `SELECT d.date, SUM(${orderAmountSql}) AS day_amount
-       FROM orders o JOIN days d ON d.id = o.day_id
+      `SELECT o.id, o.quantity, o.description, o.created_at, d.price, d.date,
+              ${orderAmountSql} AS order_amount,
+              COALESCE(o.discount_percent, 0) AS discount_percent, o.promo_code
+       FROM orders o
+       JOIN days d ON d.id = o.day_id
        WHERE LOWER(o.name) = LOWER(?)
-       GROUP BY d.date ORDER BY d.date ASC`,
+       ORDER BY d.date ASC, o.created_at ASC, o.id ASC`,
       [normalizedName],
-      (err, dayRows = []) => {
+      (err, orderRows = []) => {
         if (err) { callback(err); return; }
 
-        // Bước 2: tổng tiền đã thanh toán (toàn bộ lịch sử)
+        // Tổng tiền đã thanh toán toàn bộ lịch sử, sau đó áp dụng FIFO vào từng đơn.
         this.db.get(
           `SELECT COALESCE(SUM(amount), 0) AS total_paid
            FROM payment_transactions
@@ -948,63 +951,50 @@ class Database {
           (err2, payRow) => {
             if (err2) { callback(err2); return; }
 
-            // Bước 3: FIFO waterfall - xác định ngày nào còn nợ và còn bao nhiêu
             let pool = Number(payRow?.total_paid || 0);
-            const unpaidDates = new Set();
-            let totalRemaining = 0;
+            const mappedRows = [];
 
-            for (const day of dayRows) {
-              const dayAmount = Number(day.day_amount || 0);
-              const applied = Math.min(pool, dayAmount);
+            for (const row of orderRows) {
+              const orderAmount = Math.round(Number(row.order_amount || 0));
+              const originalQuantity = Number(row.quantity || 0);
+              const applied = Math.min(pool, orderAmount);
               pool -= applied;
-              const dayRemaining = dayAmount - applied;
-              if (dayRemaining > 0) {
-                unpaidDates.add(day.date);
-                totalRemaining += dayRemaining;
+              const remainingAmount = Math.max(0, orderAmount - applied);
+
+              if (remainingAmount <= 0) {
+                continue;
               }
+
+              const unitAmount = originalQuantity > 0 ? orderAmount / originalQuantity : orderAmount;
+              const remainingQuantity = unitAmount > 0
+                ? Math.max(1, Math.min(originalQuantity, Math.ceil(remainingAmount / unitAmount)))
+                : originalQuantity;
+              const disc = Number(row.discount_percent || 0);
+
+              mappedRows.push({
+                id: Number(row.id),
+                quantity: remainingQuantity,
+                originalQuantity,
+                description: row.description || '',
+                createdAt: row.created_at || '',
+                date: row.date || '',
+                amount: remainingAmount,
+                originalAmount: orderAmount,
+                paidAmount: Math.max(0, orderAmount - remainingAmount),
+                discount_percent: disc,
+                promo_code: row.promo_code || null
+              });
             }
 
-            const allDates = Array.from(unpaidDates);
-            if (allDates.length === 0) {
-              return callback(null, { name: normalizedName, totalQuantity: 0, totalAmount: 0, rows: [] });
-            }
+            const totalQuantity = mappedRows.reduce((sum, r) => sum + r.quantity, 0);
+            const totalRemaining = mappedRows.reduce((sum, r) => sum + r.amount, 0);
 
-            // Bước 4: lấy từng đơn lẻ thuộc các ngày còn nợ thực sự.
-            const placeholders = allDates.map(() => '?').join(', ');
-            this.db.all(
-              `SELECT o.id, o.quantity, o.description, o.created_at, d.price, d.date,
-                      ${orderAmountSql} AS order_amount,
-                      COALESCE(o.discount_percent, 0) AS discount_percent, o.promo_code
-               FROM orders o JOIN days d ON d.id = o.day_id
-               WHERE LOWER(o.name) = LOWER(?) AND d.date IN (${placeholders})
-               ORDER BY d.date ASC, o.created_at ASC, o.id ASC`,
-              [normalizedName, ...allDates],
-              (err3, orderRows = []) => {
-                if (err3) { callback(err3); return; }
-
-                const mappedRows = orderRows.map((row) => {
-                  const disc = Number(row.discount_percent || 0);
-                  return {
-                    id: Number(row.id),
-                    quantity: Number(row.quantity || 0),
-                    description: row.description || '',
-                    createdAt: row.created_at || '',
-                    amount: Math.round(Number(row.order_amount || 0)),
-                    discount_percent: disc,
-                    promo_code: row.promo_code || null
-                  };
-                });
-
-                const totalQuantity = mappedRows.reduce((sum, r) => sum + r.quantity, 0);
-
-                callback(null, {
-                  name: normalizedName,
-                  totalQuantity,
-                  totalAmount: totalRemaining,
-                  rows: mappedRows
-                });
-              }
-            );
+            callback(null, {
+              name: normalizedName,
+              totalQuantity,
+              totalAmount: totalRemaining,
+              rows: mappedRows
+            });
           }
         );
       }

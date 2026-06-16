@@ -1148,8 +1148,33 @@ function loadPromoCodes() {
         });
 }
 
+function generatePromoCode() {
+    const now = new Date();
+    const pad = (value) => String(value).padStart(2, '0');
+    const datePart = [
+        now.getFullYear(),
+        pad(now.getMonth() + 1),
+        pad(now.getDate())
+    ].join('');
+    const timePart = [
+        pad(now.getHours()),
+        pad(now.getMinutes()),
+        pad(now.getSeconds())
+    ].join('');
+    const suffix = Math.random().toString(36).slice(2, 4).toUpperCase();
+    const code = `DATCOM-${datePart}-${timePart}${suffix}`;
+    const input = document.getElementById('newPromoCode');
+    input.value = code;
+    input.focus();
+    input.select();
+}
+
 function createPromoCode() {
-    const code = document.getElementById('newPromoCode').value.trim().toUpperCase();
+    const codeInput = document.getElementById('newPromoCode');
+    if (!codeInput.value.trim()) {
+        generatePromoCode();
+    }
+    const code = codeInput.value.trim().toUpperCase();
     const discount = Number(document.getElementById('newPromoDiscount').value || 0);
     const issuedToUserId = Number(document.getElementById('newPromoUser')?.value || 0);
     const msgEl = document.getElementById('promoAdminMessage');

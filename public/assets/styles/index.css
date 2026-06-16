@@ -834,6 +834,12 @@ textarea {
 }
 
 .payment-detail-item .order-info h4 { margin-bottom: 2px; font-size: 0.9rem; }
+
+.payment-partial-note {
+    color: var(--on-surface-variant);
+    font-size: 0.75rem;
+    font-weight: 500;
+}
 .payment-detail-item .order-info p { margin: 2px 0; font-size: 0.8rem; }
 
 .payment-detail-item-time { color: var(--primary); font-size: 0.75rem; }

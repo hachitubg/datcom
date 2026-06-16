@@ -243,7 +243,10 @@
                     <div class="filter-row">
                         <div class="filter-field filter-field--grow">
                             <label for="newPromoCode">Mã khuyến mãi</label>
-                            <input type="text" id="newPromoCode" placeholder="VD: GIAM10, FREESHIP..." style="text-transform:uppercase;">
+                            <div class="promo-code-input-row">
+                                <input type="text" id="newPromoCode" placeholder="VD: DATCOM-20260616-211530" style="text-transform:uppercase;">
+                                <button type="button" class="btn-secondary promo-generate-btn" onclick="generatePromoCode()">Tự sinh</button>
+                            </div>
                         </div>
                         <div class="filter-field">
                             <label for="newPromoDiscount">Giảm giá (%)</label>

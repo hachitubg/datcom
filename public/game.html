@@ -19,6 +19,7 @@
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        .hidden { display: none !important; }
 
         html, body { height: 100%; height: 100dvh; overflow: hidden; }
 
@@ -72,11 +73,72 @@
 
         .game-area { position: relative; width: 100%; max-width: 500px; flex: 1; min-height: 0; overflow: hidden; }
 
+        .game-mode-tabs {
+            width: 100%; max-width: 500px;
+            display: grid; grid-template-columns: 1fr 1fr;
+            gap: 6px; padding: 0 8px 6px;
+            flex-shrink: 0;
+        }
+        .mode-tab {
+            border: 1px solid rgba(255,255,255,0.2);
+            background: rgba(255,255,255,0.12);
+            color: rgba(255,255,255,0.8);
+            font-family: inherit; font-weight: 700; font-size: 0.7rem;
+            border-radius: 999px; padding: 5px 8px; cursor: pointer;
+        }
+        .mode-tab.active {
+            background: rgba(255,255,255,0.9);
+            color: var(--primary);
+        }
+
         canvas {
             display: block; width: 100%; height: 100%;
             border-radius: var(--radius-xl) var(--radius-xl) 0 0;
             background: linear-gradient(180deg, #f8f6f0 0%, #efe9e3 100%);
         }
+        canvas.hidden { display: none; }
+
+        .mine-layer {
+            position: absolute; inset: 0;
+            display: none; flex-direction: column;
+            border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+            background: linear-gradient(180deg, #fbf7ef 0%, #efe1d5 100%);
+            padding: 12px;
+            overflow: hidden;
+        }
+        .mine-layer.active { display: flex; }
+        .mine-topbar {
+            display: flex; justify-content: space-between; align-items: center;
+            gap: 8px; color: var(--primary);
+            font-size: 0.72rem; font-weight: 800;
+            padding: 2px 2px 8px;
+        }
+        .mine-board {
+            flex: 1; min-height: 0;
+            display: grid; gap: 4px;
+            touch-action: none;
+        }
+        .mine-cell {
+            border: 1px solid rgba(109,88,80,0.16);
+            border-radius: 8px;
+            background: linear-gradient(135deg, #fffaf3, #ead8ca);
+            color: var(--primary);
+            font-family: inherit;
+            font-weight: 900;
+            font-size: clamp(0.68rem, 2.3vmin, 1rem);
+            display: grid; place-items: center;
+            cursor: pointer;
+            box-shadow: inset 0 -2px 0 rgba(109,88,80,0.12), 0 2px 5px rgba(109,88,80,0.08);
+            min-width: 0; min-height: 0;
+        }
+        .mine-cell.revealed {
+            background: rgba(255,255,255,0.55);
+            box-shadow: none;
+            cursor: default;
+        }
+        .mine-cell.flagged { background: linear-gradient(135deg, #fff3c4, #f8d47a); }
+        .mine-cell.mine-hit { background: linear-gradient(135deg, #fee2e2, #ef4444); color: #fff; }
+        .mine-cell.mine-show { background: linear-gradient(135deg, #f8d7ca, #c08457); }
 
         .overlay {
             position: absolute; inset: 0;
@@ -233,6 +295,8 @@
             .login-banner-text { font-size: 0.6rem; }
             .login-banner a { font-size: 0.6rem; }
             .user-banner { padding: 2px 8px; }
+            .game-mode-tabs { padding-bottom: 4px; }
+            .mode-tab { font-size: 0.64rem; padding: 4px 6px; }
             .level-progress { height: 2px; }
             .overlay { gap: 8px; padding: 12px 16px; }
             .overlay-icon { font-size: 2rem; }
@@ -252,6 +316,8 @@
             .stat-badge { font-size: 0.55rem; padding: 1px 4px; }
             .login-banner { padding: 2px 6px; }
             .login-banner-text { font-size: 0.55rem; }
+            .game-mode-tabs { padding: 0 6px 3px; gap: 4px; }
+            .mode-tab { font-size: 0.58rem; padding: 3px 5px; }
             .overlay { gap: 6px; padding: 8px 12px; }
             .overlay-icon { font-size: 1.6rem; }
             .overlay-title { font-size: 0.95rem; }
@@ -272,7 +338,7 @@
     <div class="game-header">
         <div class="game-header-left">
             <a href="/" class="btn-back">←</a>
-            <span class="game-title">Hứng Cơm</span>
+            <span class="game-title" id="gameTitle">Hứng Cơm</span>
             <button class="btn-rank" id="btnRank">🏆</button>
         </div>
         <div class="game-stats">
@@ -281,16 +347,28 @@
             <span class="stat-badge stat-lives" id="statLives">🍚🍚🍚</span>
         </div>
     </div>
+    <div class="game-mode-tabs">
+        <button class="mode-tab active" id="modeCatch" type="button">🍚 Hứng cơm</button>
+        <button class="mode-tab" id="modeMine" type="button">🍙 Dò mìn cơm</button>
+    </div>
     <div class="level-progress"><div class="level-progress-fill" id="levelProgressFill"></div></div>
 
     <div class="game-area" id="gameArea">
         <canvas id="gameCanvas"></canvas>
+        <div class="mine-layer" id="mineLayer">
+            <div class="mine-topbar">
+                <span id="mineInfo">🍙 Lv.1</span>
+                <span id="mineTimer">⏱️ 60s</span>
+                <span id="mineFlags">🚩 0</span>
+            </div>
+            <div class="mine-board" id="mineBoard"></div>
+        </div>
         <div class="debuff-bar" id="debuffBar"></div>
 
         <div class="overlay" id="startScreen">
             <div class="overlay-icon">🍚</div>
-            <h1 class="overlay-title">Hứng Cơm<br>Cô Giang</h1>
-            <ul class="rules-list">
+            <h1 class="overlay-title" id="startTitle">Hứng Cơm<br>Cô Giang</h1>
+            <ul class="rules-list" id="catchRules">
                 <li>🍚 Di chuột / kéo tay để hứng đồ ăn</li>
                 <li>💣 Dính bom = <strong>thua ngay</strong></li>
                 <li>⬇️ Để rơi 3 món ăn = <strong>thua</strong></li>
@@ -298,8 +376,15 @@
                 <li>🌀 Level cao có hiệu ứng phá rối</li>
                 <li>👑 10 level — khó dần tới bất khả thi!</li>
             </ul>
+            <ul class="rules-list hidden" id="mineRules">
+                <li>🍙 Mở hết ô cơm an toàn để qua level</li>
+                <li>🚩 Chuột phải / nhấn giữ để cắm cờ</li>
+                <li>🍘 Dính cơm cháy mìn = <strong>thua ngay</strong></li>
+                <li>⏱️ Level cao bị giới hạn thời gian rất gắt</li>
+                <li>🔥 Lv.9 trở lên là bếp địa ngục, không hứa nhẹ tay</li>
+            </ul>
             <button class="btn-play" id="btnStart">BẮT ĐẦU CHƠI</button>
-            <p class="controls-hint">🖱️ Chuột / 👆 Cảm ứng</p>
+            <p class="controls-hint" id="controlsHint">🖱️ Chuột / 👆 Cảm ứng</p>
         </div>
 
         <div class="overlay hidden" id="gameOverScreen">
@@ -309,7 +394,7 @@
             <div class="overlay-stats">
                 <div class="overlay-stat"><div class="overlay-stat-value" id="finalScore">0</div><div class="overlay-stat-label">Điểm</div></div>
                 <div class="overlay-stat"><div class="overlay-stat-value" id="finalLevel">1</div><div class="overlay-stat-label">Level</div></div>
-                <div class="overlay-stat"><div class="overlay-stat-value" id="finalCaught">0</div><div class="overlay-stat-label">Đã hứng</div></div>
+                <div class="overlay-stat"><div class="overlay-stat-value" id="finalCaught">0</div><div class="overlay-stat-label">Lượt chuẩn</div></div>
             </div>
             <button class="btn-play" id="btnRestart">CHƠI LẠI</button>
         </div>
@@ -320,7 +405,7 @@
             <p class="overlay-subtitle">Không thể tin được — bạn đã vượt qua tất cả 10 level!</p>
             <div class="overlay-stats">
                 <div class="overlay-stat"><div class="overlay-stat-value" id="winScore">0</div><div class="overlay-stat-label">Tổng điểm</div></div>
-                <div class="overlay-stat"><div class="overlay-stat-value" id="winCaught">0</div><div class="overlay-stat-label">Đã hứng</div></div>
+                <div class="overlay-stat"><div class="overlay-stat-value" id="winCaught">0</div><div class="overlay-stat-label">Lượt chuẩn</div></div>
             </div>
             <button class="btn-play" id="btnPlayAgain">CHƠI LẠI</button>
         </div>
@@ -347,6 +432,11 @@
         var canvas = document.getElementById('gameCanvas');
         var ctx = canvas.getContext('2d');
         var gameArea = document.getElementById('gameArea');
+        var mineLayer = document.getElementById('mineLayer');
+        var mineBoard = document.getElementById('mineBoard');
+        var mineInfo = document.getElementById('mineInfo');
+        var mineTimer = document.getElementById('mineTimer');
+        var mineFlags = document.getElementById('mineFlags');
         var startScreen = document.getElementById('startScreen');
         var gameOverScreen = document.getElementById('gameOverScreen');
         var winScreen = document.getElementById('winScreen');
@@ -364,6 +454,7 @@
         var MAX_MISSES = 3;
         var BASE_PLAYER_WIDTH = 58;
         var PLAYER_WIDTH = BASE_PLAYER_WIDTH;
+        var gameMode = 'catch';
 
         var currentUser = null;
 
@@ -403,6 +494,19 @@
             { needed: 45, speed: 9.5,  spawnMs: 220,  bombPct: 50, debuffPct: 35, powerPct: 2,  maxItems: 22, speedVar: 0.6  },
         ];
 
+        var MINE_LEVELS = [
+            { rows: 5, cols: 5, mines: 4,  time: 75, score: 20 },
+            { rows: 6, cols: 6, mines: 7,  time: 70, score: 25 },
+            { rows: 7, cols: 7, mines: 11, time: 65, score: 30 },
+            { rows: 8, cols: 8, mines: 16, time: 58, score: 35 },
+            { rows: 9, cols: 9, mines: 24, time: 50, score: 42 },
+            { rows: 10, cols: 10, mines: 33, time: 42, score: 50 },
+            { rows: 11, cols: 11, mines: 45, time: 34, score: 60 },
+            { rows: 12, cols: 12, mines: 60, time: 27, score: 72 },
+            { rows: 13, cols: 13, mines: 82, time: 20, score: 90 },
+            { rows: 14, cols: 14, mines: 105, time: 15, score: 120 },
+        ];
+
         var state = 'start';
         var score = 0, misses = 0, level = 1, caughtThisLevel = 0, totalCaught = 0;
         var playerX = 0, targetPlayerX = 0;
@@ -411,6 +515,12 @@
         var W, H, dpr;
         var activeDebuffs = {};
         var activePowerups = {};
+        var mineCells = [];
+        var mineRevealed = 0;
+        var mineFlagsUsed = 0;
+        var mineTimeLeft = 0;
+        var mineTimerId = null;
+        var mineLongPressTimer = null;
 
         // Auth check
         function checkAuth() {
@@ -456,9 +566,9 @@
             if (isActive('reverse')) x = W - x;
             targetPlayerX = clamp(x);
         }
-        canvas.addEventListener('mousemove', function(e) { if (state==='playing') handlePointer(e.clientX); });
-        canvas.addEventListener('touchmove', function(e) { if (state==='playing') { e.preventDefault(); handlePointer(e.touches[0].clientX); } }, {passive:false});
-        canvas.addEventListener('touchstart', function(e) { if (state==='playing') { e.preventDefault(); handlePointer(e.touches[0].clientX); } }, {passive:false});
+        canvas.addEventListener('mousemove', function(e) { if (state==='playing' && gameMode==='catch') handlePointer(e.clientX); });
+        canvas.addEventListener('touchmove', function(e) { if (state==='playing' && gameMode==='catch') { e.preventDefault(); handlePointer(e.touches[0].clientX); } }, {passive:false});
+        canvas.addEventListener('touchstart', function(e) { if (state==='playing' && gameMode==='catch') { e.preventDefault(); handlePointer(e.touches[0].clientX); } }, {passive:false});
 
         function isActive(eff) { return activeDebuffs[eff] && activeDebuffs[eff] > performance.now(); }
         function isPowerActive(eff) { return activePowerups[eff] && activePowerups[eff] > performance.now(); }
@@ -712,8 +822,13 @@
         function updateHUD() {
             document.getElementById('statLevel').textContent='Lv.'+level;
             document.getElementById('statScore').textContent=score+'\u0111';
-            var h='\u{1F35A}'.repeat(Math.max(0,MAX_MISSES-misses))+'\u2715'.repeat(Math.min(misses,MAX_MISSES));
-            document.getElementById('statLives').textContent=h;
+            if (gameMode === 'mine') {
+                var cfg = MINE_LEVELS[level - 1];
+                document.getElementById('statLives').textContent='🚩 '+mineFlagsUsed+'/'+cfg.mines;
+            } else {
+                var h='\u{1F35A}'.repeat(Math.max(0,MAX_MISSES-misses))+'\u2715'.repeat(Math.min(misses,MAX_MISSES));
+                document.getElementById('statLives').textContent=h;
+            }
         }
 
         function endGame(reason) {
@@ -739,7 +854,10 @@
             document.getElementById('finalLevel').textContent=level;
             document.getElementById('finalCaught').textContent=totalCaught;
             document.getElementById('gameOverReason').textContent=reason||'';
-            if (reason&&reason.indexOf('bom')!==-1) {
+            if (gameMode === 'mine') {
+                document.getElementById('gameOverIcon').textContent='🍘';
+                document.getElementById('gameOverTitle').textContent='Cơm cháy rồi!';
+            } else if (reason&&reason.indexOf('bom')!==-1) {
                 document.getElementById('gameOverIcon').textContent='\u{1F4A3}';
                 document.getElementById('gameOverTitle').textContent='B\u00D9M!';
             } else {
@@ -776,6 +894,198 @@
             powerupToast.classList.remove('show'); void powerupToast.offsetWidth; powerupToast.classList.add('show');
         }
 
+        function setGameMode(mode) {
+            if (state === 'playing') return;
+            gameMode = mode;
+            document.getElementById('modeCatch').classList.toggle('active', mode === 'catch');
+            document.getElementById('modeMine').classList.toggle('active', mode === 'mine');
+            document.getElementById('gameTitle').textContent = mode === 'mine' ? 'Dò Mìn Cơm' : 'Hứng Cơm';
+            document.getElementById('startTitle').innerHTML = mode === 'mine' ? 'Dò Mìn Cơm<br>Cô Giang' : 'Hứng Cơm<br>Cô Giang';
+            document.getElementById('catchRules').classList.toggle('hidden', mode !== 'catch');
+            document.getElementById('mineRules').classList.toggle('hidden', mode !== 'mine');
+            document.getElementById('controlsHint').textContent = mode === 'mine'
+                ? '👆 Chạm để mở • Nhấn giữ để cắm cờ'
+                : '🖱️ Chuột / 👆 Cảm ứng';
+            canvas.classList.toggle('hidden', mode === 'mine');
+            mineLayer.classList.toggle('active', mode === 'mine');
+            mineBoard.innerHTML = '';
+            updateHUD();
+            draw();
+        }
+
+        function getMineIndex(r, c) {
+            return r * MINE_LEVELS[level - 1].cols + c;
+        }
+        function getMineNeighbors(cell) {
+            var cfg = MINE_LEVELS[level - 1], list = [];
+            for (var dr = -1; dr <= 1; dr++) {
+                for (var dc = -1; dc <= 1; dc++) {
+                    if (dr === 0 && dc === 0) continue;
+                    var nr = cell.r + dr, nc = cell.c + dc;
+                    if (nr >= 0 && nr < cfg.rows && nc >= 0 && nc < cfg.cols) {
+                        list.push(mineCells[getMineIndex(nr, nc)]);
+                    }
+                }
+            }
+            return list;
+        }
+        function buildMineLevel() {
+            var cfg = MINE_LEVELS[level - 1];
+            mineCells = []; mineRevealed = 0; mineFlagsUsed = 0; mineTimeLeft = cfg.time;
+            mineBoard.innerHTML = '';
+            mineBoard.style.gridTemplateColumns = 'repeat(' + cfg.cols + ', 1fr)';
+            for (var r = 0; r < cfg.rows; r++) {
+                for (var c = 0; c < cfg.cols; c++) {
+                    var cell = { r:r, c:c, mine:false, revealed:false, flagged:false, count:0, el:null };
+                    mineCells.push(cell);
+                }
+            }
+            var placed = 0;
+            while (placed < cfg.mines) {
+                var idx = Math.floor(Math.random() * mineCells.length);
+                if (!mineCells[idx].mine) { mineCells[idx].mine = true; placed++; }
+            }
+            mineCells.forEach(function(cell) {
+                cell.count = getMineNeighbors(cell).filter(function(n){ return n.mine; }).length;
+                var btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'mine-cell';
+                btn.dataset.index = getMineIndex(cell.r, cell.c);
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    revealMineCell(cell);
+                });
+                btn.addEventListener('contextmenu', function(e) {
+                    e.preventDefault();
+                    toggleMineFlag(cell);
+                });
+                btn.addEventListener('touchstart', function(e) {
+                    if (state !== 'playing' || gameMode !== 'mine') return;
+                    mineLongPressTimer = setTimeout(function(){ toggleMineFlag(cell); mineLongPressTimer = null; }, 420);
+                }, { passive: true });
+                btn.addEventListener('touchend', function() {
+                    if (mineLongPressTimer) { clearTimeout(mineLongPressTimer); mineLongPressTimer = null; }
+                });
+                cell.el = btn;
+                mineBoard.appendChild(btn);
+            });
+            renderMineHUD();
+        }
+        function recalcMineCounts() {
+            mineCells.forEach(function(cell) {
+                cell.count = getMineNeighbors(cell).filter(function(n){ return n.mine; }).length;
+            });
+        }
+        function makeFirstClickSafe(cell) {
+            if (!cell.mine || mineRevealed > 0) return;
+            var candidates = mineCells.filter(function(other) {
+                return other !== cell && !other.mine;
+            });
+            if (!candidates.length) return;
+            var target = candidates[Math.floor(Math.random() * candidates.length)];
+            cell.mine = false;
+            target.mine = true;
+            recalcMineCounts();
+        }
+        function renderMineHUD() {
+            var cfg = MINE_LEVELS[level - 1];
+            mineInfo.textContent = '🍙 ' + cfg.rows + 'x' + cfg.cols + ' • ' + cfg.mines + ' cơm cháy';
+            mineTimer.textContent = '⏱️ ' + mineTimeLeft + 's';
+            mineFlags.textContent = '🚩 ' + mineFlagsUsed + '/' + cfg.mines;
+            levelProgressFill.style.width = Math.min(100, (mineRevealed / Math.max(1, cfg.rows * cfg.cols - cfg.mines)) * 100) + '%';
+        }
+        function startMineTimer() {
+            clearInterval(mineTimerId);
+            mineTimerId = setInterval(function() {
+                if (state !== 'playing' || gameMode !== 'mine') return;
+                mineTimeLeft--;
+                renderMineHUD();
+                if (mineTimeLeft <= 0) {
+                    clearInterval(mineTimerId);
+                    revealAllMines(null);
+                    state = 'over';
+                    endGame('Hết giờ rồi, nồi cơm mìn nguội mất tiêu!');
+                }
+            }, 1000);
+        }
+        function toggleMineFlag(cell) {
+            if (state !== 'playing' || gameMode !== 'mine' || cell.revealed) return;
+            var cfg = MINE_LEVELS[level - 1];
+            if (!cell.flagged && mineFlagsUsed >= cfg.mines) return;
+            cell.flagged = !cell.flagged;
+            mineFlagsUsed += cell.flagged ? 1 : -1;
+            cell.el.classList.toggle('flagged', cell.flagged);
+            cell.el.textContent = cell.flagged ? '🚩' : '';
+            renderMineHUD();
+        }
+        function revealMineCell(cell) {
+            if (state !== 'playing' || gameMode !== 'mine' || cell.revealed || cell.flagged) return;
+            makeFirstClickSafe(cell);
+            if (cell.mine) {
+                cell.el.classList.add('mine-hit');
+                cell.el.textContent = '🍘';
+                revealAllMines(cell);
+                state = 'over';
+                endGame('Bạn đã mở trúng cơm cháy mìn! 🍘');
+                return;
+            }
+            floodReveal(cell);
+            var cfg = MINE_LEVELS[level - 1];
+            var neededSafe = cfg.rows * cfg.cols - cfg.mines;
+            if (mineRevealed >= neededSafe) {
+                score += level * 150 + mineTimeLeft * 10;
+                caughtThisLevel = neededSafe;
+                if (level >= MAX_LEVEL) {
+                    state = 'win';
+                    clearInterval(mineTimerId);
+                    showWin();
+                    saveScore();
+                } else {
+                    level++;
+                    showLevelUp();
+                    buildMineLevel();
+                    updateHUD();
+                }
+            }
+            updateHUD();
+        }
+        function floodReveal(start) {
+            var stack = [start], cfg = MINE_LEVELS[level - 1];
+            while (stack.length) {
+                var cell = stack.pop();
+                if (cell.revealed || cell.flagged || cell.mine) continue;
+                cell.revealed = true;
+                mineRevealed++;
+                totalCaught++;
+                score += cfg.score;
+                cell.el.classList.add('revealed');
+                cell.el.textContent = cell.count > 0 ? String(cell.count) : '🍚';
+                if (cell.count === 0) {
+                    getMineNeighbors(cell).forEach(function(n){ if (!n.revealed && !n.mine) stack.push(n); });
+                }
+            }
+            renderMineHUD();
+        }
+        function revealAllMines(hitCell) {
+            clearInterval(mineTimerId);
+            mineCells.forEach(function(cell) {
+                if (cell.mine && cell !== hitCell) {
+                    cell.el.classList.add('mine-show');
+                    cell.el.textContent = '🍘';
+                }
+            });
+        }
+        function startMineGame() {
+            resetGame();
+            state = 'playing';
+            startScreen.classList.add('hidden'); gameOverScreen.classList.add('hidden'); winScreen.classList.add('hidden');
+            canvas.classList.add('hidden');
+            mineLayer.classList.add('active');
+            buildMineLevel();
+            startMineTimer();
+            updateHUD();
+        }
+
         // Ranking
         function openRanking() {
             rankModal.classList.remove('hidden');
@@ -791,7 +1101,7 @@
                     html += '<div class="rank-row" style="--i:'+idx+'">';
                     html += '<div class="rank-pos">'+icon+'</div>';
                     html += '<div class="rank-info"><div class="rank-name">'+escapeHtml(r.name)+'</div>';
-                    html += '<div class="rank-meta">Level '+r.level+' \u2022 '+r.caught+' \u0111\u00E3 h\u1EE9ng</div></div>';
+                    html += '<div class="rank-meta">Level '+r.level+' \u2022 '+r.caught+' lượt chuẩn</div></div>';
                     html += '<div class="rank-score">'+r.score+' \u0111</div>';
                     html += '</div>';
                 });
@@ -805,24 +1115,33 @@
         rankModal.addEventListener('click', function(e){ if (e.target===rankModal) rankModal.classList.add('hidden'); });
 
         function resetGame() {
+            clearInterval(mineTimerId);
             score=0; misses=0; level=1; caughtThisLevel=0; totalCaught=0;
             items=[]; particles=[]; activeDebuffs={}; activePowerups={}; lastSpawn=0; lastTime=0;
+            mineCells=[]; mineRevealed=0; mineFlagsUsed=0; mineTimeLeft=0; mineBoard.innerHTML='';
             PLAYER_WIDTH=BASE_PLAYER_WIDTH;
             playerX=W/2; targetPlayerX=W/2;
             levelProgressFill.style.width='0%'; debuffBar.innerHTML=''; updateHUD();
         }
         function startGame() {
+            if (gameMode === 'mine') {
+                startMineGame();
+                return;
+            }
             resetGame(); state='playing';
             startScreen.classList.add('hidden'); gameOverScreen.classList.add('hidden'); winScreen.classList.add('hidden');
+            canvas.classList.remove('hidden'); mineLayer.classList.remove('active');
             lastTime=performance.now(); animFrame=requestAnimationFrame(loop);
         }
 
         document.getElementById('btnStart').addEventListener('click',startGame);
         document.getElementById('btnRestart').addEventListener('click',startGame);
         document.getElementById('btnPlayAgain').addEventListener('click',startGame);
+        document.getElementById('modeCatch').addEventListener('click',function(){ setGameMode('catch'); });
+        document.getElementById('modeMine').addEventListener('click',function(){ setGameMode('mine'); });
         document.body.addEventListener('touchmove',function(e){e.preventDefault();},{passive:false});
 
-        playerX=W/2; targetPlayerX=W/2; draw();
+        playerX=W/2; targetPlayerX=W/2; setGameMode('catch'); draw();
     })();
     </script>
 </body>

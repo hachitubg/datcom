@@ -402,6 +402,21 @@ textarea {
     flex: 1;
 }
 
+.promo-code-input-row {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+}
+
+.promo-code-input-row input {
+    flex: 1;
+}
+
+.promo-generate-btn {
+    white-space: nowrap;
+    padding: 10px 14px;
+}
+
 .filter-input {
     width: 100%;
     background: var(--surface-container-highest);
@@ -1246,6 +1261,10 @@ tr:hover {
 
     .filter-field {
         width: 100%;
+    }
+
+    .promo-code-input-row {
+        flex-direction: column;
     }
 
     .search-input-group {

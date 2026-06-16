@@ -731,11 +731,15 @@ function openPaymentDetail(name) {
                 const disc = Number(row.discount_percent || 0);
                 const discBadge = disc > 0 ? `<span class="discount-badge">-${disc}% / 1 suất</span>` : '';
                 const promoInfo = row.promo_code ? `<p class="promo-info-text">Mã KM: ${escapeHtml(row.promo_code)} (giảm ${disc}% cho 1 suất)</p>` : '';
+                const originalQuantity = Number(row.originalQuantity || row.quantity || 0);
+                const quantityNote = originalQuantity > Number(row.quantity || 0)
+                    ? ` <span class="payment-partial-note">(đơn gốc ${originalQuantity} suất)</span>`
+                    : '';
                 html += `
                     <div class="order-item payment-detail-item ${disc > 0 ? 'order-item-discounted' : ''}">
                         <div class="order-info">
-                            <h4>Đã đặt ${row.quantity} suất vào ngày ${formatDateTime(row.createdAt)} ${discBadge}</h4>
-                            <h4>Tổng tiền ${AppUtils.formatCurrency(row.amount)}</h4>
+                            <h4>Còn nợ ${row.quantity} suất từ đơn ngày ${formatDateTime(row.createdAt)}${quantityNote} ${discBadge}</h4>
+                            <h4>Còn phải thanh toán ${AppUtils.formatCurrency(row.amount)}</h4>
                             ${row.description ? `<p><strong>Ghi chú:</strong> ${escapeHtml(row.description)}</p>` : ''}
                             ${promoInfo}
                         </div>
