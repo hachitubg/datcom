@@ -871,8 +871,14 @@ class Database {
       )
       SELECT
         MIN(display_name)                                          AS name,
-        SUM(CASE WHEN rem > 0 THEN quantity ELSE 0 END)           AS quantity,
-        SUM(CASE WHEN rem > 0 THEN day_amount ELSE 0 END)         AS total_amount,
+        SUM(
+          CASE
+            WHEN rem > 0 AND day_amount > 0
+              THEN CAST(((rem * quantity) + day_amount - 1) / day_amount AS INTEGER)
+            ELSE 0
+          END
+        )                                                          AS quantity,
+        SUM(rem)                                                   AS total_amount,
         SUM(rem)                                                   AS remaining_amount,
         MAX(last_order_time)                                       AS last_order_time
       FROM day_rem
@@ -899,9 +905,9 @@ class Database {
           quantity: row.quantity,
           unitPrice: row.quantity > 0 ? Math.round(totalAmount / row.quantity) : 0,
           totalAmount,
-          paidAmount: Math.max(0, totalAmount - remainingAmount),
+          paidAmount: 0,
           remainingAmount: Math.max(0, remainingAmount),
-          status: remainingAmount <= 0 ? 'PAID' : totalAmount > remainingAmount ? 'PARTIAL' : 'UNPAID',
+          status: remainingAmount <= 0 ? 'PAID' : 'UNPAID',
           lastOrderTime: row.last_order_time,
           latestPendingOrderCode: 0
         };

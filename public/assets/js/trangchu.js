@@ -688,7 +688,7 @@ function loadPaymentList() {
                 <div class="order-item payment-order-item">
                     <div class="order-info">
                         <h4>${escapeHtml(row.name)} - ${row.quantity} suất</h4>
-                        <p><strong>Tổng tiền:</strong> ${AppUtils.formatCurrency(row.totalAmount)}</p>
+                        <p><strong>Còn phải thanh toán:</strong> ${AppUtils.formatCurrency(row.remainingAmount)}</p>
                     </div>
                     <div class="payment-action-group">
                         <button class="payment-detail-btn" data-customer-name="${encodeURIComponent(row.name)}">Chi tiết</button>
