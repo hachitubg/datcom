@@ -317,6 +317,28 @@
             <div class="section">
                 <div id="settingsMessage" style="margin-bottom:12px;"></div>
 
+                <!-- Tạm đóng cửa -->
+                <div class="settings-card">
+                    <div class="settings-card-header">
+                        <div>
+                            <h3 class="settings-card-title">Tạm đóng cửa hôm nay</h3>
+                            <p class="settings-card-desc">Chặn đặt cơm và hiển thị thông báo lý do trên trang chủ</p>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="settingShopClosedEnabled">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="settings-card-body" id="shopClosedFields">
+                        <div class="filter-row">
+                            <div class="filter-field filter-field--grow">
+                                <label for="settingShopClosedReason">Lý do tạm đóng cửa</label>
+                                <textarea id="settingShopClosedReason" rows="3" placeholder="VD: Hôm nay quán nghỉ vì có việc gia đình..."></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Giới hạn nợ -->
                 <div class="settings-card">
                     <div class="settings-card-header">

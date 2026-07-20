@@ -1332,6 +1332,8 @@ function loadSettings() {
             document.getElementById('settingConsecutivePromoEnabled').checked = settings.consecutive_promo_enabled === '1';
             document.getElementById('settingConsecutivePromoDays').value = settings.consecutive_promo_days || '5';
             document.getElementById('settingConsecutivePromoDiscount').value = settings.consecutive_promo_discount || '50';
+            document.getElementById('settingShopClosedEnabled').checked = settings.shop_closed_enabled === '1';
+            document.getElementById('settingShopClosedReason').value = settings.shop_closed_reason || 'Hôm nay quán tạm đóng cửa, hẹn mọi người vào ngày mai nhé.';
             toggleSettingsFields();
         })
         .catch(err => {
@@ -1344,10 +1346,13 @@ function toggleSettingsFields() {
     document.getElementById('debtLimitFields').style.display = debtEnabled ? 'block' : 'none';
     const promoEnabled = document.getElementById('settingConsecutivePromoEnabled').checked;
     document.getElementById('consecutivePromoFields').style.display = promoEnabled ? 'block' : 'none';
+    const shopClosedEnabled = document.getElementById('settingShopClosedEnabled').checked;
+    document.getElementById('shopClosedFields').style.display = shopClosedEnabled ? 'block' : 'none';
 }
 
 document.getElementById('settingDebtLimitEnabled').addEventListener('change', toggleSettingsFields);
 document.getElementById('settingConsecutivePromoEnabled').addEventListener('change', toggleSettingsFields);
+document.getElementById('settingShopClosedEnabled').addEventListener('change', toggleSettingsFields);
 
 function saveSettings() {
     const settings = {
@@ -1356,7 +1361,9 @@ function saveSettings() {
         debt_limit_message: document.getElementById('settingDebtLimitMessage').value || '',
         consecutive_promo_enabled: document.getElementById('settingConsecutivePromoEnabled').checked ? '1' : '0',
         consecutive_promo_days: document.getElementById('settingConsecutivePromoDays').value || '5',
-        consecutive_promo_discount: document.getElementById('settingConsecutivePromoDiscount').value || '50'
+        consecutive_promo_discount: document.getElementById('settingConsecutivePromoDiscount').value || '50',
+        shop_closed_enabled: document.getElementById('settingShopClosedEnabled').checked ? '1' : '0',
+        shop_closed_reason: document.getElementById('settingShopClosedReason').value || 'Hôm nay quán tạm đóng cửa, hẹn mọi người vào ngày mai nhé.'
     };
 
     fetch(`${API_BASE}/api/admin/settings`, {

@@ -2167,7 +2167,9 @@ class Database {
       { key: 'consecutive_promo_enabled', value: '0', description: 'Bật/tắt tặng mã KM khi đặt liên tục' },
       { key: 'consecutive_promo_days', value: '5', description: 'Số ngày đặt liên tục để được tặng mã' },
       { key: 'consecutive_promo_discount', value: '50', description: 'Phần trăm giảm giá của mã tặng' },
-      { key: 'order_cutoff_time', value: '10:45', description: 'Giờ chốt đặt cơm hằng ngày (HH:mm)' }
+      { key: 'order_cutoff_time', value: '10:45', description: 'Giờ chốt đặt cơm hằng ngày (HH:mm)' },
+      { key: 'shop_closed_enabled', value: '0', description: 'Tạm đóng cửa website trong ngày' },
+      { key: 'shop_closed_reason', value: 'Hôm nay quán tạm đóng cửa, hẹn mọi người vào ngày mai nhé.', description: 'Lý do hiển thị khi tạm đóng cửa' }
     ];
     const stmt = this.db.prepare(`INSERT OR IGNORE INTO app_settings (key, value, description) VALUES (?, ?, ?)`);
     for (const d of defaults) {
@@ -2399,8 +2401,14 @@ class Database {
     const normalizedUserId = Number(userId || 0) || null;
     const normalizedStreak = Number(earnedStreakDays || 0) || null;
 
-    const insertNewCode = () => {
-      const code = 'AUTO' + Date.now().toString(36).toUpperCase();
+    const buildAutoCode = () => {
+      const timestamp = Date.now().toString(36).toUpperCase();
+      const suffix = Math.random().toString(36).slice(2, 6).toUpperCase();
+      return `AUTO${timestamp}${suffix}`;
+    };
+
+    const insertNewCode = (attempt = 0) => {
+      const code = buildAutoCode();
       this.db.run(
         `INSERT INTO promo_codes
           (code, discount_percent, issued_to_user_id, issued_to_name, source, earned_streak_days)
@@ -2414,7 +2422,14 @@ class Database {
           normalizedStreak
         ],
         function(err) {
-          if (err) { callback(err); return; }
+          if (err) {
+            if (err.message && err.message.includes('UNIQUE') && attempt < 3) {
+              insertNewCode(attempt + 1);
+              return;
+            }
+            callback(err);
+            return;
+          }
           callback(null, { id: this.lastID, code, discountPercent: Number(discountPercent || 0) });
         }
       );

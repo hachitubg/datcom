@@ -17,6 +17,10 @@ let orderCutoffState = {
     cutoffTime: '10:45',
     isOrderClosed: false
 };
+let shopClosedState = {
+    isClosed: false,
+    reason: 'Hôm nay quán tạm đóng cửa, hẹn mọi người vào ngày mai nhé.'
+};
 const STREAK_INTRO_STORAGE_KEY = 'datcom_streak_intro_dismissed_v1';
 
 function checkUserAuth() {
@@ -237,7 +241,10 @@ document.getElementById('btnPayment').addEventListener('click', () => {
 
 document.getElementById('mobileBtnOrder').addEventListener('click', () => {
     const orderBtn = document.getElementById('btnOrder');
-    if (orderBtn.disabled) return;
+    if (orderBtn.disabled) {
+        showPopup(getOrderUnavailableMessage());
+        return;
+    }
     orderBtn.click();
 });
 
@@ -990,6 +997,7 @@ document.getElementById('btnCheckPromo').addEventListener('click', () => {
 
 document.getElementById('btnOrder').addEventListener('click', () => {
     if (document.getElementById('btnOrder').disabled) {
+        showPopup(getOrderUnavailableMessage());
         return;
     }
     document.getElementById('orderMessage').innerHTML = '';
@@ -1069,9 +1077,42 @@ function normalizeOrderCutoffState(data) {
     };
 }
 
+function normalizeShopClosedState(data) {
+    const shopClosed = data.shopClosed || {};
+    return {
+        isClosed: Boolean(shopClosed.isClosed),
+        reason: String(shopClosed.reason || '').trim() || 'Hôm nay quán tạm đóng cửa, hẹn mọi người vào ngày mai nhé.'
+    };
+}
+
+function renderShopClosedNotice() {
+    const panel = document.getElementById('shopClosedPanel');
+    const reasonEl = document.getElementById('shopClosedReason');
+    if (!panel || !reasonEl) return;
+
+    panel.style.display = shopClosedState.isClosed ? 'flex' : 'none';
+    reasonEl.textContent = shopClosedState.reason;
+}
+
+function getOrderUnavailableMessage() {
+    if (shopClosedState.isClosed) {
+        return `Hôm nay quán tạm đóng cửa. ${shopClosedState.reason}`;
+    }
+    if (orderCutoffState.isOrderClosed) {
+        return 'Đã quá giờ đặt cơm, nếu muốn đặt thêm vui lòng liên hệ admin. Cảm ơn bạn ^^';
+    }
+    return 'Hiện tại chưa thể đặt cơm.';
+}
+
 function renderOrderCutoff() {
     const cutoffInfoEl = document.getElementById('orderCutoffInfo');
     if (!cutoffInfoEl) return;
+
+    if (shopClosedState.isClosed) {
+        cutoffInfoEl.classList.add('cutoff-closed');
+        cutoffInfoEl.textContent = 'Hôm nay quán tạm đóng cửa, chưa nhận đơn mới.';
+        return;
+    }
 
     cutoffInfoEl.classList.toggle('cutoff-closed', orderCutoffState.isOrderClosed);
     if (orderCutoffState.isOrderClosed) {
@@ -1087,6 +1128,15 @@ function applyOrderButtonState(data) {
     const mobileOrderBtn = document.getElementById('mobileBtnOrder');
     const mobileText = mobileOrderBtn ? mobileOrderBtn.querySelector('.mobile-btn-text') : null;
     const remaining = Number(data.remaining || 0);
+
+    if (shopClosedState.isClosed) {
+        orderBtn.disabled = true;
+        orderBtn.classList.add('disabled');
+        orderBtn.innerHTML = '<span class="btn-icon">🍱</span><span>TẠM ĐÓNG</span>';
+        if (mobileOrderBtn) mobileOrderBtn.disabled = true;
+        if (mobileText) mobileText.textContent = 'Tạm đóng';
+        return;
+    }
 
     if (orderCutoffState.isOrderClosed) {
         orderBtn.disabled = true;
@@ -1144,6 +1194,8 @@ function loadTodayInfo() {
             document.getElementById('remainingCount').textContent = data.remaining;
             document.getElementById('orderedCount').textContent = data.ordered;
             orderCutoffState = normalizeOrderCutoffState(data);
+            shopClosedState = normalizeShopClosedState(data);
+            renderShopClosedNotice();
             renderOrderCutoff();
 
             applyOrderButtonState(data);

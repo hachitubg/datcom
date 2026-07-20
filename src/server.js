@@ -431,6 +431,67 @@ function markPaymentPaidAcrossSites(orderCode, paymentData, callback) {
   next();
 }
 
+function callDb(methodName, ...args) {
+  return new Promise((resolve, reject) => {
+    db[methodName](...args, (err, result) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      resolve(result);
+    });
+  });
+}
+
+function normalizeShopClosedSettings(settings = {}) {
+  const reason = String(settings.shop_closed_reason || '').trim()
+    || 'Hôm nay quán tạm đóng cửa, hẹn mọi người vào ngày mai nhé.';
+
+  return {
+    isClosed: settings.shop_closed_enabled === '1',
+    reason
+  };
+}
+
+async function ensureConsecutivePromoForUser(user, settingsInput = null) {
+  if (!user || !user.id) {
+    return null;
+  }
+
+  const settings = settingsInput
+    || await callDb('getSettings', ['consecutive_promo_enabled', 'consecutive_promo_days', 'consecutive_promo_discount']);
+
+  if (settings.consecutive_promo_enabled !== '1') {
+    return null;
+  }
+
+  const requiredDays = Math.max(2, Number(settings.consecutive_promo_days || 5));
+  const discountPercent = Math.max(1, Math.min(100, Number(settings.consecutive_promo_discount || 50)));
+  const currentDays = await callDb('getConsecutiveOrderDaysForUser', user.id);
+  const milestoneCount = Math.floor(Number(currentDays || 0) / requiredDays);
+  const createdPromos = [];
+
+  for (let index = 1; index <= milestoneCount; index++) {
+    const streakDays = index * requiredDays;
+    const existing = await callDb('getAutoPromoCodeByStreak', user.id, streakDays);
+    if (existing) {
+      continue;
+    }
+
+    const promo = await callDb('createAutoPromoCode', user.name, discountPercent, user.id, streakDays);
+    if (promo && !promo.existing) {
+      createdPromos.push({ ...promo, earnedStreakDays: streakDays });
+    }
+  }
+
+  return {
+    currentDays: Number(currentDays || 0),
+    requiredDays,
+    discountPercent,
+    createdPromos
+  };
+}
+
 async function syncOrderCodeFromPayOS(orderCode, database = getActiveDb()) {
   const paymentInfo = await payos.getPaymentLinkInformation(orderCode);
   const paidAmount = Number(paymentInfo.amountPaid || 0);
@@ -535,16 +596,18 @@ app.get('/api/today', (req, res) => {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
-    db.getSettings(['order_cutoff_time'], (settingsErr, settings) => {
+    db.getSettings(['order_cutoff_time', 'shop_closed_enabled', 'shop_closed_reason'], (settingsErr, settings) => {
       if (settingsErr) {
         return res.status(500).json({ error: settingsErr.message });
       }
 
       const cutoffTime = normalizeCutoffTime(settings.order_cutoff_time);
+      const shopClosed = normalizeShopClosedSettings(settings);
       res.json({
         ...data,
         orderCutoffTime: cutoffTime,
-        orderCutoff: getOrderCutoffInfo(cutoffTime)
+        orderCutoff: getOrderCutoffInfo(cutoffTime),
+        shopClosed
       });
     });
   });
@@ -577,9 +640,23 @@ app.post('/api/orders', (req, res) => {
 
     const userId = user ? user.id : null;
 
-    db.getSettings(['order_cutoff_time', 'debt_limit_enabled', 'debt_limit_servings', 'debt_limit_message'], (settingsErr, settings) => {
+    db.getSettings([
+      'order_cutoff_time',
+      'shop_closed_enabled',
+      'shop_closed_reason',
+      'debt_limit_enabled',
+      'debt_limit_servings',
+      'debt_limit_message'
+    ], (settingsErr, settings) => {
       if (settingsErr) {
         return res.status(500).json({ error: settingsErr.message });
+      }
+
+      const shopClosed = normalizeShopClosedSettings(settings);
+      if (shopClosed.isClosed) {
+        return res.status(400).json({
+          error: `Hôm nay quán tạm đóng cửa. ${shopClosed.reason}`
+        });
       }
 
       const cutoffTime = normalizeCutoffTime(settings.order_cutoff_time);
@@ -599,7 +676,7 @@ app.post('/api/orders', (req, res) => {
             return res.status(400).json({ error: err.message });
           }
 
-          db.getSettings(['consecutive_promo_enabled', 'consecutive_promo_days', 'consecutive_promo_discount'], (cpErr, cpSettings) => {
+          db.getSettings(['consecutive_promo_enabled', 'consecutive_promo_days', 'consecutive_promo_discount'], async (cpErr, cpSettings) => {
             if (cpErr || cpSettings.consecutive_promo_enabled !== '1') {
               return res.json(order);
             }
@@ -608,35 +685,28 @@ app.post('/api/orders', (req, res) => {
               return res.json(order);
             }
 
-            const requiredDays = Number(cpSettings.consecutive_promo_days || 5);
-            const discount = Number(cpSettings.consecutive_promo_discount || 50);
-
-            db.getConsecutiveOrderDaysForUser(user.id, (daysErr, consecutiveDays) => {
-              if (daysErr || consecutiveDays < requiredDays) {
+            try {
+              const promoResult = await ensureConsecutivePromoForUser(
+                { ...user, name: normalizedCustomerName },
+                cpSettings
+              );
+              const promoInfo = promoResult?.createdPromos?.[promoResult.createdPromos.length - 1];
+              if (!promoInfo) {
                 return res.json(order);
               }
 
-              if (consecutiveDays % requiredDays !== 0) {
-                return res.json(order);
-              }
-
-              db.createAutoPromoCode(normalizedCustomerName, discount, user.id, consecutiveDays, (promoErr, promoInfo) => {
-                if (promoErr) {
-                  return res.json(order);
+              res.json({
+                ...order,
+                bonus_promo: {
+                  code: promoInfo.code,
+                  discount: promoInfo.discountPercent,
+                  message: `Chúc mừng! Bạn đã đặt cơm ${promoInfo.earnedStreakDays} ngày liên tục và được tặng mã giảm ${promoResult.discountPercent}%: ${promoInfo.code}`
                 }
-                if (promoInfo && promoInfo.existing) {
-                  return res.json(order);
-                }
-                res.json({
-                  ...order,
-                  bonus_promo: {
-                    code: promoInfo.code,
-                    discount: promoInfo.discountPercent,
-                    message: `Chuc mung! Ban da dat com ${consecutiveDays} ngay lien tuc va duoc tang ma giam ${discount}%: ${promoInfo.code}`
-                  }
-                });
               });
-            });
+            } catch (promoErr) {
+              console.error('[Consecutive Promo] Failed:', promoErr.message);
+              return res.json(order);
+            }
           });
         });
       };
@@ -947,11 +1017,14 @@ app.post('/api/payments/create', async (req, res) => {
       return res.status(400).json({ error: err.message });
     }
 
-    if (paymentInfo.remainingAmount <= 0) {
+    let activePaymentInfo = paymentInfo;
+    const refreshPaymentInfo = () => callDb('getTodayCustomerPayment', name);
+
+    if (activePaymentInfo.remainingAmount <= 0) {
       return res.json({
         paid: true,
         message: 'Đơn này đã thanh toán đủ.',
-        paymentInfo
+        paymentInfo: activePaymentInfo
       });
     }
 
@@ -966,11 +1039,40 @@ app.post('/api/payments/create', async (req, res) => {
         });
       });
 
-      if (reusePending && Number(reusePending.amount || 0) === Number(paymentInfo.remainingAmount || 0) && reusePending.checkout_url) {
+      let canReusePending = Boolean(reusePending);
+      if (reusePending) {
+        try {
+          const syncResult = await syncOrderCodeFromPayOS(Number(reusePending.order_code));
+          const syncStatus = String(syncResult?.status || '').toUpperCase();
+
+          if (syncResult?.updated || PAID_PAYMENT_STATUSES.has(syncStatus)) {
+            activePaymentInfo = await refreshPaymentInfo();
+            if (activePaymentInfo.remainingAmount <= 0) {
+              return res.json({
+                paid: true,
+                message: 'Đơn này đã thanh toán đủ.',
+                paymentInfo: activePaymentInfo
+              });
+            }
+          }
+
+          canReusePending = !['CANCELLED', 'EXPIRED'].includes(syncStatus)
+            && !PAID_PAYMENT_STATUSES.has(syncStatus);
+        } catch (syncErr) {
+          console.error(`[PayOS] Không kiểm tra được link pending ${reusePending.order_code}:`, syncErr.message);
+          const createdAt = Date.parse(`${String(reusePending.created_at || '').replace(' ', 'T')}Z`);
+          const pendingAgeMs = Number.isFinite(createdAt) ? Date.now() - createdAt : Infinity;
+          canReusePending = pendingAgeMs < 14 * 60 * 1000;
+        }
+      }
+
+      if (canReusePending
+        && Number(reusePending.amount || 0) === Number(activePaymentInfo.remainingAmount || 0)
+        && reusePending.checkout_url) {
         return res.json({
           paid: false,
           reused: true,
-          paymentInfo,
+          paymentInfo: activePaymentInfo,
           payos: {
             orderCode: Number(reusePending.order_code),
             amount: Number(reusePending.amount || 0),
@@ -985,7 +1087,7 @@ app.post('/api/payments/create', async (req, res) => {
       const baseUrl = getPublicBaseUrl(req);
       const payload = {
         orderCode,
-        amount: paymentInfo.remainingAmount,
+        amount: activePaymentInfo.remainingAmount,
         description: `DATCOM ${name}`.slice(0, 25),
         returnUrl: `${baseUrl}/?payment=success&orderCode=${orderCode}`,
         cancelUrl: `${baseUrl}/?payment=cancel&orderCode=${orderCode}`,
@@ -996,10 +1098,10 @@ app.post('/api/payments/create', async (req, res) => {
       const payosLink = await payos.createPaymentLink(payload);
       db.createPaymentRequest(
         {
-          dayId: paymentInfo.dayId,
+          dayId: activePaymentInfo.dayId,
           customerName: name,
           orderCode,
-          amount: paymentInfo.remainingAmount,
+          amount: activePaymentInfo.remainingAmount,
           paymentLinkId: payosLink.paymentLinkId,
           checkoutUrl: payosLink.checkoutUrl,
           qrCode: payosLink.qrCode
@@ -1012,10 +1114,10 @@ app.post('/api/payments/create', async (req, res) => {
           db.supersedePendingPaymentRequests(name, orderCode, () => {
             res.json({
               paid: false,
-              paymentInfo,
+              paymentInfo: activePaymentInfo,
               payos: {
                 orderCode,
-                amount: paymentInfo.remainingAmount,
+                amount: activePaymentInfo.remainingAmount,
                 checkoutUrl: payosLink.checkoutUrl,
                 qrCode: payosLink.qrCode,
                 paymentLinkId: payosLink.paymentLinkId
@@ -1183,20 +1285,22 @@ app.get('/api/consecutive-promo/status', (req, res) => {
         });
       }
 
-      db.getConsecutiveOrderDaysForUser(user.id, (daysErr, currentDays) => {
-        if (daysErr) {
-          return res.status(500).json({ error: daysErr.message });
-        }
-
+      ensureConsecutivePromoForUser(user, settings)
+        .then((promoResult) => {
+          const currentDays = promoResult ? promoResult.currentDays : 0;
         res.json({
           enabled: true,
           requiredDays,
           discountPercent,
           loggedIn: true,
           currentDays,
-          remainingDays: Math.max(0, requiredDays - (currentDays % requiredDays || (currentDays >= requiredDays ? requiredDays : 0)))
+          remainingDays: Math.max(0, requiredDays - (currentDays % requiredDays || (currentDays >= requiredDays ? requiredDays : 0))),
+          newPromoCount: promoResult?.createdPromos?.length || 0
         });
-      });
+        })
+        .catch((daysErr) => {
+          res.status(500).json({ error: daysErr.message });
+        });
     });
   });
 });
@@ -1210,28 +1314,35 @@ app.get('/api/promo-wallet', (req, res) => {
       return res.status(401).json({ error: 'Vui lòng đăng nhập để xem mã khuyến mãi' });
     }
 
-    db.getPromoWalletForUser(user.id, (err, rows = []) => {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
+    ensureConsecutivePromoForUser(user)
+      .catch((promoErr) => {
+        console.error('[Consecutive Promo] Wallet backfill failed:', promoErr.message);
+        return null;
+      })
+      .then(() => {
+        db.getPromoWalletForUser(user.id, (err, rows = []) => {
+          if (err) {
+            return res.status(500).json({ error: err.message });
+          }
 
-      const codes = rows.map((row) => ({
-        id: row.id,
-        code: row.code,
-        discountPercent: Number(row.discount_percent || 0),
-        createdAt: row.created_at,
-        usedAt: row.used_at,
-        used: Boolean(row.used_by),
-        source: row.source || 'manual',
-        earnedStreakDays: Number(row.earned_streak_days || 0),
-        seen: Boolean(row.promo_seen_at)
-      }));
+          const codes = rows.map((row) => ({
+            id: row.id,
+            code: row.code,
+            discountPercent: Number(row.discount_percent || 0),
+            createdAt: row.created_at,
+            usedAt: row.used_at,
+            used: Boolean(row.used_by),
+            source: row.source || 'manual',
+            earnedStreakDays: Number(row.earned_streak_days || 0),
+            seen: Boolean(row.promo_seen_at)
+          }));
 
-      res.json({
-        codes,
-        unseenCount: codes.filter((code) => code.source === 'admin_gift' && !code.seen).length
+          res.json({
+            codes,
+            unseenCount: codes.filter((code) => code.source === 'admin_gift' && !code.seen).length
+          });
+        });
       });
-    });
   });
 });
 
