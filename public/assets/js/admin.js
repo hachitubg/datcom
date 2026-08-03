@@ -208,6 +208,8 @@ function switchTab(tab, event) {
     } else if (tab === 'promos') {
         loadPromoCodes();
         loadPromoUserOptions();
+    } else if (tab === 'streaks') {
+        loadConsecutiveStreaks();
     } else if (tab === 'users') {
         loadUsers();
     } else if (tab === 'settings') {
@@ -416,17 +418,25 @@ function renderHistoryOrders() {
 
     const rowsHtml = pageRows.map((order) => {
         const disc = Number(order.discount_percent || 0);
+        const isDeleted = Boolean(order.is_deleted);
+        const changeAction = order.change_action || 'created';
+        const changeNote = changeAction === 'edited'
+            ? `<div class="order-change-note order-change-edited">Đã sửa lúc ${AppUtils.formatDateTime(order.change_at)}</div>`
+            : changeAction === 'deleted'
+                ? `<div class="order-change-note order-change-deleted">Đã xóa lúc ${AppUtils.formatDateTime(order.change_at)}</div>`
+                : '';
         const discBadge = disc > 0 ? `<span class="discount-badge">-${disc}% / 1 suất</span>` : '';
         const promoInfo = disc > 0 ? `<div class="admin-payment-meta promo-info-text">Mã KM: ${escapeHtml(order.promo_code || '')} — Giảm ${disc}% cho 1 suất</div>` : '';
         return `
-        <div class="order-row ${disc > 0 ? 'order-row-discounted' : ''}">
+        <div class="order-row ${disc > 0 ? 'order-row-discounted' : ''} ${isDeleted ? 'order-row-deleted' : ''} ${changeAction === 'edited' ? 'order-row-edited' : ''}">
             <div class="order-info">
                 <div class="order-name">${escapeHtml(order.name)} ${discBadge}</div>
                 <div class="order-details">Số lượng: ${order.quantity} suất ${order.description ? '</br> Ghi chú: ' + escapeHtml(order.description) : ''}</div>
                 ${promoInfo}
+                ${changeNote}
                 <div class="admin-payment-meta">Thời gian đặt: ${AppUtils.formatDateTime(order.created_at)}</div>
             </div>
-            <div class="admin-payment-actions">
+            <div class="admin-payment-actions" style="${isDeleted ? 'display:none' : ''}">
                 <button class="edit-icon-btn" title="Chỉnh sửa đơn" onclick="openOrderEditModal(${order.id}, '${encodeURIComponent(order.name)}', ${order.quantity}, '${encodeURIComponent(order.description || '')}', '${currentHistoryDetailDate}')">✏️</button>
             </div>
         </div>
@@ -1087,6 +1097,68 @@ window.addEventListener('click', (e) => {
 // =============================================
 // Promo Code Management
 // =============================================
+function loadConsecutiveStreaks() {
+    const list = document.getElementById('streakAdminList');
+    const summary = document.getElementById('streakAdminSummary');
+    if (!list || !summary) return;
+    list.innerHTML = '<div class="loading">Đang tải...</div>';
+
+    fetch(`${API_BASE}/api/admin/consecutive-streaks`)
+        .then(res => res.json())
+        .then(data => {
+            if (data.error) throw new Error(data.error);
+            const activeRows = (data.rows || []).filter(row => Number(row.current_days || 0) > 0);
+            const nearTarget = activeRows.filter(row => Number(row.remaining_days || 0) <= 1).length;
+            summary.innerHTML = `
+                <div><span>Trạng thái</span><strong class="${data.enabled ? 'streak-enabled' : 'streak-disabled'}">${data.enabled ? 'Đang bật' : 'Đang tắt'}</strong></div>
+                <div><span>Chuỗi đang hoạt động</span><strong>${activeRows.length}</strong></div>
+                <div><span>Sắp đạt mốc</span><strong>${nearTarget}</strong></div>
+                <div><span>Batch gần nhất</span><strong>${data.lastBatchDate || 'Chưa chạy'}</strong></div>
+            `;
+
+            if (!activeRows.length) {
+                list.innerHTML = '<div class="streak-admin-empty">Hiện chưa có người dùng nào đang duy trì chuỗi đặt cơm.</div>';
+                return;
+            }
+
+            list.innerHTML = `<div class="streak-admin-list">${activeRows.map(row => {
+                const currentDays = Number(row.current_days || 0);
+                const remainingDays = Number(row.remaining_days || 0);
+                const cycleDays = currentDays > 0 && currentDays % data.requiredDays === 0
+                    ? data.requiredDays
+                    : currentDays % data.requiredDays;
+                const percent = Math.min(100, Math.round((cycleDays / data.requiredDays) * 100));
+                const targetText = remainingDays === 0
+                    ? (row.current_cycle_awarded ? 'Đã nhận mã chu kỳ này' : 'Đủ điều kiện, chờ batch 06:00')
+                    : `Còn ${remainingDays} ngày để đạt mốc`;
+                const cycleStatus = Number(row.current_milestone_days || 0) <= 0
+                    ? 'Chưa đạt mốc'
+                    : row.current_cycle_awarded
+                        ? `Đã cấp mốc ${Number(row.current_milestone_days)} ngày`
+                        : `Chưa cấp mốc ${Number(row.current_milestone_days)} ngày`;
+                return `
+                    <div class="streak-admin-row">
+                        <div class="streak-admin-person">
+                            <strong>${escapeHtml(row.name)}</strong>
+                            <span>${escapeHtml(row.phone)} · Đặt gần nhất: ${row.last_order_date || 'Chưa có'}</span>
+                        </div>
+                        <div class="streak-admin-progress">
+                            <div><strong>${currentDays} ngày</strong><span>${escapeHtml(targetText)}</span></div>
+                            <div class="streak-admin-track"><span style="width:${percent}%"></span></div>
+                        </div>
+                        <div class="streak-admin-awards">
+                            <strong>${Number(row.promo_count || 0)} mã</strong>
+                            <span>${escapeHtml(cycleStatus)}</span>
+                        </div>
+                    </div>
+                `;
+            }).join('')}</div>`;
+        })
+        .catch(err => {
+            list.innerHTML = `<div class="error-message">Lỗi tải danh sách chuỗi: ${escapeHtml(err.message)}</div>`;
+        });
+}
+
 function loadPromoUserOptions() {
     const select = document.getElementById('newPromoUser');
     if (!select) return;
@@ -1125,7 +1197,8 @@ function loadPromoCodes() {
                 if (c.source === 'admin_gift') {
                     sourceInfo = `<div class="admin-payment-meta">Mã quà tặng cho ${escapeHtml(c.issued_to_name || 'khách hàng')} · Nhận ngày ${AppUtils.formatDateTime(c.created_at)}</div>`;
                 } else if (c.source === 'auto_consecutive') {
-                    sourceInfo = `<div class="admin-payment-meta">Mã chương trình đặt liên tục cho ${escapeHtml(c.issued_to_name || 'khách hàng')} · Mốc ${Number(c.earned_streak_days || 0)} ngày</div>`;
+                    const earnedDate = c.earned_streak_date ? ` · Đạt ngày ${escapeHtml(c.earned_streak_date)}` : '';
+                    sourceInfo = `<div class="admin-payment-meta">Mã chương trình đặt liên tục cho ${escapeHtml(c.issued_to_name || 'khách hàng')} · Mốc ${Number(c.earned_streak_days || 0)} ngày${earnedDate}</div>`;
                 }
                 return `
                     <div class="admin-payment-row ${isUsed ? 'promo-used' : ''}">

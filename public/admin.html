@@ -16,13 +16,13 @@
         </header>
 
         <div class="tab-buttons">
-            <button class="tab-btn active" onclick="switchTab('history', event)">
-                <span class="tab-icon">📋</span>
-                <span class="tab-label">ĐẶT CƠM</span>
-            </button>
-            <button class="tab-btn" onclick="switchTab('today', event)">
+            <button class="tab-btn active" onclick="switchTab('today', event)">
                 <span class="tab-icon">🍽️</span>
                 <span class="tab-label">MENU</span>
+            </button>
+            <button class="tab-btn" onclick="switchTab('history', event)">
+                <span class="tab-icon">📋</span>
+                <span class="tab-label">ĐẶT CƠM</span>
             </button>
             <button class="tab-btn" onclick="switchTab('payments', event)">
                 <span class="tab-icon">💳</span>
@@ -31,6 +31,10 @@
             <button class="tab-btn" onclick="switchTab('promos', event)">
                 <span class="tab-icon">🏷️</span>
                 <span class="tab-label">KHUYẾN MÃI</span>
+            </button>
+            <button class="tab-btn" onclick="switchTab('streaks', event)">
+                <span class="tab-icon">🔥</span>
+                <span class="tab-label">CHUỖI ĐẶT CƠM</span>
             </button>
             <button class="tab-btn" onclick="switchTab('users', event)">
                 <span class="tab-icon">👥</span>
@@ -47,7 +51,7 @@
         </div>
 
         <!-- Tab Quản lý hôm nay -->
-        <div id="today" class="tab-content">
+        <div id="today" class="tab-content active">
             <div class="section">
                 <div id="todayMessage"></div>
 
@@ -110,7 +114,7 @@
         <!-- =============================================
              Tab Danh sách đặt cơm
              ============================================= -->
-        <div id="history" class="tab-content active">
+        <div id="history" class="tab-content">
             <div class="section">
                 <div class="filter-card">
                     <!-- Row 1: Date picker -->
@@ -273,6 +277,20 @@
         <!-- =============================================
              Tab Quản lý người dùng
              ============================================= -->
+        <div id="streaks" class="tab-content">
+            <div class="section">
+                <div class="streak-admin-header">
+                    <div>
+                        <h3 class="section-subtitle">THEO DÕI CHUỖI ĐẶT CƠM</h3>
+                        <p class="streak-admin-description">Batch tự động kiểm tra và tặng mã lúc 06:00 hàng ngày. Thứ 7 và Chủ nhật không làm đứt chuỗi.</p>
+                    </div>
+                    <button type="button" class="btn-secondary" onclick="loadConsecutiveStreaks()">LÀM MỚI</button>
+                </div>
+                <div id="streakAdminSummary" class="streak-admin-summary"></div>
+                <div id="streakAdminList" class="loading">Đang tải...</div>
+            </div>
+        </div>
+
         <div id="users" class="tab-content">
             <div class="section">
                 <div class="filter-card">

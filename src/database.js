@@ -137,12 +137,31 @@ class Database {
       this.db.run("ALTER TABLE orders ADD COLUMN discount_percent INTEGER DEFAULT 0", () => {});
       this.db.run("ALTER TABLE orders ADD COLUMN promo_code TEXT", () => {});
       this.db.run("ALTER TABLE orders ADD COLUMN user_id INTEGER", () => {});
+      this.db.run("ALTER TABLE orders ADD COLUMN updated_at DATETIME", () => {});
+      this.db.run("ALTER TABLE orders ADD COLUMN last_action TEXT DEFAULT 'created'", () => {});
       this.db.run("ALTER TABLE promo_codes ADD COLUMN issued_to_user_id INTEGER", () => {});
       this.db.run("ALTER TABLE promo_codes ADD COLUMN issued_to_name TEXT", () => {});
       this.db.run("ALTER TABLE promo_codes ADD COLUMN source TEXT DEFAULT 'manual'", () => {});
       this.db.run("ALTER TABLE promo_codes ADD COLUMN earned_streak_days INTEGER", () => {});
+      this.db.run("ALTER TABLE promo_codes ADD COLUMN earned_streak_date TEXT", () => {});
       this.db.run("ALTER TABLE promo_codes ADD COLUMN promo_seen_at DATETIME", () => {});
       this.db.run("ALTER TABLE users ADD COLUMN session_version INTEGER DEFAULT 1", () => {});
+
+      this.db.run(`
+        CREATE TABLE IF NOT EXISTS order_change_log (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          order_id INTEGER NOT NULL,
+          day_id INTEGER NOT NULL,
+          name TEXT NOT NULL,
+          quantity INTEGER NOT NULL,
+          description TEXT,
+          action TEXT NOT NULL,
+          action_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          actor_type TEXT DEFAULT 'user',
+          original_created_at DATETIME,
+          FOREIGN KEY (day_id) REFERENCES days(id)
+        )
+      `);
 
       this.db.run(`
         CREATE TABLE IF NOT EXISTS game_scores (
@@ -160,6 +179,7 @@ class Database {
       this.ensureTodayRecord();
       this.seedAdminUser();
       this.seedDefaultSettings();
+      this.migrateConsecutivePromoData();
       this.cleanupExpiredSessions(() => {});
     });
   }
@@ -264,12 +284,22 @@ class Database {
     this.db.all(
       `SELECT o.id, o.name, o.quantity, o.description, o.created_at,
               COALESCE(o.discount_percent, 0) AS discount_percent,
-              o.promo_code, o.user_id
+              o.promo_code, o.user_id, COALESCE(o.last_action, 'created') AS change_action,
+              CASE WHEN COALESCE(o.last_action, 'created') = 'edited'
+                THEN COALESCE(o.updated_at, o.created_at) ELSE o.created_at END AS change_at,
+              0 AS is_deleted
        FROM orders o
        JOIN days d ON o.day_id = d.id
        WHERE d.date = ?
-       ORDER BY o.created_at DESC`,
-      [today],
+       UNION ALL
+       SELECT -l.id AS id, l.name, l.quantity, l.description, l.original_created_at AS created_at,
+              0 AS discount_percent, NULL AS promo_code, NULL AS user_id,
+              'deleted' AS change_action, l.action_at AS change_at, 1 AS is_deleted
+       FROM order_change_log l
+       JOIN days d ON l.day_id = d.id
+       WHERE d.date = ? AND l.action = 'deleted'
+       ORDER BY change_at DESC, id DESC`,
+      [today, today],
       callback
     );
   }
@@ -496,14 +526,26 @@ class Database {
         } else {
           console.log('📦 Tìm thấy ngày:', date);
           this.db.all(
-            `SELECT id, name, quantity, description, created_at, COALESCE(discount_percent, 0) AS discount_percent, promo_code FROM orders WHERE day_id = ? ORDER BY created_at DESC, id DESC`,
-            [dayRow.id],
+            `SELECT id, name, quantity, description, created_at,
+                    COALESCE(discount_percent, 0) AS discount_percent, promo_code,
+                    COALESCE(last_action, 'created') AS change_action,
+                    CASE WHEN COALESCE(last_action, 'created') = 'edited'
+                      THEN COALESCE(updated_at, created_at) ELSE created_at END AS change_at,
+                    0 AS is_deleted
+             FROM orders WHERE day_id = ?
+             UNION ALL
+             SELECT -id AS id, name, quantity, description, original_created_at AS created_at,
+                    0 AS discount_percent, NULL AS promo_code, 'deleted' AS change_action,
+                    action_at AS change_at, 1 AS is_deleted
+             FROM order_change_log WHERE day_id = ? AND action = 'deleted'
+             ORDER BY change_at DESC, id DESC`,
+            [dayRow.id, dayRow.id],
             (err, orders) => {
               if (err) {
                 console.error('❌ Lỗi tìm đơn hàng:', err);
                 callback(err);
               } else {
-                const ordered = orders.reduce((sum, o) => sum + o.quantity, 0);
+                const ordered = orders.reduce((sum, o) => sum + (o.is_deleted ? 0 : o.quantity), 0);
                 console.log('📋 Tìm thấy', orders.length, 'đơn hàng');
                 
                 // Parse menu if it's JSON
@@ -676,18 +718,61 @@ class Database {
 
   getOrderById(orderId, callback) {
     this.db.get(
-      `SELECT id, name, quantity, description, created_at, user_id FROM orders WHERE id = ?`,
+      `SELECT o.id, o.day_id, o.name, o.quantity, o.description, o.created_at, o.user_id,
+              o.discount_percent, o.promo_code, d.date
+       FROM orders o
+       JOIN days d ON d.id = o.day_id
+       WHERE o.id = ?`,
       [orderId],
       callback
     );
   }
 
-  deleteOrder(orderId, callback) {
-    this.db.run(
-      `DELETE FROM orders WHERE id = ?`,
-      [orderId],
-      callback
-    );
+  deleteOrder(orderId, actorType, callback) {
+    if (typeof actorType === 'function') {
+      callback = actorType;
+      actorType = 'user';
+    }
+
+    const normalizedOrderId = Number(orderId);
+    const dbConn = this.db;
+    dbConn.serialize(() => {
+      dbConn.run('BEGIN IMMEDIATE TRANSACTION', (beginErr) => {
+        if (beginErr) { callback(beginErr); return; }
+        dbConn.run(
+          `INSERT INTO order_change_log
+            (order_id, day_id, name, quantity, description, action, actor_type, original_created_at)
+           SELECT id, day_id, name, quantity, description, 'deleted', ?, created_at
+           FROM orders WHERE id = ?`,
+          [String(actorType || 'user'), normalizedOrderId],
+          function(logErr) {
+            if (logErr || this.changes === 0) {
+              dbConn.run('ROLLBACK', () => callback(logErr || new Error('Khong tim thay don hang')));
+              return;
+            }
+            dbConn.run(
+              `UPDATE promo_codes
+               SET used_by = NULL, used_at = NULL, order_id = NULL
+               WHERE order_id = ?`,
+              [normalizedOrderId],
+              (promoErr) => {
+                if (promoErr) {
+                  dbConn.run('ROLLBACK', () => callback(promoErr));
+                  return;
+                }
+                dbConn.run(`DELETE FROM orders WHERE id = ?`, [normalizedOrderId], (deleteErr) => {
+                  if (deleteErr) {
+                    dbConn.run('ROLLBACK', () => callback(deleteErr));
+                    return;
+                  }
+                  dbConn.run('COMMIT', callback);
+                });
+              }
+            );
+          }
+        );
+      });
+    });
   }
 
   updateOrder(orderId, data, callback) {
@@ -702,7 +787,8 @@ class Database {
 
     this.db.run(
       `UPDATE orders
-       SET name = ?, quantity = ?, description = ?
+       SET name = ?, quantity = ?, description = ?,
+           updated_at = CURRENT_TIMESTAMP, last_action = 'edited'
        WHERE id = ?`,
       [normalizedName, normalizedQuantity, normalizedDescription, Number(orderId)],
       callback
@@ -1898,7 +1984,8 @@ class Database {
   getPromoCodes(callback) {
     this.db.all(
       `SELECT id, code, discount_percent, created_at, used_by, used_at, order_id,
-              issued_to_user_id, issued_to_name, source, earned_streak_days, promo_seen_at
+              issued_to_user_id, issued_to_name, source, earned_streak_days,
+              earned_streak_date, promo_seen_at
        FROM promo_codes
        ORDER BY created_at DESC`,
       callback
@@ -1933,7 +2020,8 @@ class Database {
 
     this.db.all(
       `SELECT id, code, discount_percent, created_at, used_by, used_at, order_id,
-              issued_to_user_id, issued_to_name, source, earned_streak_days, promo_seen_at
+              issued_to_user_id, issued_to_name, source, earned_streak_days,
+              earned_streak_date, promo_seen_at
        FROM promo_codes
        WHERE issued_to_user_id = ?
        ORDER BY created_at DESC, id DESC
@@ -2171,11 +2259,52 @@ class Database {
       { key: 'shop_closed_enabled', value: '0', description: 'Tạm đóng cửa website trong ngày' },
       { key: 'shop_closed_reason', value: 'Hôm nay quán tạm đóng cửa, hẹn mọi người vào ngày mai nhé.', description: 'Lý do hiển thị khi tạm đóng cửa' }
     ];
+    defaults.push({
+      key: 'consecutive_promo_last_batch_date',
+      value: '',
+      description: 'Ngay batch chuoi dat com chay thanh cong gan nhat'
+    });
+    defaults.push({
+      key: 'consecutive_promo_data_migration_v2',
+      value: '0',
+      description: 'Danh dau migration ma chuoi theo tung chu ky'
+    });
     const stmt = this.db.prepare(`INSERT OR IGNORE INTO app_settings (key, value, description) VALUES (?, ?, ?)`);
     for (const d of defaults) {
       stmt.run([d.key, d.value, d.description]);
     }
     stmt.finalize();
+  }
+
+  migrateConsecutivePromoData() {
+    this.db.exec(
+      `BEGIN IMMEDIATE TRANSACTION;
+
+       UPDATE promo_codes
+       SET earned_streak_date = SUBSTR(created_at, 1, 10),
+           promo_seen_at = COALESCE(promo_seen_at, created_at)
+       WHERE source = 'auto_consecutive'
+         AND COALESCE((
+           SELECT value FROM app_settings
+           WHERE key = 'consecutive_promo_data_migration_v2'
+         ), '0') != '1';
+
+       UPDATE app_settings
+       SET value = '1', updated_at = CURRENT_TIMESTAMP
+       WHERE key = 'consecutive_promo_data_migration_v2' AND value != '1';
+
+       COMMIT;
+
+       CREATE UNIQUE INDEX IF NOT EXISTS idx_promo_consecutive_cycle
+       ON promo_codes (issued_to_user_id, earned_streak_days, earned_streak_date)
+       WHERE source = 'auto_consecutive'
+         AND issued_to_user_id IS NOT NULL
+         AND earned_streak_days IS NOT NULL
+         AND earned_streak_date IS NOT NULL;`,
+      (err) => {
+        if (err) console.error('[Migration] Cannot migrate consecutive promo data:', err.message);
+      }
+    );
   }
 
   getAllSettings(callback) {
@@ -2282,9 +2411,16 @@ class Database {
   }
 
   getConsecutiveOrderDaysForUser(userId, callback) {
+    this.getActiveConsecutiveOrderDatesForUser(userId, (err, dates = []) => {
+      if (err) { callback(err); return; }
+      callback(null, dates.length);
+    });
+  }
+
+  getActiveConsecutiveOrderDatesForUser(userId, callback) {
     const normalizedUserId = Number(userId || 0);
     if (!normalizedUserId) {
-      callback(null, 0);
+      callback(null, []);
       return;
     }
 
@@ -2298,7 +2434,127 @@ class Database {
       [normalizedUserId],
       (err, rows = []) => {
         if (err) { callback(err); return; }
-        callback(null, this.countActiveConsecutiveBusinessDates(rows.map((row) => row.date)));
+        const dates = rows.map((row) => row.date);
+        const activeCount = this.countActiveConsecutiveBusinessDates(dates);
+        callback(null, dates.slice(0, activeCount));
+      }
+    );
+  }
+
+  getConsecutiveOrderDatesForUserThroughDate(userId, throughDate, callback) {
+    const normalizedUserId = Number(userId || 0);
+    const normalizedDate = String(throughDate || '').trim();
+    if (!normalizedUserId || !/^\d{4}-\d{2}-\d{2}$/.test(normalizedDate)) {
+      callback(null, []);
+      return;
+    }
+
+    this.db.all(
+      `SELECT DISTINCT d.date
+       FROM orders o
+       JOIN days d ON d.id = o.day_id
+       WHERE o.user_id = ?
+         AND d.date <= ?
+         AND strftime('%w', d.date) NOT IN ('0', '6')
+       ORDER BY d.date DESC`,
+      [normalizedUserId, normalizedDate],
+      (err, rows = []) => {
+        if (err) { callback(err); return; }
+        const dates = rows.map((row) => row.date);
+        if (!dates.length || dates[0] !== normalizedDate) {
+          callback(null, []);
+          return;
+        }
+        callback(null, dates.slice(0, this.countConsecutiveBusinessDates(dates)));
+      }
+    );
+  }
+
+  getConsecutivePromoOverview(requiredDays, callback) {
+    const normalizedRequiredDays = Math.max(2, Number(requiredDays || 5));
+    this.db.all(
+      `SELECT id, phone, name
+       FROM users
+       WHERE role = 'user'
+       ORDER BY name COLLATE NOCASE ASC`,
+      (userErr, users = []) => {
+        if (userErr) { callback(userErr); return; }
+
+        this.db.all(
+          `SELECT DISTINCT o.user_id, d.date
+           FROM orders o
+           JOIN days d ON d.id = o.day_id
+           WHERE o.user_id IS NOT NULL
+             AND strftime('%w', d.date) NOT IN ('0', '6')
+           ORDER BY o.user_id ASC, d.date DESC`,
+          (dateErr, dateRows = []) => {
+            if (dateErr) { callback(dateErr); return; }
+
+            this.db.all(
+              `SELECT issued_to_user_id AS user_id,
+                      earned_streak_days,
+                      earned_streak_date,
+                      created_at
+               FROM promo_codes
+               WHERE source = 'auto_consecutive' AND issued_to_user_id IS NOT NULL
+               ORDER BY created_at DESC, id DESC`,
+              (promoErr, promoRows = []) => {
+                if (promoErr) { callback(promoErr); return; }
+
+                const datesByUser = new Map();
+                for (const row of dateRows) {
+                  const key = Number(row.user_id);
+                  if (!datesByUser.has(key)) datesByUser.set(key, []);
+                  datesByUser.get(key).push(row.date);
+                }
+                const promosByUser = new Map();
+                for (const row of promoRows) {
+                  const key = Number(row.user_id);
+                  if (!promosByUser.has(key)) promosByUser.set(key, []);
+                  promosByUser.get(key).push(row);
+                }
+                const rows = users.map((user) => {
+                  const dates = datesByUser.get(Number(user.id)) || [];
+                  const currentDays = this.countActiveConsecutiveBusinessDates(dates);
+                  const userPromos = promosByUser.get(Number(user.id)) || [];
+                  const cycleProgress = currentDays % normalizedRequiredDays;
+                  const completedMilestone = Math.floor(currentDays / normalizedRequiredDays) * normalizedRequiredDays;
+                  const currentMilestoneDate = completedMilestone > 0
+                    ? dates[currentDays - completedMilestone]
+                    : null;
+                  const currentCycleAwarded = completedMilestone > 0 && userPromos.some((promo) => (
+                    Number(promo.earned_streak_days || 0) === completedMilestone
+                    && promo.earned_streak_date === currentMilestoneDate
+                  ));
+                  return {
+                    id: user.id,
+                    phone: user.phone,
+                    name: user.name,
+                    current_days: currentDays,
+                    last_order_date: dates[0] || null,
+                    remaining_days: currentDays > 0 && cycleProgress === 0
+                      ? 0
+                      : Math.max(0, normalizedRequiredDays - cycleProgress),
+                    promo_count: userPromos.length,
+                    latest_promo_at: userPromos[0]?.created_at || null,
+                    highest_awarded_streak: userPromos.reduce(
+                      (highest, promo) => Math.max(highest, Number(promo.earned_streak_days || 0)),
+                      0
+                    ),
+                    current_milestone_days: completedMilestone,
+                    current_milestone_date: currentMilestoneDate,
+                    current_cycle_awarded: currentCycleAwarded
+                  };
+                });
+
+                rows.sort((a, b) => b.current_days - a.current_days
+                  || String(b.last_order_date || '').localeCompare(String(a.last_order_date || ''))
+                  || a.name.localeCompare(b.name, 'vi'));
+                callback(null, rows);
+              }
+            );
+          }
+        );
       }
     );
   }
@@ -2335,7 +2591,20 @@ class Database {
   }
 
   getCurrentBusinessDateString(date = new Date()) {
-    const current = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Ho_Chi_Minh',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).formatToParts(date).reduce((result, part) => {
+      result[part.type] = part.value;
+      return result;
+    }, {});
+    const current = new Date(Date.UTC(
+      Number(parts.year),
+      Number(parts.month) - 1,
+      Number(parts.day)
+    ));
     while (current.getUTCDay() === 0 || current.getUTCDay() === 6) {
       current.setUTCDate(current.getUTCDate() - 1);
     }
@@ -2358,17 +2627,27 @@ class Database {
     return `${year}-${month}-${day}`;
   }
 
-  getAutoPromoCodeByStreak(userId, streakDays, callback) {
+  getAutoPromoCodeByStreak(userId, streakDays, earnedStreakDate, callback) {
+    if (typeof earnedStreakDate === 'function') {
+      callback = earnedStreakDate;
+      earnedStreakDate = '';
+    }
+    const normalizedDate = String(earnedStreakDate || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedDate)) {
+      callback(null, null);
+      return;
+    }
     this.db.get(
       `SELECT id, code, discount_percent, created_at, used_by, used_at, order_id,
-              issued_to_user_id, issued_to_name, source, earned_streak_days
+              issued_to_user_id, issued_to_name, source, earned_streak_days, earned_streak_date
        FROM promo_codes
        WHERE source = 'auto_consecutive'
          AND issued_to_user_id = ?
          AND earned_streak_days = ?
+         AND earned_streak_date = ?
        ORDER BY created_at DESC, id DESC
        LIMIT 1`,
-      [Number(userId || 0), Number(streakDays || 0)],
+      [Number(userId || 0), Number(streakDays || 0), normalizedDate],
       callback
     );
   }
@@ -2376,7 +2655,7 @@ class Database {
   getAutoPromoCodesForUser(userId, callback) {
     this.db.all(
       `SELECT id, code, discount_percent, created_at, used_by, used_at, order_id,
-              issued_to_user_id, issued_to_name, source, earned_streak_days
+              issued_to_user_id, issued_to_name, source, earned_streak_days, earned_streak_date
        FROM promo_codes
        WHERE source = 'auto_consecutive'
          AND issued_to_user_id = ?
@@ -2388,18 +2667,21 @@ class Database {
   }
 
   // Tạo mã KM tự động cho khách (consecutive promo)
-  createAutoPromoCode(name, discountPercent, userId, earnedStreakDays, callback) {
-    if (typeof userId === 'function') {
-      callback = userId;
-      userId = null;
-      earnedStreakDays = null;
-    } else if (typeof earnedStreakDays === 'function') {
-      callback = earnedStreakDays;
-      earnedStreakDays = null;
+  createAutoPromoCode(name, discountPercent, userId, earnedStreakDays, earnedStreakDate, callback) {
+    if (typeof earnedStreakDate === 'function') {
+      callback = earnedStreakDate;
+      earnedStreakDate = '';
     }
 
     const normalizedUserId = Number(userId || 0) || null;
     const normalizedStreak = Number(earnedStreakDays || 0) || null;
+    const normalizedStreakDate = String(earnedStreakDate || '').trim();
+    const database = this;
+
+    if (normalizedUserId && (!normalizedStreak || !/^\d{4}-\d{2}-\d{2}$/.test(normalizedStreakDate))) {
+      callback(new Error('Thieu ngay dat moc hop le cho ma chuoi'));
+      return;
+    }
 
     const buildAutoCode = () => {
       const timestamp = Date.now().toString(36).toUpperCase();
@@ -2411,26 +2693,51 @@ class Database {
       const code = buildAutoCode();
       this.db.run(
         `INSERT INTO promo_codes
-          (code, discount_percent, issued_to_user_id, issued_to_name, source, earned_streak_days)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+          (code, discount_percent, issued_to_user_id, issued_to_name, source, earned_streak_days, earned_streak_date)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [
           code,
           Number(discountPercent || 0),
           normalizedUserId,
           String(name || '').trim(),
           normalizedUserId ? 'auto_consecutive' : 'manual',
-          normalizedStreak
+          normalizedStreak,
+          normalizedUserId ? normalizedStreakDate : null
         ],
         function(err) {
           if (err) {
-            if (err.message && err.message.includes('UNIQUE') && attempt < 3) {
-              insertNewCode(attempt + 1);
+            if (err.message && err.message.includes('UNIQUE')) {
+              database.getAutoPromoCodeByStreak(
+                normalizedUserId,
+                normalizedStreak,
+                normalizedStreakDate,
+                (findErr, existing) => {
+                  if (findErr) { callback(findErr); return; }
+                  if (existing) {
+                    callback(null, {
+                      id: existing.id,
+                      code: existing.code,
+                      discountPercent: Number(existing.discount_percent || discountPercent || 0),
+                      earnedStreakDate: normalizedStreakDate,
+                      existing: true
+                    });
+                    return;
+                  }
+                  if (attempt < 3) { insertNewCode(attempt + 1); return; }
+                  callback(err);
+                }
+              );
               return;
             }
             callback(err);
             return;
           }
-          callback(null, { id: this.lastID, code, discountPercent: Number(discountPercent || 0) });
+          callback(null, {
+            id: this.lastID,
+            code,
+            discountPercent: Number(discountPercent || 0),
+            earnedStreakDate: normalizedStreakDate
+          });
         }
       );
     };
@@ -2440,7 +2747,7 @@ class Database {
       return;
     }
 
-    this.getAutoPromoCodeByStreak(normalizedUserId, normalizedStreak, (err, existing) => {
+    this.getAutoPromoCodeByStreak(normalizedUserId, normalizedStreak, normalizedStreakDate, (err, existing) => {
       if (err) {
         callback(err);
         return;
@@ -2450,6 +2757,7 @@ class Database {
           id: existing.id,
           code: existing.code,
           discountPercent: Number(existing.discount_percent || discountPercent || 0),
+          earnedStreakDate: normalizedStreakDate,
           existing: true
         });
         return;

@@ -2109,6 +2109,40 @@ textarea {
     transform: scale(0.95);
 }
 
+.order-item-edited {
+    border-left: 4px solid #d18b00;
+    background: #fffaf0;
+}
+
+.order-item-deleted {
+    border-left: 4px solid #c33b3b;
+    background: #fff3f3;
+    opacity: 0.92;
+}
+
+.order-item-deleted h4 {
+    text-decoration: line-through;
+}
+
+.order-change-note {
+    display: inline-block;
+    margin-top: 6px;
+    padding: 3px 7px;
+    border-radius: 6px;
+    font-size: 0.76rem;
+    font-weight: 700;
+}
+
+.order-change-edited {
+    color: #895b00;
+    background: #fff0c7;
+}
+
+.order-change-deleted {
+    color: #a32323;
+    background: #ffd9d9;
+}
+
 /* ========================================
    CONSECUTIVE PROMO
    ======================================== */

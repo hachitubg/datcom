@@ -23,7 +23,7 @@ let shopClosedState = {
 };
 const STREAK_INTRO_STORAGE_KEY = 'datcom_streak_intro_dismissed_v1';
 
-function checkUserAuth() {
+function checkUserAuth({ notifyPromos = false } = {}) {
     return fetch(`${API_BASE}/api/auth/me`)
         .then(res => res.json())
         .then(data => {
@@ -39,7 +39,11 @@ function checkUserAuth() {
             }
             updatePromoAccess();
             loadConsecutivePromoStatus({ maybeShowIntro: true });
-            loadPromoWalletSummary();
+            loadPromoWalletSummary().then((wallet) => {
+                if (notifyPromos && Number(wallet?.unseenCount || 0) > 0) {
+                    showPopup(`Bạn vừa nhận được ${wallet.unseenCount} mã khuyến mãi mới. Nhấn biểu tượng vé để xem mã.`);
+                }
+            });
         })
         .catch(() => {
             currentUser = null;
@@ -114,7 +118,7 @@ document.getElementById('btnLogin').addEventListener('click', () => {
     .then(({ ok, data }) => {
         if (!ok) throw new Error(data.error || 'Đăng nhập thất bại');
         authModal.style.display = 'none';
-        checkUserAuth();
+        checkUserAuth({ notifyPromos: true });
     })
     .catch(err => {
         document.getElementById('authMessage').innerHTML = `<div class="error-message">${err.message}</div>`;
@@ -138,7 +142,7 @@ document.getElementById('btnRegister').addEventListener('click', () => {
     .then(({ ok, data }) => {
         if (!ok) throw new Error(data.error || 'Đăng ký thất bại');
         authModal.style.display = 'none';
-        checkUserAuth();
+        checkUserAuth({ notifyPromos: true });
     })
     .catch(err => {
         document.getElementById('authMessage').innerHTML = `<div class="error-message">${err.message}</div>`;
@@ -528,7 +532,9 @@ function loadConsecutivePromoStatus({ maybeShowIntro = false } = {}) {
 function getStreakProgress(status) {
     const requiredDays = Math.max(1, Number(status?.requiredDays || 1));
     const currentDays = Math.max(0, Number(status?.currentDays || 0));
-    const cycleDays = currentDays >= requiredDays ? requiredDays : currentDays;
+    const cycleDays = currentDays > 0 && currentDays % requiredDays === 0
+        ? requiredDays
+        : currentDays % requiredDays;
     return Math.min(100, Math.round((cycleDays / requiredDays) * 100));
 }
 
@@ -569,7 +575,7 @@ function renderStreakStatus(status) {
             <div class="streak-status-top">
                 <div>
                     <span class="streak-kicker">Tiến độ hiện tại</span>
-                    <h3>${currentDays} / ${requiredDays} ngày</h3>
+                    <h3>${currentDays} ngày liên tục</h3>
                     <p>${escapeHtml(nextText)}</p>
                 </div>
                 <div class="streak-ring" style="--streak-pct:${percent}%">
@@ -599,7 +605,8 @@ function getPromoWalletNote(code) {
         const streakText = Number(code.earnedStreakDays || 0) > 0
             ? ` · Mốc ${Number(code.earnedStreakDays)} ngày`
             : '';
-        return `Mã chương trình đặt liên tục${streakText}`;
+        const earnedDateText = code.earnedStreakDate ? ` · Đạt ngày ${code.earnedStreakDate}` : '';
+        return `Mã chương trình đặt liên tục${streakText}${earnedDateText}`;
     }
     return `Mã khuyến mãi được tạo ngày ${AppUtils.formatDateTime(code.createdAt)}`;
 }
@@ -631,7 +638,7 @@ function renderPromoWallet(status) {
                 const statusLabel = used ? 'Đã sử dụng' : 'Chưa sử dụng';
                 const statusClass = used ? 'promo-wallet-status-used' : 'promo-wallet-status-ready';
                 return `
-                    <div class="promo-wallet-row ${!code.seen && code.source === 'admin_gift' ? 'promo-wallet-row-new' : ''}">
+                    <div class="promo-wallet-row ${!code.seen && !used ? 'promo-wallet-row-new' : ''}">
                         <div class="promo-wallet-main">
                             <div class="promo-wallet-code">${escapeHtml(code.code)}</div>
                             <div class="promo-wallet-meta">Giảm ${Number(code.discountPercent || 0)}% cho 1 suất</div>
@@ -1280,26 +1287,28 @@ function loadOrders() {
                 ordersList.innerHTML = orders.map((order, index) => {
                     const disc = Number(order.discount_percent || 0);
                     const discBadge = disc > 0 ? `<span class="discount-badge">-${disc}% / 1 suất</span>` : '';
-                    const isOwner = currentUser && order.user_id === currentUser.id;
-                    const createdAt = new Date(order.created_at + 'Z');
-                    const diffMin = (Date.now() - createdAt.getTime()) / 60000;
-                    const canModify = isOwner && diffMin <= 30;
+                    const isDeleted = Boolean(order.is_deleted);
+                    const isOwner = !isDeleted && currentUser && order.user_id === currentUser.id;
+                    const changeAction = order.change_action || 'created';
+                    const changeNote = changeAction === 'edited'
+                        ? `<p class="order-change-note order-change-edited">Đã sửa lúc ${AppUtils.formatDateTime(order.change_at)}</p>`
+                        : changeAction === 'deleted'
+                            ? `<p class="order-change-note order-change-deleted">Đã xóa lúc ${AppUtils.formatDateTime(order.change_at)}</p>`
+                            : '';
+                    const orderSummary = isDeleted
+                        ? `${escapeHtml(order.name)} đã xóa đơn ${order.quantity} suất`
+                        : `${escapeHtml(order.name)} đã đặt ${order.quantity} suất ${discBadge}`;
                     return `
-                        <div class="order-item ${disc > 0 ? 'order-item-discounted' : ''}">
+                        <div class="order-item ${disc > 0 ? 'order-item-discounted' : ''} ${isDeleted ? 'order-item-deleted' : ''} ${changeAction === 'edited' ? 'order-item-edited' : ''}">
                             <div class="order-info">
-                                <h4>${orders.length - index}. ${escapeHtml(order.name)} đã đặt ${order.quantity} suất ${discBadge}</h4>
+                                <h4>${orders.length - index}. ${orderSummary}</h4>
                                 ${order.description ? `<p><strong>Ghi chú:</strong> ${escapeHtml(order.description)}</p>` : ''}
                                 <p class="order-time">${AppUtils.formatDateTime(order.created_at)}</p>
+                                ${changeNote}
                                 ${isOwner ? `
                                     <div class="order-actions">
-                                        ${canModify
-                                            ? `<button class="btn-edit-order" data-id="${order.id}" data-quantity="${order.quantity}" data-description="${escapeAttr(order.description || '')}">Sửa</button>`
-                                            : `<button class="btn-edit-order" disabled title="Quá 30 phút, liên hệ admin để sửa">Sửa</button>`
-                                        }
-                                        ${canModify
-                                            ? `<button class="btn-delete-order" data-id="${order.id}">Xóa</button>`
-                                            : `<button class="btn-delete-order" disabled title="Quá 30 phút, liên hệ admin để xóa">Xóa</button>`
-                                        }
+                                        <button class="btn-edit-order" data-id="${order.id}" data-quantity="${order.quantity}" data-description="${escapeAttr(order.description || '')}">Sửa</button>
+                                        <button class="btn-delete-order" data-id="${order.id}">Xóa</button>
                                     </div>
                                 ` : ''}
                             </div>
@@ -1341,10 +1350,6 @@ document.getElementById('orderForm').addEventListener('submit', (e) => {
                 loadTodayInfo();
                 loadConsecutivePromoStatus();
                 loadPromoWalletSummary();
-                // Hiển thị thông báo tặng mã KM nếu có
-                if (data.bonus_promo) {
-                    showPopup(data.bonus_promo.message);
-                }
             }, 1500);
         }
     })
@@ -1379,18 +1384,8 @@ document.getElementById('ordersList').addEventListener('click', async (e) => {
         return;
     }
 
-    if (deleteBtn && deleteBtn.disabled) {
-        showPopup('Đã quá 30 phút, vui lòng liên hệ admin để xóa đơn này.');
-        return;
-    }
-
     const editBtn = e.target.closest('.btn-edit-order');
-    if (editBtn && editBtn.disabled) {
-        showPopup('Đã quá 30 phút, vui lòng liên hệ admin để chỉnh sửa đơn này.');
-        return;
-    }
-
-    if (editBtn && !editBtn.disabled) {
+    if (editBtn) {
         const orderId = editBtn.dataset.id;
         const oldQty = editBtn.dataset.quantity;
         const oldDesc = editBtn.dataset.description;

@@ -432,8 +432,12 @@ function markPaymentPaidAcrossSites(orderCode, paymentData, callback) {
 }
 
 function callDb(methodName, ...args) {
+  return callDatabase(getActiveDb(), methodName, ...args);
+}
+
+function callDatabase(database, methodName, ...args) {
   return new Promise((resolve, reject) => {
-    db[methodName](...args, (err, result) => {
+    database[methodName](...args, (err, result) => {
       if (err) {
         reject(err);
         return;
@@ -453,13 +457,18 @@ function normalizeShopClosedSettings(settings = {}) {
   };
 }
 
-async function ensureConsecutivePromoForUser(user, settingsInput = null) {
+async function ensureConsecutivePromoForUser(
+  user,
+  settingsInput = null,
+  database = getActiveDb(),
+  throughDate = null
+) {
   if (!user || !user.id) {
     return null;
   }
 
   const settings = settingsInput
-    || await callDb('getSettings', ['consecutive_promo_enabled', 'consecutive_promo_days', 'consecutive_promo_discount']);
+    || await callDatabase(database, 'getSettings', ['consecutive_promo_enabled', 'consecutive_promo_days', 'consecutive_promo_discount']);
 
   if (settings.consecutive_promo_enabled !== '1') {
     return null;
@@ -467,20 +476,38 @@ async function ensureConsecutivePromoForUser(user, settingsInput = null) {
 
   const requiredDays = Math.max(2, Number(settings.consecutive_promo_days || 5));
   const discountPercent = Math.max(1, Math.min(100, Number(settings.consecutive_promo_discount || 50)));
-  const currentDays = await callDb('getConsecutiveOrderDaysForUser', user.id);
+  const activeDates = throughDate
+    ? await callDatabase(database, 'getConsecutiveOrderDatesForUserThroughDate', user.id, throughDate)
+    : await callDatabase(database, 'getActiveConsecutiveOrderDatesForUser', user.id);
+  const currentDays = activeDates.length;
   const milestoneCount = Math.floor(Number(currentDays || 0) / requiredDays);
   const createdPromos = [];
 
   for (let index = 1; index <= milestoneCount; index++) {
     const streakDays = index * requiredDays;
-    const existing = await callDb('getAutoPromoCodeByStreak', user.id, streakDays);
+    const earnedStreakDate = activeDates[currentDays - streakDays];
+    const existing = await callDatabase(
+      database,
+      'getAutoPromoCodeByStreak',
+      user.id,
+      streakDays,
+      earnedStreakDate
+    );
     if (existing) {
       continue;
     }
 
-    const promo = await callDb('createAutoPromoCode', user.name, discountPercent, user.id, streakDays);
+    const promo = await callDatabase(
+      database,
+      'createAutoPromoCode',
+      user.name,
+      discountPercent,
+      user.id,
+      streakDays,
+      earnedStreakDate
+    );
     if (promo && !promo.existing) {
-      createdPromos.push({ ...promo, earnedStreakDays: streakDays });
+      createdPromos.push({ ...promo, earnedStreakDays: streakDays, earnedStreakDate });
     }
   }
 
@@ -490,6 +517,65 @@ async function ensureConsecutivePromoForUser(user, settingsInput = null) {
     discountPercent,
     createdPromos
   };
+}
+
+const consecutivePromoBatchInProgress = new WeakSet();
+
+function getVietnamBatchTime(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    hourCycle: 'h23'
+  }).formatToParts(date).reduce((result, part) => {
+    result[part.type] = part.value;
+    return result;
+  }, {});
+  return {
+    date: `${parts.year}-${parts.month}-${parts.day}`,
+    hour: Number(parts.hour || 0)
+  };
+}
+
+async function runConsecutivePromoBatch(database) {
+  if (consecutivePromoBatchInProgress.has(database)) return;
+  consecutivePromoBatchInProgress.add(database);
+  try {
+    const batchTime = getVietnamBatchTime();
+    const settings = await callDatabase(database, 'getSettings', [
+      'consecutive_promo_enabled',
+      'consecutive_promo_days',
+      'consecutive_promo_discount',
+      'consecutive_promo_last_batch_date'
+    ]);
+    if (settings.consecutive_promo_enabled !== '1'
+      || batchTime.hour < 6
+      || settings.consecutive_promo_last_batch_date === batchTime.date) {
+      return;
+    }
+
+    const users = await callDatabase(database, 'getUsers');
+    const throughDate = database.getPreviousBusinessDate(batchTime.date);
+    let createdCount = 0;
+    for (const user of users.filter((item) => item.role === 'user')) {
+      const result = await ensureConsecutivePromoForUser(user, settings, database, throughDate);
+      createdCount += result?.createdPromos?.length || 0;
+    }
+    await callDatabase(database, 'updateSetting', 'consecutive_promo_last_batch_date', batchTime.date);
+    console.log(`[Consecutive Promo Batch] ${database.dbPath}: created ${createdCount} promo(s) for ${batchTime.date}`);
+  } catch (err) {
+    console.error(`[Consecutive Promo Batch] ${database.dbPath}:`, err.message);
+  } finally {
+    consecutivePromoBatchInProgress.delete(database);
+  }
+}
+
+function runConsecutivePromoBatchAcrossSites() {
+  for (const database of getAllSiteDatabases()) {
+    runConsecutivePromoBatch(database);
+  }
 }
 
 async function syncOrderCodeFromPayOS(orderCode, database = getActiveDb()) {
@@ -676,38 +762,8 @@ app.post('/api/orders', (req, res) => {
             return res.status(400).json({ error: err.message });
           }
 
-          db.getSettings(['consecutive_promo_enabled', 'consecutive_promo_days', 'consecutive_promo_discount'], async (cpErr, cpSettings) => {
-            if (cpErr || cpSettings.consecutive_promo_enabled !== '1') {
-              return res.json(order);
-            }
-
-            if (!user) {
-              return res.json(order);
-            }
-
-            try {
-              const promoResult = await ensureConsecutivePromoForUser(
-                { ...user, name: normalizedCustomerName },
-                cpSettings
-              );
-              const promoInfo = promoResult?.createdPromos?.[promoResult.createdPromos.length - 1];
-              if (!promoInfo) {
-                return res.json(order);
-              }
-
-              res.json({
-                ...order,
-                bonus_promo: {
-                  code: promoInfo.code,
-                  discount: promoInfo.discountPercent,
-                  message: `Chúc mừng! Bạn đã đặt cơm ${promoInfo.earnedStreakDays} ngày liên tục và được tặng mã giảm ${promoResult.discountPercent}%: ${promoInfo.code}`
-                }
-              });
-            } catch (promoErr) {
-              console.error('[Consecutive Promo] Failed:', promoErr.message);
-              return res.json(order);
-            }
-          });
+          // Consecutive promotions are issued only by the daily 06:00 batch.
+          res.json(order);
         });
       };
 
@@ -740,15 +796,11 @@ app.delete('/api/orders/:orderId', (req, res) => {
       if (err) return res.status(500).json({ error: err.message });
       if (!order) return res.status(404).json({ error: 'Khong tim thay don hang' });
       if (order.user_id !== user.id) return res.status(403).json({ error: 'Ban khong co quyen xoa don nay' });
-
-      const createdAt = new Date(order.created_at + 'Z');
-      const now = new Date();
-      const diffMinutes = (now - createdAt) / 60000;
-      if (diffMinutes > 30) {
-        return res.status(400).json({ error: 'Da qua 30 phut, vui long nhan tin cho admin de xoa don.' });
+      if (order.date !== db.getDateString()) {
+        return res.status(400).json({ error: 'Chi co the xoa don dat com cua ngay hom nay' });
       }
 
-      db.deleteOrder(orderId, (delErr) => {
+      db.deleteOrder(orderId, 'user', (delErr) => {
         if (delErr) return res.status(500).json({ error: delErr.message });
         res.json({ success: true });
       });
@@ -766,6 +818,9 @@ app.put('/api/orders/:orderId', (req, res) => {
       if (err) return res.status(500).json({ error: err.message });
       if (!order) return res.status(404).json({ error: 'Khong tim thay don hang' });
       if (order.user_id !== user.id) return res.status(403).json({ error: 'Ban khong co quyen sua don nay' });
+      if (order.date !== db.getDateString()) {
+        return res.status(400).json({ error: 'Chi co the sua don dat com cua ngay hom nay' });
+      }
 
       const quantity = Number(req.body.quantity || 0);
       const description = (req.body.description || '').toString();
@@ -866,7 +921,7 @@ app.post('/api/admin/quantity', (req, res) => {
 // Xóa đơn hàng
 app.delete('/api/admin/orders/:orderId', (req, res) => {
   const { orderId } = req.params;
-  db.deleteOrder(orderId, (err) => {
+  db.deleteOrder(orderId, 'admin', (err) => {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
@@ -1285,9 +1340,8 @@ app.get('/api/consecutive-promo/status', (req, res) => {
         });
       }
 
-      ensureConsecutivePromoForUser(user, settings)
-        .then((promoResult) => {
-          const currentDays = promoResult ? promoResult.currentDays : 0;
+      callDb('getConsecutiveOrderDaysForUser', user.id)
+        .then((currentDays) => {
         res.json({
           enabled: true,
           requiredDays,
@@ -1295,7 +1349,7 @@ app.get('/api/consecutive-promo/status', (req, res) => {
           loggedIn: true,
           currentDays,
           remainingDays: Math.max(0, requiredDays - (currentDays % requiredDays || (currentDays >= requiredDays ? requiredDays : 0))),
-          newPromoCount: promoResult?.createdPromos?.length || 0
+          newPromoCount: 0
         });
         })
         .catch((daysErr) => {
@@ -1314,13 +1368,7 @@ app.get('/api/promo-wallet', (req, res) => {
       return res.status(401).json({ error: 'Vui lòng đăng nhập để xem mã khuyến mãi' });
     }
 
-    ensureConsecutivePromoForUser(user)
-      .catch((promoErr) => {
-        console.error('[Consecutive Promo] Wallet backfill failed:', promoErr.message);
-        return null;
-      })
-      .then(() => {
-        db.getPromoWalletForUser(user.id, (err, rows = []) => {
+    db.getPromoWalletForUser(user.id, (err, rows = []) => {
           if (err) {
             return res.status(500).json({ error: err.message });
           }
@@ -1334,15 +1382,15 @@ app.get('/api/promo-wallet', (req, res) => {
             used: Boolean(row.used_by),
             source: row.source || 'manual',
             earnedStreakDays: Number(row.earned_streak_days || 0),
+            earnedStreakDate: row.earned_streak_date || null,
             seen: Boolean(row.promo_seen_at)
           }));
 
           res.json({
             codes,
-            unseenCount: codes.filter((code) => code.source === 'admin_gift' && !code.seen).length
+            unseenCount: codes.filter((code) => !code.seen && !code.used).length
           });
-        });
-      });
+    });
   });
 });
 
@@ -1712,6 +1760,28 @@ app.post('/api/auth/register', (req, res) => {
   });
 });
 
+app.get('/api/admin/consecutive-streaks', (req, res) => {
+  db.getSettings([
+    'consecutive_promo_enabled',
+    'consecutive_promo_days',
+    'consecutive_promo_discount',
+    'consecutive_promo_last_batch_date'
+  ], (settingsErr, settings) => {
+    if (settingsErr) return res.status(500).json({ error: settingsErr.message });
+    const requiredDays = Math.max(2, Number(settings.consecutive_promo_days || 5));
+    db.getConsecutivePromoOverview(requiredDays, (overviewErr, rows) => {
+      if (overviewErr) return res.status(500).json({ error: overviewErr.message });
+      res.json({
+        enabled: settings.consecutive_promo_enabled === '1',
+        requiredDays,
+        discountPercent: Number(settings.consecutive_promo_discount || 50),
+        lastBatchDate: settings.consecutive_promo_last_batch_date || null,
+        rows
+      });
+    });
+  });
+});
+
 app.post('/api/auth/login', (req, res) => {
   const phone = String(req.body.phone || '').trim();
   const password = String(req.body.password || '');
@@ -1783,6 +1853,11 @@ if (payos.isConfigured()) {
   setInterval(() => {
     syncPendingPaymentsFromPayOS();
   }, payosAutoSyncMs);
+}
+
+if (process.env.NODE_ENV !== 'test') {
+  setTimeout(runConsecutivePromoBatchAcrossSites, 5000);
+  setInterval(runConsecutivePromoBatchAcrossSites, 60000);
 }
 
 app.listen(PORT, () => {
