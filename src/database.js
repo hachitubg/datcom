@@ -163,6 +163,15 @@ class Database {
         )
       `);
 
+      // Lich nghi rieng cua tung site. Cac ngay nay khong lam gian doan chuoi dat com.
+      this.db.run(`
+        CREATE TABLE IF NOT EXISTS shop_closure_dates (
+          closure_date TEXT PRIMARY KEY NOT NULL,
+          reason TEXT NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
       this.db.run(`
         CREATE TABLE IF NOT EXISTS game_scores (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2247,6 +2256,90 @@ class Database {
   // =============================================
   // App Settings
   // =============================================
+  getShopClosureDates(callback) {
+    this.db.all(
+      `SELECT closure_date, reason, created_at
+       FROM shop_closure_dates
+       ORDER BY closure_date DESC`,
+      callback
+    );
+  }
+
+  getShopClosureByDate(date, callback) {
+    this.db.get(
+      `SELECT closure_date, reason, created_at
+       FROM shop_closure_dates
+       WHERE closure_date = ?`,
+      [String(date || '').trim()],
+      callback
+    );
+  }
+
+  upsertShopClosureRange(startDate, endDate, reason, callback) {
+    const dates = this.getDateRange(startDate, endDate);
+    if (!dates.length) {
+      callback(new Error('Khoang ngay nghi khong hop le'));
+      return;
+    }
+
+    this.db.serialize(() => {
+      this.db.run('BEGIN IMMEDIATE TRANSACTION');
+      let firstError = null;
+      const stmt = this.db.prepare(
+        `INSERT INTO shop_closure_dates (closure_date, reason)
+         VALUES (?, ?)
+         ON CONFLICT(closure_date) DO UPDATE SET reason = excluded.reason`
+      );
+      for (const date of dates) {
+        stmt.run(date, reason, (err) => {
+          if (err && !firstError) firstError = err;
+        });
+      }
+      stmt.finalize((err) => {
+        const writeError = firstError || err;
+        if (writeError) {
+          this.db.run('ROLLBACK', () => callback(writeError));
+          return;
+        }
+        this.db.run('COMMIT', (commitErr) => callback(commitErr, { count: dates.length }));
+      });
+    });
+  }
+
+  deleteShopClosureDate(date, callback) {
+    this.db.run(
+      'DELETE FROM shop_closure_dates WHERE closure_date = ?',
+      [String(date || '').trim()],
+      function onDelete(err) {
+        callback(err, { deleted: this?.changes || 0 });
+      }
+    );
+  }
+
+  getClosureDateSet(callback) {
+    this.db.all('SELECT closure_date FROM shop_closure_dates', (err, rows = []) => {
+      if (err) { callback(err); return; }
+      callback(null, new Set(rows.map((row) => row.closure_date)));
+    });
+  }
+
+  getDateRange(startDate, endDate) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) return [];
+    const start = new Date(`${startDate}T00:00:00Z`);
+    const end = new Date(`${endDate}T00:00:00Z`);
+    if (Number.isNaN(start.getTime())
+      || Number.isNaN(end.getTime())
+      || this.getUtcDateString(start) !== startDate
+      || this.getUtcDateString(end) !== endDate
+      || start > end) return [];
+
+    const dates = [];
+    for (const cursor = new Date(start); cursor <= end && dates.length <= 366; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+      dates.push(this.getUtcDateString(cursor));
+    }
+    return dates.length <= 366 ? dates : [];
+  }
+
   seedDefaultSettings() {
     const defaults = [
       { key: 'debt_limit_enabled', value: '0', description: 'Bật/tắt giới hạn nợ khi đặt cơm' },
@@ -2386,28 +2479,21 @@ class Database {
   // Đếm số ngày đặt liên tục gần nhất của khách hàng
   getConsecutiveOrderDays(name, callback) {
     const normalizedName = String(name || '').trim();
-    this.db.all(
-      `SELECT DISTINCT d.date FROM orders o JOIN days d ON d.id = o.day_id
-       WHERE LOWER(o.name) = LOWER(?)
-         AND strftime('%w', d.date) NOT IN ('0', '6')
-       ORDER BY d.date DESC`,
-      [normalizedName],
-      (err, rows = []) => {
-        if (err) { callback(err); return; }
-        if (!rows.length) { callback(null, 0); return; }
-
-        let consecutive = 1;
-        for (let i = 1; i < rows.length; i++) {
-          const expectedPrevious = this.getPreviousBusinessDate(rows[i - 1].date);
-          if (rows[i].date === expectedPrevious) {
-            consecutive++;
-          } else {
-            break;
-          }
+    this.getClosureDateSet((closureErr, closureDates) => {
+      if (closureErr) { callback(closureErr); return; }
+      this.db.all(
+        `SELECT DISTINCT d.date FROM orders o JOIN days d ON d.id = o.day_id
+         WHERE LOWER(o.name) = LOWER(?)
+           AND strftime('%w', d.date) NOT IN ('0', '6')
+         ORDER BY d.date DESC`,
+        [normalizedName],
+        (err, rows = []) => {
+          if (err) { callback(err); return; }
+          const dates = rows.map((row) => row.date).filter((date) => !closureDates.has(date));
+          callback(null, this.countConsecutiveBusinessDates(dates, closureDates));
         }
-        callback(null, consecutive);
-      }
-    );
+      );
+    });
   }
 
   getConsecutiveOrderDaysForUser(userId, callback) {
@@ -2424,21 +2510,24 @@ class Database {
       return;
     }
 
-    this.db.all(
-      `SELECT DISTINCT d.date
-       FROM orders o
-       JOIN days d ON d.id = o.day_id
-       WHERE o.user_id = ?
-         AND strftime('%w', d.date) NOT IN ('0', '6')
-       ORDER BY d.date DESC`,
-      [normalizedUserId],
-      (err, rows = []) => {
-        if (err) { callback(err); return; }
-        const dates = rows.map((row) => row.date);
-        const activeCount = this.countActiveConsecutiveBusinessDates(dates);
-        callback(null, dates.slice(0, activeCount));
-      }
-    );
+    this.getClosureDateSet((closureErr, closureDates) => {
+      if (closureErr) { callback(closureErr); return; }
+      this.db.all(
+        `SELECT DISTINCT d.date
+         FROM orders o
+         JOIN days d ON d.id = o.day_id
+         WHERE o.user_id = ?
+           AND strftime('%w', d.date) NOT IN ('0', '6')
+         ORDER BY d.date DESC`,
+        [normalizedUserId],
+        (err, rows = []) => {
+          if (err) { callback(err); return; }
+          const dates = rows.map((row) => row.date).filter((date) => !closureDates.has(date));
+          const activeCount = this.countActiveConsecutiveBusinessDates(dates, new Date(), closureDates);
+          callback(null, dates.slice(0, activeCount));
+        }
+      );
+    });
   }
 
   getConsecutiveOrderDatesForUserThroughDate(userId, throughDate, callback) {
@@ -2449,25 +2538,28 @@ class Database {
       return;
     }
 
-    this.db.all(
-      `SELECT DISTINCT d.date
-       FROM orders o
-       JOIN days d ON d.id = o.day_id
-       WHERE o.user_id = ?
-         AND d.date <= ?
-         AND strftime('%w', d.date) NOT IN ('0', '6')
-       ORDER BY d.date DESC`,
-      [normalizedUserId, normalizedDate],
-      (err, rows = []) => {
-        if (err) { callback(err); return; }
-        const dates = rows.map((row) => row.date);
-        if (!dates.length || dates[0] !== normalizedDate) {
-          callback(null, []);
-          return;
+    this.getClosureDateSet((closureErr, closureDates) => {
+      if (closureErr) { callback(closureErr); return; }
+      this.db.all(
+        `SELECT DISTINCT d.date
+         FROM orders o
+         JOIN days d ON d.id = o.day_id
+         WHERE o.user_id = ?
+           AND d.date <= ?
+           AND strftime('%w', d.date) NOT IN ('0', '6')
+         ORDER BY d.date DESC`,
+        [normalizedUserId, normalizedDate],
+        (err, rows = []) => {
+          if (err) { callback(err); return; }
+          const dates = rows.map((row) => row.date).filter((date) => !closureDates.has(date));
+          if (!dates.length || dates[0] !== normalizedDate) {
+            callback(null, []);
+            return;
+          }
+          callback(null, dates.slice(0, this.countConsecutiveBusinessDates(dates, closureDates)));
         }
-        callback(null, dates.slice(0, this.countConsecutiveBusinessDates(dates)));
-      }
-    );
+      );
+    });
   }
 
   getConsecutivePromoOverview(requiredDays, callback) {
@@ -2479,15 +2571,16 @@ class Database {
        ORDER BY name COLLATE NOCASE ASC`,
       (userErr, users = []) => {
         if (userErr) { callback(userErr); return; }
-
-        this.db.all(
-          `SELECT DISTINCT o.user_id, d.date
-           FROM orders o
-           JOIN days d ON d.id = o.day_id
-           WHERE o.user_id IS NOT NULL
-             AND strftime('%w', d.date) NOT IN ('0', '6')
-           ORDER BY o.user_id ASC, d.date DESC`,
-          (dateErr, dateRows = []) => {
+        this.getClosureDateSet((closureErr, closureDates) => {
+          if (closureErr) { callback(closureErr); return; }
+          this.db.all(
+            `SELECT DISTINCT o.user_id, d.date
+             FROM orders o
+             JOIN days d ON d.id = o.day_id
+             WHERE o.user_id IS NOT NULL
+               AND strftime('%w', d.date) NOT IN ('0', '6')
+             ORDER BY o.user_id ASC, d.date DESC`,
+            (dateErr, dateRows = []) => {
             if (dateErr) { callback(dateErr); return; }
 
             this.db.all(
@@ -2503,6 +2596,7 @@ class Database {
 
                 const datesByUser = new Map();
                 for (const row of dateRows) {
+                  if (closureDates.has(row.date)) continue;
                   const key = Number(row.user_id);
                   if (!datesByUser.has(key)) datesByUser.set(key, []);
                   datesByUser.get(key).push(row.date);
@@ -2515,7 +2609,7 @@ class Database {
                 }
                 const rows = users.map((user) => {
                   const dates = datesByUser.get(Number(user.id)) || [];
-                  const currentDays = this.countActiveConsecutiveBusinessDates(dates);
+                  const currentDays = this.countActiveConsecutiveBusinessDates(dates, new Date(), closureDates);
                   const userPromos = promosByUser.get(Number(user.id)) || [];
                   const cycleProgress = currentDays % normalizedRequiredDays;
                   const completedMilestone = Math.floor(currentDays / normalizedRequiredDays) * normalizedRequiredDays;
@@ -2553,19 +2647,20 @@ class Database {
                 callback(null, rows);
               }
             );
-          }
-        );
+            }
+          );
+        });
       }
     );
   }
 
-  countConsecutiveBusinessDates(dateRows) {
+  countConsecutiveBusinessDates(dateRows, closureDates = new Set()) {
     const dates = Array.isArray(dateRows) ? dateRows : [];
     if (!dates.length) return 0;
 
     let consecutive = 1;
     for (let i = 1; i < dates.length; i++) {
-      const expectedPrevious = this.getPreviousBusinessDate(dates[i - 1]);
+      const expectedPrevious = this.getPreviousBusinessDate(dates[i - 1], closureDates);
       if (dates[i] === expectedPrevious) {
         consecutive++;
       } else {
@@ -2575,22 +2670,22 @@ class Database {
     return consecutive;
   }
 
-  countActiveConsecutiveBusinessDates(dateRows, referenceDate = new Date()) {
+  countActiveConsecutiveBusinessDates(dateRows, referenceDate = new Date(), closureDates = new Set()) {
     const dates = Array.isArray(dateRows) ? dateRows : [];
     if (!dates.length) return 0;
 
     const latestOrderDate = dates[0];
-    const currentBusinessDate = this.getCurrentBusinessDateString(referenceDate);
-    const previousBusinessDate = this.getPreviousBusinessDate(currentBusinessDate);
+    const currentBusinessDate = this.getCurrentBusinessDateString(referenceDate, closureDates);
+    const previousBusinessDate = this.getPreviousBusinessDate(currentBusinessDate, closureDates);
 
     if (latestOrderDate !== currentBusinessDate && latestOrderDate !== previousBusinessDate) {
       return 0;
     }
 
-    return this.countConsecutiveBusinessDates(dates);
+    return this.countConsecutiveBusinessDates(dates, closureDates);
   }
 
-  getCurrentBusinessDateString(date = new Date()) {
+  getCurrentBusinessDateString(date = new Date(), closureDates = new Set()) {
     const parts = new Intl.DateTimeFormat('en-CA', {
       timeZone: 'Asia/Ho_Chi_Minh',
       year: 'numeric',
@@ -2605,22 +2700,33 @@ class Database {
       Number(parts.month) - 1,
       Number(parts.day)
     ));
-    while (current.getUTCDay() === 0 || current.getUTCDay() === 6) {
+    while (current.getUTCDay() === 0
+      || current.getUTCDay() === 6
+      || closureDates.has(this.getUtcDateString(current))) {
       current.setUTCDate(current.getUTCDate() - 1);
     }
-
-    const year = current.getUTCFullYear();
-    const month = String(current.getUTCMonth() + 1).padStart(2, '0');
-    const day = String(current.getUTCDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    return this.getUtcDateString(current);
   }
 
-  getPreviousBusinessDate(dateString) {
+  getPreviousBusinessDate(dateString, closureDates = new Set()) {
     const date = new Date(dateString + 'T00:00:00Z');
     do {
       date.setUTCDate(date.getUTCDate() - 1);
-    } while (date.getUTCDay() === 0 || date.getUTCDay() === 6);
+    } while (date.getUTCDay() === 0
+      || date.getUTCDay() === 6
+      || closureDates.has(this.getUtcDateString(date)));
 
+    return this.getUtcDateString(date);
+  }
+
+  getPreviousOpenBusinessDate(dateString, callback) {
+    this.getClosureDateSet((err, closureDates) => {
+      if (err) { callback(err); return; }
+      callback(null, this.getPreviousBusinessDate(dateString, closureDates));
+    });
+  }
+
+  getUtcDateString(date) {
     const year = date.getUTCFullYear();
     const month = String(date.getUTCMonth() + 1).padStart(2, '0');
     const day = String(date.getUTCDate()).padStart(2, '0');

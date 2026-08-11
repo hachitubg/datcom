@@ -457,6 +457,19 @@ function normalizeShopClosedSettings(settings = {}) {
   };
 }
 
+async function getShopClosedStatus(database, settings = {}, date = database.getDateString()) {
+  const scheduledClosure = await callDatabase(database, 'getShopClosureByDate', date);
+  if (scheduledClosure) {
+    return {
+      isClosed: true,
+      reason: scheduledClosure.reason,
+      date: scheduledClosure.closure_date,
+      source: 'schedule'
+    };
+  }
+  return { ...normalizeShopClosedSettings(settings), date, source: 'manual' };
+}
+
 async function ensureConsecutivePromoForUser(
   user,
   settingsInput = null,
@@ -557,7 +570,7 @@ async function runConsecutivePromoBatch(database) {
     }
 
     const users = await callDatabase(database, 'getUsers');
-    const throughDate = database.getPreviousBusinessDate(batchTime.date);
+    const throughDate = await callDatabase(database, 'getPreviousOpenBusinessDate', batchTime.date);
     let createdCount = 0;
     for (const user of users.filter((item) => item.role === 'user')) {
       const result = await ensureConsecutivePromoForUser(user, settings, database, throughDate);
@@ -682,19 +695,23 @@ app.get('/api/today', (req, res) => {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
-    db.getSettings(['order_cutoff_time', 'shop_closed_enabled', 'shop_closed_reason'], (settingsErr, settings) => {
+    db.getSettings(['order_cutoff_time', 'shop_closed_enabled', 'shop_closed_reason'], async (settingsErr, settings) => {
       if (settingsErr) {
         return res.status(500).json({ error: settingsErr.message });
       }
 
-      const cutoffTime = normalizeCutoffTime(settings.order_cutoff_time);
-      const shopClosed = normalizeShopClosedSettings(settings);
-      res.json({
-        ...data,
-        orderCutoffTime: cutoffTime,
-        orderCutoff: getOrderCutoffInfo(cutoffTime),
-        shopClosed
-      });
+      try {
+        const cutoffTime = normalizeCutoffTime(settings.order_cutoff_time);
+        const shopClosed = await getShopClosedStatus(db, settings);
+        res.json({
+          ...data,
+          orderCutoffTime: cutoffTime,
+          orderCutoff: getOrderCutoffInfo(cutoffTime),
+          shopClosed
+        });
+      } catch (closureErr) {
+        res.status(500).json({ error: closureErr.message });
+      }
     });
   });
 });
@@ -733,12 +750,17 @@ app.post('/api/orders', (req, res) => {
       'debt_limit_enabled',
       'debt_limit_servings',
       'debt_limit_message'
-    ], (settingsErr, settings) => {
+    ], async (settingsErr, settings) => {
       if (settingsErr) {
         return res.status(500).json({ error: settingsErr.message });
       }
 
-      const shopClosed = normalizeShopClosedSettings(settings);
+      let shopClosed;
+      try {
+        shopClosed = await getShopClosedStatus(db, settings);
+      } catch (closureErr) {
+        return res.status(500).json({ error: closureErr.message });
+      }
       if (shopClosed.isClosed) {
         return res.status(400).json({
           error: `Hôm nay quán tạm đóng cửa. ${shopClosed.reason}`
@@ -1700,6 +1722,54 @@ app.put('/api/admin/settings', (req, res) => {
   db.bulkUpdateSettings(settings, (err) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ success: true });
+  });
+});
+
+app.get('/api/admin/shop-closures', (req, res) => {
+  db.getShopClosureDates((err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows || []);
+  });
+});
+
+app.post('/api/admin/shop-closures', (req, res) => {
+  const startDate = String(req.body.startDate || '').trim();
+  const endDate = String(req.body.endDate || startDate).trim();
+  const reason = String(req.body.reason || '').trim();
+  const validDate = (value) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+    const parsed = new Date(`${value}T00:00:00Z`);
+    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+  };
+  if (!validDate(startDate) || !validDate(endDate) || startDate > endDate) {
+    return res.status(400).json({ error: 'Khoảng ngày nghỉ không hợp lệ' });
+  }
+  if (!reason || reason.length > 500) {
+    return res.status(400).json({ error: 'Vui lòng nhập lý do nghỉ (tối đa 500 ký tự)' });
+  }
+
+  db.upsertShopClosureRange(startDate, endDate, reason, (err, result) => {
+    if (err) return res.status(400).json({ error: err.message });
+    db.updateSetting('consecutive_promo_last_batch_date', '', (settingErr) => {
+      if (settingErr) return res.status(500).json({ error: settingErr.message });
+      runConsecutivePromoBatch(db);
+      res.json({ success: true, count: result.count });
+    });
+  });
+});
+
+app.delete('/api/admin/shop-closures/:date', (req, res) => {
+  const date = String(req.params.date || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return res.status(400).json({ error: 'Ngày nghỉ không hợp lệ' });
+  }
+  db.deleteShopClosureDate(date, (err, result) => {
+    if (err) return res.status(500).json({ error: err.message });
+    db.updateSetting('consecutive_promo_last_batch_date', '', (settingErr) => {
+      if (settingErr) return res.status(500).json({ error: settingErr.message });
+      runConsecutivePromoBatch(db);
+      res.json({ success: true, deleted: result.deleted });
+    });
   });
 });
 

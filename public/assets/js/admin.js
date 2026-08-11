@@ -1396,6 +1396,7 @@ async function resetUserPassword(id, encodedName) {
 // Settings Management
 // =============================================
 function loadSettings() {
+    loadShopClosures();
     fetch(`${API_BASE}/api/admin/settings`)
         .then(res => res.json())
         .then(settings => {
@@ -1421,6 +1422,85 @@ function toggleSettingsFields() {
     document.getElementById('consecutivePromoFields').style.display = promoEnabled ? 'block' : 'none';
     const shopClosedEnabled = document.getElementById('settingShopClosedEnabled').checked;
     document.getElementById('shopClosedFields').style.display = shopClosedEnabled ? 'block' : 'none';
+}
+
+function loadShopClosures() {
+    const list = document.getElementById('shopClosureList');
+    if (!list) return;
+    list.classList.add('loading');
+    fetch(`${API_BASE}/api/admin/shop-closures`)
+        .then(res => res.json().then(data => {
+            if (!res.ok || data.error) throw new Error(data.error || 'Không tải được lịch nghỉ');
+            return data;
+        }))
+        .then(rows => {
+            list.classList.remove('loading');
+            if (!rows.length) {
+                list.innerHTML = '<div class="shop-closure-empty">Chưa có ngày nghỉ nào được khai báo.</div>';
+                return;
+            }
+            list.innerHTML = rows.map(row => `
+                <div class="shop-closure-item">
+                    <div>
+                        <strong>${escapeHtml(formatDate(row.closure_date))}</strong>
+                        <span>${escapeHtml(row.reason)}</span>
+                    </div>
+                    <button class="btn-danger btn-small" type="button" onclick="deleteShopClosure('${row.closure_date}')">XÓA</button>
+                </div>
+            `).join('');
+        })
+        .catch(err => {
+            list.classList.remove('loading');
+            list.innerHTML = `<div class="error-message">${escapeHtml(err.message)}</div>`;
+        });
+}
+
+function addShopClosure() {
+    const startDate = document.getElementById('closureStartDate').value;
+    const endDate = document.getElementById('closureEndDate').value || startDate;
+    const reason = document.getElementById('closureReason').value.trim();
+    if (!startDate || !reason) {
+        showClosureMessage('Vui lòng chọn ngày và nhập lý do nghỉ.', true);
+        return;
+    }
+
+    fetch(`${API_BASE}/api/admin/shop-closures`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ startDate, endDate, reason })
+    })
+        .then(res => res.json().then(data => {
+            if (!res.ok || data.error) throw new Error(data.error || 'Không thêm được lịch nghỉ');
+            return data;
+        }))
+        .then(data => {
+            showClosureMessage(`Đã lưu ${data.count} ngày nghỉ. Chuỗi đặt cơm đã được tính lại.`);
+            document.getElementById('closureReason').value = '';
+            loadShopClosures();
+        })
+        .catch(err => showClosureMessage(err.message, true));
+}
+
+function deleteShopClosure(date) {
+    showPopup(`Xóa ngày nghỉ ${formatDate(date)}?`, { type: 'confirm', danger: true })
+        .then(confirmed => {
+            if (!confirmed) return;
+            fetch(`${API_BASE}/api/admin/shop-closures/${encodeURIComponent(date)}`, { method: 'DELETE' })
+                .then(res => res.json().then(data => {
+                    if (!res.ok || data.error) throw new Error(data.error || 'Không xóa được ngày nghỉ');
+                }))
+                .then(() => {
+                    showClosureMessage('Đã xóa ngày nghỉ và tính lại chuỗi đặt cơm.');
+                    loadShopClosures();
+                })
+                .catch(err => showClosureMessage(err.message, true));
+        });
+}
+
+function showClosureMessage(message, isError = false) {
+    const element = document.getElementById('closureMessage');
+    element.innerHTML = `<div class="${isError ? 'error-message' : 'success-message'}">${escapeHtml(message)}</div>`;
+    setTimeout(() => { element.innerHTML = ''; }, 4000);
 }
 
 document.getElementById('settingDebtLimitEnabled').addEventListener('change', toggleSettingsFields);

@@ -357,6 +357,39 @@
                     </div>
                 </div>
 
+                <!-- Lịch nghỉ -->
+                <div class="settings-card">
+                    <div class="settings-card-header">
+                        <div>
+                            <h3 class="settings-card-title">Lịch nghỉ của quán</h3>
+                            <p class="settings-card-desc">Ngày nghỉ sẽ không làm gián đoạn chuỗi đặt cơm của khách hàng</p>
+                        </div>
+                    </div>
+                    <div class="settings-card-body">
+                        <div class="filter-row">
+                            <div class="filter-field filter-field--grow">
+                                <label for="closureStartDate">Từ ngày</label>
+                                <input type="date" id="closureStartDate">
+                            </div>
+                            <div class="filter-field filter-field--grow">
+                                <label for="closureEndDate">Đến ngày</label>
+                                <input type="date" id="closureEndDate">
+                            </div>
+                        </div>
+                        <div class="filter-row">
+                            <div class="filter-field filter-field--grow">
+                                <label for="closureReason">Lý do nghỉ</label>
+                                <input type="text" id="closureReason" maxlength="500" placeholder="VD: Quán nghỉ thứ Hai và thứ Ba">
+                            </div>
+                            <div class="filter-actions">
+                                <button class="btn-primary btn-filter" type="button" onclick="addShopClosure()">THÊM LỊCH NGHỈ</button>
+                            </div>
+                        </div>
+                        <div id="closureMessage" style="margin-top:8px;"></div>
+                        <div id="shopClosureList" class="shop-closure-list loading">Đang tải lịch nghỉ...</div>
+                    </div>
+                </div>
+
                 <!-- Giới hạn nợ -->
                 <div class="settings-card">
                     <div class="settings-card-header">

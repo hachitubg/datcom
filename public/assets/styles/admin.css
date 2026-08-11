@@ -1768,6 +1768,46 @@ tr:hover {
     padding: 16px 20px;
 }
 
+.shop-closure-list {
+    display: grid;
+    gap: 8px;
+    margin-top: 14px;
+}
+
+.shop-closure-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--outline-variant);
+    border-radius: 8px;
+    background: var(--surface-container-low);
+}
+
+.shop-closure-item strong,
+.shop-closure-item span {
+    display: block;
+}
+
+.shop-closure-item strong {
+    font-size: 0.84rem;
+    color: var(--on-surface);
+}
+
+.shop-closure-item span,
+.shop-closure-empty {
+    margin-top: 2px;
+    font-size: 0.76rem;
+    color: var(--on-surface-variant);
+}
+
+@media (max-width: 600px) {
+    .shop-closure-item {
+        align-items: flex-start;
+    }
+}
+
 .order-row-edited {
     border-left: 4px solid #d18b00;
     background: #fffaf0;
