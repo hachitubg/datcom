@@ -1427,7 +1427,7 @@ function toggleSettingsFields() {
 
 function openShopClosureHistory() {
     shopClosurePage = 1;
-    document.getElementById('shopClosureHistoryModal').style.display = 'block';
+    document.getElementById('shopClosureHistoryModal').style.display = 'flex';
     loadShopClosureHistory(shopClosurePage);
 }
 
