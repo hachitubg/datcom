@@ -1768,6 +1768,31 @@ tr:hover {
     padding: 16px 20px;
 }
 
+.settings-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 0 0 auto;
+}
+
+.closure-history-note {
+    margin-top: 4px;
+    color: var(--on-surface-variant);
+    font-size: 0.8rem;
+}
+
+.closure-history-modal {
+    max-height: 88vh;
+    overflow-y: auto;
+}
+
+.closure-history-modal .pagination-wrap {
+    position: sticky;
+    bottom: -20px;
+    padding: 12px 0 4px;
+    background: var(--surface-container-lowest);
+}
+
 .shop-closure-list {
     display: grid;
     gap: 8px;
@@ -1803,6 +1828,15 @@ tr:hover {
 }
 
 @media (max-width: 600px) {
+    .settings-card-header {
+        align-items: flex-start;
+    }
+
+    .settings-header-actions {
+        flex-direction: column-reverse;
+        align-items: flex-end;
+    }
+
     .shop-closure-item {
         align-items: flex-start;
     }

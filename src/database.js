@@ -2256,13 +2256,32 @@ class Database {
   // =============================================
   // App Settings
   // =============================================
-  getShopClosureDates(callback) {
-    this.db.all(
-      `SELECT closure_date, reason, created_at
-       FROM shop_closure_dates
-       ORDER BY closure_date DESC`,
-      callback
-    );
+  getShopClosureDates(page, limit, callback) {
+    const parsedLimit = Number(limit);
+    const parsedPage = Number(page);
+    const normalizedLimit = Number.isFinite(parsedLimit) ? Math.max(1, Math.min(50, Math.floor(parsedLimit))) : 10;
+    const requestedPage = Number.isFinite(parsedPage) ? Math.max(1, Math.floor(parsedPage)) : 1;
+    this.db.get('SELECT COUNT(*) AS total FROM shop_closure_dates', (countErr, countRow) => {
+      if (countErr) { callback(countErr); return; }
+      const total = Number(countRow?.total || 0);
+      const totalPages = Math.max(1, Math.ceil(total / normalizedLimit));
+      const normalizedPage = Math.min(requestedPage, totalPages);
+      const offset = (normalizedPage - 1) * normalizedLimit;
+      this.db.all(
+        `SELECT closure_date, reason, created_at
+         FROM shop_closure_dates
+         ORDER BY closure_date DESC
+         LIMIT ? OFFSET ?`,
+        [normalizedLimit, offset],
+        (err, rows = []) => callback(err, {
+          rows,
+          page: normalizedPage,
+          limit: normalizedLimit,
+          total,
+          totalPages
+        })
+      );
+    });
   }
 
   getShopClosureByDate(date, callback) {

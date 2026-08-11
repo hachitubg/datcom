@@ -1395,8 +1395,9 @@ async function resetUserPassword(id, encodedName) {
 // =============================================
 // Settings Management
 // =============================================
+let shopClosurePage = 1;
+
 function loadSettings() {
-    loadShopClosures();
     fetch(`${API_BASE}/api/admin/settings`)
         .then(res => res.json())
         .then(settings => {
@@ -1424,22 +1425,36 @@ function toggleSettingsFields() {
     document.getElementById('shopClosedFields').style.display = shopClosedEnabled ? 'block' : 'none';
 }
 
-function loadShopClosures() {
-    const list = document.getElementById('shopClosureList');
+function openShopClosureHistory() {
+    shopClosurePage = 1;
+    document.getElementById('shopClosureHistoryModal').style.display = 'block';
+    loadShopClosureHistory(shopClosurePage);
+}
+
+function closeShopClosureHistory() {
+    document.getElementById('shopClosureHistoryModal').style.display = 'none';
+}
+
+function loadShopClosureHistory(page = 1) {
+    const list = document.getElementById('shopClosureHistoryList');
+    const pagination = document.getElementById('shopClosurePagination');
     if (!list) return;
     list.classList.add('loading');
-    fetch(`${API_BASE}/api/admin/shop-closures`)
+    list.innerHTML = 'Đang tải...';
+    pagination.innerHTML = '';
+    fetch(`${API_BASE}/api/admin/shop-closures?page=${page}&limit=8`)
         .then(res => res.json().then(data => {
             if (!res.ok || data.error) throw new Error(data.error || 'Không tải được lịch nghỉ');
             return data;
         }))
-        .then(rows => {
+        .then(data => {
+            shopClosurePage = data.page;
             list.classList.remove('loading');
-            if (!rows.length) {
+            if (!data.rows.length) {
                 list.innerHTML = '<div class="shop-closure-empty">Chưa có ngày nghỉ nào được khai báo.</div>';
                 return;
             }
-            list.innerHTML = rows.map(row => `
+            list.innerHTML = data.rows.map(row => `
                 <div class="shop-closure-item">
                     <div>
                         <strong>${escapeHtml(formatDate(row.closure_date))}</strong>
@@ -1448,37 +1463,16 @@ function loadShopClosures() {
                     <button class="btn-danger btn-small" type="button" onclick="deleteShopClosure('${row.closure_date}')">XÓA</button>
                 </div>
             `).join('');
+            pagination.innerHTML = `
+                <button class="btn-secondary btn-small" type="button" onclick="loadShopClosureHistory(${data.page - 1})" ${data.page <= 1 ? 'disabled' : ''}>TRƯỚC</button>
+                <span>Trang ${data.page}/${data.totalPages} · ${data.total} ngày nghỉ</span>
+                <button class="btn-secondary btn-small" type="button" onclick="loadShopClosureHistory(${data.page + 1})" ${data.page >= data.totalPages ? 'disabled' : ''}>SAU</button>
+            `;
         })
         .catch(err => {
             list.classList.remove('loading');
             list.innerHTML = `<div class="error-message">${escapeHtml(err.message)}</div>`;
         });
-}
-
-function addShopClosure() {
-    const startDate = document.getElementById('closureStartDate').value;
-    const endDate = document.getElementById('closureEndDate').value || startDate;
-    const reason = document.getElementById('closureReason').value.trim();
-    if (!startDate || !reason) {
-        showClosureMessage('Vui lòng chọn ngày và nhập lý do nghỉ.', true);
-        return;
-    }
-
-    fetch(`${API_BASE}/api/admin/shop-closures`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ startDate, endDate, reason })
-    })
-        .then(res => res.json().then(data => {
-            if (!res.ok || data.error) throw new Error(data.error || 'Không thêm được lịch nghỉ');
-            return data;
-        }))
-        .then(data => {
-            showClosureMessage(`Đã lưu ${data.count} ngày nghỉ. Chuỗi đặt cơm đã được tính lại.`);
-            document.getElementById('closureReason').value = '';
-            loadShopClosures();
-        })
-        .catch(err => showClosureMessage(err.message, true));
 }
 
 function deleteShopClosure(date) {
@@ -1490,15 +1484,16 @@ function deleteShopClosure(date) {
                     if (!res.ok || data.error) throw new Error(data.error || 'Không xóa được ngày nghỉ');
                 }))
                 .then(() => {
-                    showClosureMessage('Đã xóa ngày nghỉ và tính lại chuỗi đặt cơm.');
-                    loadShopClosures();
+                    showClosureHistoryMessage('Đã xóa ngày nghỉ và tính lại chuỗi đặt cơm.');
+                    loadShopClosureHistory(shopClosurePage);
+                    loadSettings();
                 })
-                .catch(err => showClosureMessage(err.message, true));
+                .catch(err => showClosureHistoryMessage(err.message, true));
         });
 }
 
-function showClosureMessage(message, isError = false) {
-    const element = document.getElementById('closureMessage');
+function showClosureHistoryMessage(message, isError = false) {
+    const element = document.getElementById('closureHistoryMessage');
     element.innerHTML = `<div class="${isError ? 'error-message' : 'success-message'}">${escapeHtml(message)}</div>`;
     setTimeout(() => { element.innerHTML = ''; }, 4000);
 }
@@ -1524,10 +1519,16 @@ function saveSettings() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings)
     })
-    .then(res => res.json())
+    .then(res => res.json().then(data => {
+        if (!res.ok || data.error) throw new Error(data.error || 'Không lưu được cài đặt');
+        return data;
+    }))
     .then(data => {
-        if (data.error) throw new Error(data.error);
-        document.getElementById('settingsMessage').innerHTML = '<div class="success-message">Lưu cài đặt thành công! ✅</div>';
+        const closureMessage = data.shopClosedToday
+            ? 'Quán đã được đóng hôm nay và lưu vào lịch sử nghỉ.'
+            : 'Đã lưu cài đặt. Quán đang mở hôm nay.';
+        document.getElementById('settingsMessage').innerHTML = `<div class="success-message">${escapeHtml(closureMessage)}</div>`;
+        loadSettings();
         setTimeout(() => { document.getElementById('settingsMessage').innerHTML = ''; }, 3000);
     })
     .catch(err => {
