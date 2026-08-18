@@ -823,9 +823,9 @@ class Database {
       rows.forEach((row) => {
         const originalName = (row.name || '').trim().replace(/\s+/g, ' ');
         if (!originalName) return;
-        const normalizedName = this.getSearchKey(originalName);
-        if (!uniqueMap.has(normalizedName)) {
-          uniqueMap.set(normalizedName, originalName);
+        const exactKey = originalName.toLocaleLowerCase('vi');
+        if (!uniqueMap.has(exactKey)) {
+          uniqueMap.set(exactKey, originalName);
         }
       });
 
@@ -848,8 +848,15 @@ class Database {
         return;
       }
 
-      const exactMatch = names.find((candidate) => this.getSearchKey(candidate) === searchKey);
-      callback(null, exactMatch || normalizedName);
+      const exactKey = normalizedName.toLocaleLowerCase('vi');
+      const exactMatch = names.find((candidate) => candidate.toLocaleLowerCase('vi') === exactKey);
+      if (exactMatch) {
+        callback(null, exactMatch);
+        return;
+      }
+
+      const normalizedMatches = names.filter((candidate) => this.getSearchKey(candidate) === searchKey);
+      callback(null, normalizedMatches.length === 1 ? normalizedMatches[0] : normalizedName);
     });
   }
 
@@ -1213,9 +1220,16 @@ class Database {
 
   markPaymentPaid(orderCode, paymentData, callback) {
     const normalizedOrderCode = Number(orderCode);
+    const incomingAmount = Number(paymentData.amount || 0);
     const dbConn = this.db;
     const orderAmountSql = this.getOrderAmountSql('o', 'd');
     let finished = false;
+
+    if (!Number.isFinite(normalizedOrderCode) || normalizedOrderCode <= 0
+      || !Number.isFinite(incomingAmount) || incomingAmount <= 0) {
+      callback(new Error('Dữ liệu thanh toán không hợp lệ'));
+      return;
+    }
 
     const done = (err) => {
       if (finished) return;
@@ -1274,14 +1288,13 @@ class Database {
                     const totalAmount = Number(totalRow?.total_amount || 0);
                     const paidAmount = Number(paidRow?.paid_amount || 0);
                     const remainingDebt = Math.max(0, totalAmount - paidAmount);
-                    const incomingAmount = Number(paymentData.amount || 0);
-                    const appliedAmount = Math.max(0, Math.min(incomingAmount, remainingDebt));
                     const reference = paymentData.reference || paymentData.code || paymentData.paymentLinkId || '';
                     const transactionDate = paymentData.transactionDateTime || paymentData.transactionDate || '';
                     const rawPayload = JSON.stringify({
                       ...paymentData,
                       incomingAmount,
-                      appliedAmount
+                      appliedAmount: incomingAmount,
+                      remainingDebtBeforePayment: remainingDebt
                     });
 
                     const finishUpdate = () => {
@@ -1305,20 +1318,20 @@ class Database {
                       );
                     };
 
-                    if (appliedAmount <= 0) {
-                      finishUpdate();
-                      return;
-                    }
-
                     dbConn.run(
-                      `INSERT OR IGNORE INTO payment_transactions
+                      `INSERT INTO payment_transactions
                         (day_id, customer_name, order_code, amount, status, reference, transaction_date, raw_payload)
-                       VALUES (?, ?, ?, ?, 'PAID', ?, ?, ?)`,
+                       VALUES (?, ?, ?, ?, 'PAID', ?, ?, ?)
+                       ON CONFLICT(order_code, status) DO UPDATE SET
+                         amount = MAX(payment_transactions.amount, excluded.amount),
+                         reference = CASE WHEN excluded.reference != '' THEN excluded.reference ELSE payment_transactions.reference END,
+                         transaction_date = CASE WHEN excluded.transaction_date != '' THEN excluded.transaction_date ELSE payment_transactions.transaction_date END,
+                         raw_payload = excluded.raw_payload`,
                       [
                         requestRow.day_id,
                         requestRow.customer_name,
                         normalizedOrderCode,
-                        appliedAmount,
+                        incomingAmount,
                         reference,
                         transactionDate,
                         rawPayload
@@ -1574,17 +1587,21 @@ class Database {
   }
 
 
-  getPendingPaymentRequests(limit, callback) {
+  getSyncablePaymentRequests(limit, callback) {
     const normalizedLimit = Math.max(1, Math.min(Number(limit) || 50, 200));
     this.db.all(
-      `SELECT id, order_code, amount, customer_name, payment_link_id, created_at, updated_at
+      `SELECT id, order_code, amount, customer_name, payment_link_id, status, created_at, updated_at
        FROM payment_requests
-       WHERE status = 'PENDING'
-       ORDER BY created_at ASC
+       WHERE status IN ('PENDING', 'SUPERSEDED')
+       ORDER BY CASE status WHEN 'PENDING' THEN 0 ELSE 1 END, created_at ASC
        LIMIT ?`,
       [normalizedLimit],
       callback
     );
+  }
+
+  getPendingPaymentRequests(limit, callback) {
+    this.getSyncablePaymentRequests(limit, callback);
   }
 
   updatePaymentRequestStatus(orderCode, status, callback) {

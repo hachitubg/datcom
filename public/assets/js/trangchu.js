@@ -797,29 +797,55 @@ document.getElementById('paymentList').addEventListener('click', (event) => {
     openPayQr(name);
 });
 
-window.openPayQr = function(name) {
-    fetch(`${API_BASE}/api/payments/create`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name })
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.error) {
-            throw new Error(data.error);
-        }
+const paymentCreationNames = new Set();
 
-        if (!data.payos || !data.payos.checkoutUrl) {
-            throw new Error('Không lấy được link thanh toán');
-        }
+window.openPayQr = async function(name) {
+    const lockKey = String(name || '').trim().toLocaleLowerCase('vi');
+    if (!lockKey || paymentCreationNames.has(lockKey)) return;
+    paymentCreationNames.add(lockKey);
 
-        // 👉 Redirect thẳng sang PayOS
-        window.location.href = data.payos.checkoutUrl;
-    })
-    .catch(err => {
-        showPopup(`Lỗi tạo thanh toán: ${err.message}`);
+    const matchingButtons = Array.from(document.querySelectorAll('.pay-btn')).filter((button) => {
+        const encoded = button.getAttribute('data-customer-name') || '';
+        return decodeURIComponent(encoded).trim().toLocaleLowerCase('vi') === lockKey;
     });
-}
+    matchingButtons.forEach((button) => {
+        button.disabled = true;
+        button.dataset.originalText = button.textContent;
+        button.textContent = 'Đang tạo mã...';
+    });
+
+    try {
+        const response = await fetch(`${API_BASE}/api/payments/create`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name })
+        });
+        const data = await response.json();
+        if (!response.ok || data.error) {
+            throw new Error(data.error || 'Không tạo được mã thanh toán');
+        }
+
+        if (data.paid) {
+            await showPopup(data.message || 'Đơn này đã được thanh toán đủ.');
+            loadPaymentList();
+            return;
+        }
+        if (!data.payos?.checkoutUrl) {
+            throw new Error('PayOS không trả về link thanh toán hợp lệ');
+        }
+
+        window.location.href = data.payos.checkoutUrl;
+    } catch (err) {
+        showPopup(`Lỗi tạo thanh toán: ${err.message}`);
+    } finally {
+        paymentCreationNames.delete(lockKey);
+        matchingButtons.forEach((button) => {
+            button.disabled = false;
+            button.textContent = button.dataset.originalText || 'Thanh toán';
+            delete button.dataset.originalText;
+        });
+    }
+};
 
 
 function togglePaymentHistoryInputs() {

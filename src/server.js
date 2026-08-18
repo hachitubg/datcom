@@ -39,17 +39,34 @@ app.post('/api/payments/webhook/payos',
 
       const isValidSignature = payos.verifyWebhook(parsedBody);
       if (!isValidSignature) {
-        console.log("Invalid signature");
-        return res.status(200).json({ ok: true }); // ⚠️ KHÔNG trả 400
+        console.error('[PayOS Webhook] Chữ ký không hợp lệ');
+        return res.status(400).json({ error: 'INVALID_SIGNATURE' });
       }
 
       const data = parsedBody.data;
+      if (parsedBody.success === false || parsedBody.code !== '00' || data.code !== '00') {
+        return res.status(200).json({ ok: true, ignored: true });
+      }
       const orderCode = Number(data.orderCode);
       const amount = Number(data.amount || 0);
+      if (!Number.isFinite(orderCode) || orderCode <= 0 || !Number.isFinite(amount) || amount <= 0) {
+        return res.status(400).json({ error: 'INVALID_PAYMENT_DATA' });
+      }
 
-      markPaymentPaidAcrossSites(orderCode, { amount, raw: parsedBody }, (err) => {
+      markPaymentPaidAcrossSites(orderCode, {
+        amount,
+        reference: data.reference || '',
+        transactionDateTime: data.transactionDateTime || '',
+        code: data.code || '',
+        paymentLinkId: data.paymentLinkId || '',
+        raw: parsedBody
+      }, (err) => {
         if (err) {
-          console.error("DB error:", err);
+          if (isPaymentRequestNotFoundError(err)) {
+            console.warn(`[PayOS Webhook] Không tìm thấy orderCode=${orderCode}; có thể là webhook kiểm tra cấu hình.`);
+            return res.status(200).json({ ok: true, ignored: true });
+          }
+          console.error('[PayOS Webhook] DB error:', err);
           return res.status(500).json({ error: err.message });
         }
 
@@ -390,7 +407,7 @@ function getOrderCutoffInfo(cutoffTime, now = new Date()) {
 }
 
 function buildOrderCode() {
-  return Number(`${Date.now().toString().slice(-10)}${Math.floor(Math.random() * 90 + 10)}`);
+  return Number(`${Date.now().toString().slice(-9)}${crypto.randomInt(100000, 1000000)}`);
 }
 
 function getPublicBaseUrl(req) {
@@ -597,6 +614,10 @@ async function syncOrderCodeFromPayOS(orderCode, database = getActiveDb()) {
   const amount = Number(paymentInfo.amount || paidAmount || 0);
   const status = String(paymentInfo.status || '').toUpperCase();
   const paidStatuses = PAID_PAYMENT_STATUSES;
+  const transactions = Array.isArray(paymentInfo.transactions) ? paymentInfo.transactions : [];
+  const latestTransaction = transactions.slice().sort((a, b) => (
+    String(b.transactionDateTime || '').localeCompare(String(a.transactionDateTime || ''))
+  ))[0] || {};
 
   if (paidStatuses.has(status) || paidAmount > 0) {
     return new Promise((resolve, reject) => {
@@ -604,10 +625,10 @@ async function syncOrderCodeFromPayOS(orderCode, database = getActiveDb()) {
         orderCode,
         {
           amount: paidAmount > 0 ? paidAmount : amount,
-          reference: paymentInfo.reference || paymentInfo.paymentLinkId || '',
-          transactionDateTime: paymentInfo.transactionDateTime || paymentInfo.transactionDate || '',
+          reference: latestTransaction.reference || paymentInfo.reference || paymentInfo.paymentLinkId || paymentInfo.id || '',
+          transactionDateTime: latestTransaction.transactionDateTime || paymentInfo.transactionDateTime || paymentInfo.transactionDate || '',
           code: paymentInfo.code || '',
-          paymentLinkId: paymentInfo.paymentLinkId || '',
+          paymentLinkId: paymentInfo.paymentLinkId || paymentInfo.id || '',
           raw: paymentInfo
         },
         (err) => {
@@ -638,6 +659,23 @@ async function syncOrderCodeFromPayOS(orderCode, database = getActiveDb()) {
 }
 
 const PAID_PAYMENT_STATUSES = new Set(['PAID', 'SUCCESS', 'SUCCEEDED']);
+const paymentCreationLocks = new WeakMap();
+
+function acquirePaymentCreationLock(database, customerName) {
+  if (!paymentCreationLocks.has(database)) paymentCreationLocks.set(database, new Set());
+  const locks = paymentCreationLocks.get(database);
+  const key = database.getSearchKey(customerName);
+  if (locks.has(key)) return null;
+  locks.add(key);
+  return () => locks.delete(key);
+}
+
+function isPayOSPaymentNotFoundError(error) {
+  const message = String(error?.message || '').toLowerCase();
+  return error?.statusCode === 404
+    || message.includes('mã thanh toán không tồn tại')
+    || message.includes('payment link not found');
+}
 
 let isSyncingPendingPayOS = false;
 
@@ -655,7 +693,7 @@ async function syncPendingPaymentsFromPayOS() {
     let updatedCount = 0;
     for (const database of getAllSiteDatabases()) {
       const pendingRows = await new Promise((resolve, reject) => {
-        database.getPendingPaymentRequests(50, (err, rows = []) => {
+        database.getSyncablePaymentRequests(25, (err, rows = []) => {
           if (err) {
             reject(err);
             return;
@@ -673,8 +711,15 @@ async function syncPendingPaymentsFromPayOS() {
             console.log(`[PayOS Sync] Updated PAID for orderCode=${row.order_code}`);
           }
         } catch (orderErr) {
+          if (isPayOSPaymentNotFoundError(orderErr)) {
+            await callDatabase(database, 'updatePaymentRequestStatus', row.order_code, 'NOT_FOUND');
+            console.warn(`[PayOS Sync] Marked NOT_FOUND for orderCode=${row.order_code}`);
+            await new Promise((resolve) => setTimeout(resolve, 1200));
+            continue;
+          }
           console.error(`[PayOS Sync] Failed orderCode=${row.order_code}:`, orderErr.message);
         }
+        await new Promise((resolve) => setTimeout(resolve, 1200));
       }
     }
 
@@ -1089,6 +1134,22 @@ app.post('/api/payments/create', async (req, res) => {
     });
   }
 
+  const activeDatabase = getActiveDb();
+  const releasePaymentCreationLock = acquirePaymentCreationLock(activeDatabase, name);
+  if (!releasePaymentCreationLock) {
+    return res.status(409).json({
+      error: 'Hệ thống đang tạo mã thanh toán cho khách này. Vui lòng chờ trong giây lát.'
+    });
+  }
+  let paymentLockReleased = false;
+  const releaseOnce = () => {
+    if (paymentLockReleased) return;
+    paymentLockReleased = true;
+    releasePaymentCreationLock();
+  };
+  res.once('finish', releaseOnce);
+  res.once('close', releaseOnce);
+
   db.getTodayCustomerPayment(name, async (err, paymentInfo) => {
     if (err) {
       return res.status(400).json({ error: err.message });
@@ -1188,7 +1249,10 @@ app.post('/api/payments/create', async (req, res) => {
             return res.status(500).json({ error: saveErr.message });
           }
 
-          db.supersedePendingPaymentRequests(name, orderCode, () => {
+          db.supersedePendingPaymentRequests(name, orderCode, (supersedeErr) => {
+            if (supersedeErr) {
+              return res.status(500).json({ error: supersedeErr.message });
+            }
             res.json({
               paid: false,
               paymentInfo: activePaymentInfo,
@@ -1949,7 +2013,10 @@ app.get('/api/auth/me', (req, res) => {
   });
 });
 
-const payosAutoSyncMs = Number(process.env.PAYOS_AUTO_SYNC_MS || 30000);
+const configuredPayOSAutoSyncMs = Number(process.env.PAYOS_AUTO_SYNC_MS || 60000);
+const payosAutoSyncMs = Number.isFinite(configuredPayOSAutoSyncMs)
+  ? Math.max(60000, configuredPayOSAutoSyncMs)
+  : 60000;
 if (payos.isConfigured()) {
   setTimeout(() => {
     syncPendingPaymentsFromPayOS();
