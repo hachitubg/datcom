@@ -408,6 +408,10 @@ textarea {
     align-items: stretch;
 }
 
+#newPromoUserSearch {
+    margin-bottom: 8px;
+}
+
 .promo-code-input-row input {
     flex: 1;
 }

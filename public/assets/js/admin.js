@@ -1159,6 +1159,29 @@ function loadConsecutiveStreaks() {
         });
 }
 
+let promoUserAccounts = [];
+
+function renderPromoUserOptions(searchValue = '') {
+    const select = document.getElementById('newPromoUser');
+    if (!select) return;
+    const selectedValue = select.value;
+    const searchKey = AppUtils.getSearchKey(searchValue);
+    const filteredUsers = promoUserAccounts.filter((user) => {
+        if (!searchKey) return true;
+        return AppUtils.getSearchKey(`${user.name} ${user.phone}`).includes(searchKey);
+    });
+    const userOptions = filteredUsers
+        .map(user => `<option value="${user.id}">${escapeHtml(user.name)} - ${escapeHtml(user.phone)}</option>`)
+        .join('');
+    const emptyOption = searchKey && !filteredUsers.length
+        ? '<option value="" disabled>Không tìm thấy tài khoản phù hợp</option>'
+        : '';
+    select.innerHTML = `<option value="">Không gửi tới tài khoản cụ thể</option>${emptyOption}${userOptions}`;
+    if (filteredUsers.some((user) => String(user.id) === selectedValue)) {
+        select.value = selectedValue;
+    }
+}
+
 function loadPromoUserOptions() {
     const select = document.getElementById('newPromoUser');
     if (!select) return;
@@ -1166,16 +1189,17 @@ function loadPromoUserOptions() {
     fetch(`${API_BASE}/api/admin/users`)
         .then(res => res.json())
         .then(users => {
-            const userOptions = (users || [])
-                .filter(u => u.role === 'user')
-                .map(u => `<option value="${u.id}">${escapeHtml(u.name)} - ${escapeHtml(u.phone)}</option>`)
-                .join('');
-            select.innerHTML = `<option value="">Không gửi tới tài khoản cụ thể</option>${userOptions}`;
+            promoUserAccounts = (users || []).filter(user => user.role === 'user');
+            renderPromoUserOptions(document.getElementById('newPromoUserSearch')?.value || '');
         })
         .catch(() => {
             select.innerHTML = '<option value="">Không tải được danh sách tài khoản</option>';
         });
 }
+
+document.getElementById('newPromoUserSearch')?.addEventListener('input', (event) => {
+    renderPromoUserOptions(event.target.value);
+});
 
 function loadPromoCodes() {
     const container = document.getElementById('promoCodeList');
@@ -1271,6 +1295,10 @@ function createPromoCode() {
         if (document.getElementById('newPromoUser')) {
             document.getElementById('newPromoUser').value = '';
         }
+        if (document.getElementById('newPromoUserSearch')) {
+            document.getElementById('newPromoUserSearch').value = '';
+            renderPromoUserOptions('');
+        }
         loadPromoCodes();
     })
     .catch(err => {
@@ -1293,13 +1321,23 @@ async function deletePromoCode(id) {
 // =============================================
 // User Management
 // =============================================
-function loadUsers() {
-    const container = document.getElementById('userList');
-    container.innerHTML = '<div class="loading">Đang tải...</div>';
+let userCurrentPage = 1;
+const USER_PAGE_SIZE = 10;
 
-    fetch(`${API_BASE}/api/admin/users`)
-        .then(res => res.json())
-        .then(users => {
+function loadUsers(page = userCurrentPage) {
+    const container = document.getElementById('userList');
+    const pagination = document.getElementById('userPagination');
+    container.innerHTML = '<div class="loading">Đang tải...</div>';
+    pagination.innerHTML = '';
+
+    fetch(`${API_BASE}/api/admin/users?page=${page}&limit=${USER_PAGE_SIZE}`)
+        .then(res => res.json().then(data => {
+            if (!res.ok || data.error) throw new Error(data.error || 'Không tải được danh sách người dùng');
+            return data;
+        }))
+        .then(data => {
+            const users = data.rows || [];
+            userCurrentPage = data.page || 1;
             if (!users || !users.length) {
                 container.innerHTML = '<div style="padding:14px; color:#999; text-align:center;">Chưa có người dùng nào.</div>';
                 return;
@@ -1322,6 +1360,11 @@ function loadUsers() {
                     </div>
                 `;
             }).join('');
+            pagination.innerHTML = `
+                <button class="btn-secondary btn-small" type="button" onclick="loadUsers(${data.page - 1})" ${data.page <= 1 ? 'disabled' : ''}>TRƯỚC</button>
+                <span>Trang ${data.page}/${data.totalPages} · ${data.total} tài khoản</span>
+                <button class="btn-secondary btn-small" type="button" onclick="loadUsers(${data.page + 1})" ${data.page >= data.totalPages ? 'disabled' : ''}>SAU</button>
+            `;
         })
         .catch(err => {
             container.innerHTML = `<div style="padding:14px; color:red; text-align:center;">Lỗi: ${err.message}</div>`;
@@ -1352,7 +1395,7 @@ function createUser() {
         document.getElementById('newUserPhone').value = '';
         document.getElementById('newUserName').value = '';
         document.getElementById('newUserPassword').value = '';
-        loadUsers();
+        loadUsers(1);
     })
     .catch(err => {
         msgEl.innerHTML = `<div class="error-message">${err.message}</div>`;
@@ -1367,7 +1410,7 @@ async function deleteUser(id, encodedName) {
         .then(res => res.json())
         .then(data => {
             if (data.error) throw new Error(data.error);
-            loadUsers();
+            loadUsers(userCurrentPage);
         })
         .catch(err => showPopup('Lỗi xóa: ' + err.message));
 }

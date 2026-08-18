@@ -773,7 +773,7 @@ app.get('/api/orders/today', (req, res) => {
 
 // Tạo đơn hàng mới
 app.post('/api/orders', (req, res) => {
-  const normalizedCustomerName = normalizeName(req.body.name);
+  let normalizedCustomerName = normalizeName(req.body.name);
   const { quantity, description } = req.body;
   const promoCode = (req.body.promoCode || '').trim() || null;
 
@@ -787,8 +787,24 @@ app.post('/api/orders', (req, res) => {
     }
 
     const userId = user ? user.id : null;
+    if (user) {
+      normalizedCustomerName = normalizeName(user.name);
+      continueOrderCreation();
+      return;
+    }
 
-    db.getSettings([
+    db.findRegisteredUserByName(normalizedCustomerName, (nameErr, registeredUser) => {
+      if (nameErr) return res.status(500).json({ error: nameErr.message });
+      if (registeredUser) {
+        return res.status(409).json({
+          error: 'Tên này đã được đăng ký tài khoản. Vui lòng sử dụng tên khác hoặc đăng nhập để đặt cơm.'
+        });
+      }
+      continueOrderCreation();
+    });
+
+    function continueOrderCreation() {
+      db.getSettings([
       'order_cutoff_time',
       'shop_closed_enabled',
       'shop_closed_reason',
@@ -850,6 +866,7 @@ app.post('/api/orders', (req, res) => {
         proceedWithOrder();
       });
     });
+    }
   });
 });
 
@@ -1705,6 +1722,16 @@ app.delete('/api/admin/promo-codes/:id', (req, res) => {
 // Admin: User Management
 // =============================================
 app.get('/api/admin/users', (req, res) => {
+  if (req.query.page !== undefined) {
+    const page = Math.max(1, Math.floor(Number(req.query.page) || 1));
+    const limit = Math.max(1, Math.min(50, Math.floor(Number(req.query.limit) || 10)));
+    db.getUsersPage(page, limit, (err, result) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json(result);
+    });
+    return;
+  }
+
   db.getUsers((err, users) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json(users || []);

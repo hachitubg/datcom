@@ -219,6 +219,17 @@ class Database {
       .replace(/['\s]+/g, '');
   }
 
+  parseMenuValue(value) {
+    if (typeof value !== 'string') return value;
+    const trimmed = value.trim();
+    if (!trimmed || !['{', '['].includes(trimmed[0])) return value;
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return value;
+    }
+  }
+
   matchesNameSearch(name, searchKeyword) {
     const keyword = this.getSearchKey(searchKeyword);
     if (!keyword) return true;
@@ -249,7 +260,6 @@ class Database {
           this.ensureTodayRecord();
           this.getTodayInfo(callback);
         } else {
-          console.log('📦 Raw menu từ DB:', row.menu);
           // Đếm số lượng đã đặt
           this.db.get(
             `SELECT SUM(quantity) as ordered FROM orders WHERE day_id = ?`,
@@ -261,20 +271,10 @@ class Database {
                 const ordered = (orderRow && orderRow.ordered) || 0;
                 const remaining = row.quantity - ordered;
                 
-                // Parse menu nếu là JSON string
-                let menu = row.menu;
-                try {
-                  menu = JSON.parse(row.menu);
-                  console.log('✅ Parsed menu object:', menu);
-                } catch (e) {
-                  console.warn('⚠️  Không parse được JSON, giữ nguyên string:', row.menu);
-                  // Nếu không phải JSON, giữ nguyên string
-                }
-                
                 callback(null, {
                   id: row.id,
                   date: row.date,
-                  menu: menu,
+                  menu: this.parseMenuValue(row.menu),
                   quantity: row.quantity,
                   ordered: ordered,
                   remaining: Math.max(0, remaining),
@@ -557,19 +557,11 @@ class Database {
                 const ordered = orders.reduce((sum, o) => sum + (o.is_deleted ? 0 : o.quantity), 0);
                 console.log('📋 Tìm thấy', orders.length, 'đơn hàng');
                 
-                // Parse menu if it's JSON
-                let menu = dayRow.menu;
-                try {
-                  menu = JSON.parse(dayRow.menu);
-                } catch (e) {
-                  // Keep as string if not JSON
-                }
-                
                 callback(null, {
                   day: {
                     id: dayRow.id,
                     date: dayRow.date,
-                    menu: menu,
+                    menu: this.parseMenuValue(dayRow.menu),
                     quantity: dayRow.quantity,
                     price: dayRow.price,
                     ordered: ordered,
@@ -2096,21 +2088,29 @@ class Database {
   }
 
   createUser(phone, name, passwordHash, salt, role, callback) {
-    this.db.run(
-      `INSERT INTO users (phone, name, password_hash, salt, role) VALUES (?, ?, ?, ?, ?)`,
-      [phone, name, passwordHash, salt, role || 'user'],
-      function(err) {
-        if (err) {
-          if (err.message && err.message.includes('UNIQUE')) {
-            callback(new Error('Số điện thoại đã được đăng ký'));
-          } else {
-            callback(err);
-          }
-          return;
-        }
-        callback(null, { id: this.lastID, phone, name, role: role || 'user' });
+    this.findRegisteredUserByName(name, (nameErr, existingUser) => {
+      if (nameErr) { callback(nameErr); return; }
+      if (existingUser) {
+        callback(new Error('Tên người dùng đã được đăng ký. Vui lòng sử dụng tên khác.'));
+        return;
       }
-    );
+
+      this.db.run(
+        `INSERT INTO users (phone, name, password_hash, salt, role) VALUES (?, ?, ?, ?, ?)`,
+        [phone, name, passwordHash, salt, role || 'user'],
+        function onCreateUser(err) {
+          if (err) {
+            if (err.message && err.message.includes('UNIQUE')) {
+              callback(new Error('Số điện thoại đã được đăng ký'));
+            } else {
+              callback(err);
+            }
+            return;
+          }
+          callback(null, { id: this.lastID, phone, name, role: role || 'user' });
+        }
+      );
+    });
   }
 
   getUserByPhone(phone, callback) {
@@ -2164,6 +2164,49 @@ class Database {
     );
   }
 
+  getUsersPage(page, limit, callback) {
+    const normalizedLimit = Math.max(1, Math.min(50, Math.floor(Number(limit) || 10)));
+    const requestedPage = Math.max(1, Math.floor(Number(page) || 1));
+    this.db.get('SELECT COUNT(*) AS total FROM users', (countErr, countRow) => {
+      if (countErr) { callback(countErr); return; }
+      const total = Number(countRow?.total || 0);
+      const totalPages = Math.max(1, Math.ceil(total / normalizedLimit));
+      const normalizedPage = Math.min(requestedPage, totalPages);
+      this.db.all(
+        `SELECT id, phone, name, role, created_at, COALESCE(session_version, 1) AS session_version
+         FROM users ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`,
+        [normalizedLimit, (normalizedPage - 1) * normalizedLimit],
+        (err, rows = []) => callback(err, {
+          rows,
+          page: normalizedPage,
+          limit: normalizedLimit,
+          total,
+          totalPages
+        })
+      );
+    });
+  }
+
+  findRegisteredUserByName(name, excludeUserId, callback) {
+    if (typeof excludeUserId === 'function') {
+      callback = excludeUserId;
+      excludeUserId = 0;
+    }
+    const searchKey = this.getSearchKey(name);
+    if (!searchKey) {
+      callback(null, null);
+      return;
+    }
+    this.db.all(
+      'SELECT id, phone, name, role FROM users WHERE id != ?',
+      [Number(excludeUserId || 0)],
+      (err, rows = []) => {
+        if (err) { callback(err); return; }
+        callback(null, rows.find((user) => this.getSearchKey(user.name) === searchKey) || null);
+      }
+    );
+  }
+
   updateUserName(id, newName, callback) {
     const userId = Number(id);
     const normalizedNewName = String(newName || '').trim().replace(/\s+/g, ' ');
@@ -2172,7 +2215,14 @@ class Database {
       return;
     }
 
-    this.getUserById(userId, (userErr, user) => {
+    this.findRegisteredUserByName(normalizedNewName, userId, (nameErr, existingUser) => {
+      if (nameErr) { callback(nameErr); return; }
+      if (existingUser) {
+        callback(new Error('Tên người dùng đã được đăng ký. Vui lòng sử dụng tên khác.'));
+        return;
+      }
+
+      this.getUserById(userId, (userErr, user) => {
       if (userErr) {
         callback(userErr);
         return;
@@ -2267,6 +2317,7 @@ class Database {
             );
           }
         );
+      });
       });
     });
   }

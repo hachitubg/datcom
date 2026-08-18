@@ -258,6 +258,7 @@
                         </div>
                         <div class="filter-field filter-field--grow">
                             <label for="newPromoUser">Gửi trực tiếp tới tài khoản</label>
+                            <input type="search" id="newPromoUserSearch" placeholder="Tìm theo tên hoặc số điện thoại..." autocomplete="off">
                             <select id="newPromoUser">
                                 <option value="">Không gửi tới tài khoản cụ thể</option>
                             </select>
@@ -326,6 +327,7 @@
 
                 <h3 class="section-subtitle" style="margin-top:20px;">DANH SÁCH NGƯỜI DÙNG</h3>
                 <div id="userList" class="loading">Đang tải...</div>
+                <div id="userPagination" class="pagination-wrap"></div>
             </div>
         </div>
         <!-- =============================================
