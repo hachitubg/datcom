@@ -408,8 +408,58 @@ textarea {
     align-items: stretch;
 }
 
-#newPromoUserSearch {
-    margin-bottom: 8px;
+.promo-create-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 180px;
+    gap: 16px;
+    margin-top: 14px;
+}
+
+.promo-recipient-field {
+    grid-column: 1 / -1;
+    padding-top: 14px;
+    border-top: 1px solid var(--outline-variant);
+}
+
+.promo-recipient-controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 1fr);
+    gap: 10px;
+}
+
+.promo-recipient-controls .search-input-wrap,
+.promo-recipient-controls input,
+.promo-recipient-controls select,
+.promo-discount-field input,
+.promo-code-input-row input,
+.promo-generate-btn {
+    min-height: 46px;
+}
+
+.promo-recipient-controls input,
+.promo-recipient-controls select {
+    width: 100%;
+}
+
+.promo-recipient-field .form-hint {
+    margin-top: 6px;
+}
+
+.promo-create-footer {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.promo-create-footer .btn-primary {
+    flex: 0 0 auto;
+    min-width: 132px;
+}
+
+#promoAdminMessage {
+    flex: 1;
+    min-width: 0;
 }
 
 .promo-code-input-row input {
@@ -419,6 +469,27 @@ textarea {
 .promo-generate-btn {
     white-space: nowrap;
     padding: 10px 14px;
+}
+
+@media (max-width: 700px) {
+    .promo-create-grid,
+    .promo-recipient-controls {
+        grid-template-columns: 1fr;
+    }
+
+    .promo-code-input-row {
+        flex-direction: column;
+    }
+
+    .promo-generate-btn,
+    .promo-create-footer .btn-primary {
+        width: 100%;
+    }
+
+    .promo-create-footer {
+        align-items: stretch;
+        flex-direction: column;
+    }
 }
 
 .filter-input {
@@ -1871,6 +1942,270 @@ tr:hover {
 
 .order-change-edited { color: #895b00; background: #fff0c7; }
 .order-change-deleted { color: #a32323; background: #ffd9d9; }
+
+.order-tools-details {
+    margin-bottom: 12px;
+    border: 1px solid var(--outline-variant);
+    border-radius: 8px;
+    background: var(--surface-container-lowest);
+}
+
+.order-tools-details > summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 46px;
+    padding: 10px 13px;
+    color: var(--on-surface);
+    cursor: pointer;
+    font-size: 0.82rem;
+    font-weight: 700;
+    list-style: none;
+}
+
+.order-tools-details > summary::-webkit-details-marker {
+    display: none;
+}
+
+.order-tools-details > summary::after {
+    content: 'Mở';
+    flex: 0 0 auto;
+    color: var(--primary);
+    font-size: 0.72rem;
+}
+
+.order-tools-details[open] > summary::after {
+    content: 'Đóng';
+}
+
+.order-tools-details > summary small {
+    min-width: 0;
+    margin-left: auto;
+    color: var(--on-surface-variant);
+    font-size: 0.7rem;
+    font-weight: 500;
+    overflow-wrap: anywhere;
+}
+
+.order-tools-content {
+    margin: 0;
+    border: 0;
+    border-top: 1px solid var(--outline-variant);
+    border-radius: 0 0 8px 8px;
+    box-shadow: none;
+}
+
+.kitchen-summary {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.kitchen-summary > div {
+    min-width: 0;
+    padding: 11px 12px;
+    border: 1px solid var(--outline-variant);
+    border-radius: 8px;
+    background: var(--surface-container-lowest);
+}
+
+.kitchen-summary span,
+.kitchen-summary strong {
+    display: block;
+}
+
+.kitchen-summary span {
+    color: var(--on-surface-variant);
+    font-size: 0.7rem;
+}
+
+.kitchen-summary strong {
+    margin-top: 3px;
+    color: var(--on-surface);
+    font-size: 1rem;
+}
+
+.kitchen-summary .has-alert {
+    border-color: #c33b3b;
+    background: #fff3f3;
+}
+
+.kitchen-summary .has-alert strong {
+    color: #a32323;
+}
+
+.kitchen-filter-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+    overflow-x: auto;
+    scrollbar-width: thin;
+}
+
+.kitchen-filter-btn {
+    flex: 0 0 auto;
+    min-height: 40px;
+    padding: 8px 14px;
+    border: 1px solid var(--outline-variant);
+    border-radius: 8px;
+    background: var(--surface-container-lowest);
+    color: var(--on-surface-variant);
+    font-size: 0.78rem;
+}
+
+.kitchen-filter-btn.active {
+    border-color: var(--primary);
+    background: var(--primary);
+    color: var(--on-primary);
+}
+
+.kitchen-order-card {
+    align-items: stretch;
+    gap: 12px;
+    border: 1px solid var(--outline-variant);
+    box-shadow: none;
+}
+
+.kitchen-order-main {
+    min-width: 0;
+}
+
+.kitchen-order-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.kitchen-quantity {
+    flex: 0 0 auto;
+    padding: 5px 8px;
+    border-radius: 6px;
+    background: var(--surface-container-high);
+    color: var(--on-surface);
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.kitchen-order-number {
+    color: var(--on-surface-variant);
+    font-weight: 800;
+}
+
+.kitchen-order-controls {
+    display: flex;
+    flex: 0 0 220px;
+    flex-direction: column;
+    justify-content: center;
+    gap: 8px;
+}
+
+.kitchen-check {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-height: 44px;
+    padding: 9px 11px;
+    border: 1px solid #8b9d7b;
+    border-radius: 8px;
+    background: #f5faef;
+    color: #36572e;
+    cursor: pointer;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.kitchen-check input {
+    width: 22px;
+    height: 22px;
+    margin: 0;
+    accent-color: #4f7a42;
+}
+
+.kitchen-check.checked {
+    background: #e5f2dc;
+}
+
+.kitchen-cancel-btn {
+    min-height: 44px;
+    padding: 9px 11px;
+    border-radius: 8px;
+    background: #a32323;
+    color: #fff;
+    font-size: 0.78rem;
+}
+
+.kitchen-cancel-btn.handled {
+    background: #e7e7e7;
+    color: #555;
+}
+
+.kitchen-order-done {
+    background: #f7faf5;
+    border-color: #b7c9aa;
+}
+
+.kitchen-order-done .order-name {
+    color: #4a6742;
+}
+
+.kitchen-completed-time {
+    margin-top: 5px;
+    color: #4f7a42;
+    font-size: 0.72rem;
+    font-weight: 600;
+}
+
+.kitchen-empty {
+    padding: 24px 12px;
+    color: var(--on-surface-variant);
+    text-align: center;
+}
+
+@media (max-width: 700px) {
+    .order-tools-details > summary {
+        align-items: flex-start;
+        flex-wrap: wrap;
+    }
+
+    .order-tools-details > summary small {
+        order: 3;
+        width: 100%;
+        margin-left: 0;
+    }
+
+    .kitchen-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .kitchen-filter-bar {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        overflow: visible;
+    }
+
+    .kitchen-filter-btn {
+        width: 100%;
+    }
+
+    .kitchen-order-card {
+        flex-direction: column;
+        padding: 12px;
+    }
+
+    .kitchen-order-controls {
+        flex: 0 0 auto;
+        width: 100%;
+    }
+
+    .kitchen-order-controls .edit-icon-btn,
+    .kitchen-check,
+    .kitchen-cancel-btn {
+        width: 100%;
+    }
+}
 
 .streak-admin-header {
     display: flex;

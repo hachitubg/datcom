@@ -116,7 +116,12 @@
              ============================================= -->
         <div id="history" class="tab-content">
             <div class="section">
-                <div class="filter-card">
+                <details class="order-tools-details">
+                    <summary>
+                        <span>Bộ lọc ngày & tìm lịch sử</span>
+                        <small id="orderToolsDateLabel">Nhấn để mở</small>
+                    </summary>
+                    <div class="filter-card order-tools-content">
                     <!-- Row 1: Date picker -->
                     <div class="filter-row">
                         <div class="filter-field filter-field--grow">
@@ -143,6 +148,15 @@
 
                     <!-- Summary -->
                     <div id="orderSummaryInfo" class="filter-summary"></div>
+                    </div>
+                </details>
+
+                <div id="kitchenSummary" class="kitchen-summary"></div>
+                <div class="kitchen-filter-bar" aria-label="Lọc trạng thái chế biến">
+                    <button class="kitchen-filter-btn" data-filter="all" onclick="setKitchenOrderFilter('all')">Tất cả</button>
+                    <button class="kitchen-filter-btn active" data-filter="pending" onclick="setKitchenOrderFilter('pending')">Suất mới</button>
+                    <button class="kitchen-filter-btn" data-filter="done" onclick="setKitchenOrderFilter('done')">Đã hoàn thành</button>
+                    <button class="kitchen-filter-btn" data-filter="changes" onclick="setKitchenOrderFilter('changes')">Sửa / hủy</button>
                 </div>
 
                 <div id="historyList" class="loading">Đang tải...</div>
@@ -244,30 +258,36 @@
             <div class="section">
                 <div class="filter-card">
                     <h3 class="section-subtitle">TẠO MÃ KHUYẾN MÃI MỚI</h3>
-                    <div class="filter-row">
-                        <div class="filter-field filter-field--grow">
+                    <div class="promo-create-grid">
+                        <div class="filter-field promo-code-field">
                             <label for="newPromoCode">Mã khuyến mãi</label>
                             <div class="promo-code-input-row">
                                 <input type="text" id="newPromoCode" placeholder="VD: DATCOM-20260616-211530" style="text-transform:uppercase;">
                                 <button type="button" class="btn-secondary promo-generate-btn" onclick="generatePromoCode()">Tự sinh</button>
                             </div>
                         </div>
-                        <div class="filter-field">
+                        <div class="filter-field promo-discount-field">
                             <label for="newPromoDiscount">Giảm giá (%)</label>
                             <input type="number" id="newPromoDiscount" min="1" max="100" placeholder="Nhập % giảm giá">
                         </div>
-                        <div class="filter-field filter-field--grow">
-                            <label for="newPromoUser">Gửi trực tiếp tới tài khoản</label>
-                            <input type="search" id="newPromoUserSearch" placeholder="Tìm theo tên hoặc số điện thoại..." autocomplete="off">
-                            <select id="newPromoUser">
-                                <option value="">Không gửi tới tài khoản cụ thể</option>
-                            </select>
+                        <div class="filter-field promo-recipient-field">
+                            <label for="newPromoUserSearch">Gửi tặng tài khoản</label>
+                            <div class="promo-recipient-controls">
+                                <div class="search-input-wrap">
+                                    <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                                    <input type="search" id="newPromoUserSearch" placeholder="Tìm tên hoặc số điện thoại..." autocomplete="off">
+                                </div>
+                                <select id="newPromoUser" aria-label="Chọn tài khoản nhận mã">
+                                    <option value="">Không gửi tới tài khoản cụ thể</option>
+                                </select>
+                            </div>
+                            <small class="form-hint">Để trống nếu đây là mã dùng chung.</small>
                         </div>
                     </div>
-                    <div class="button-group" style="margin-top:12px;">
+                    <div class="promo-create-footer">
                         <button class="btn-primary" onclick="createPromoCode()">TẠO MÃ</button>
+                        <div id="promoAdminMessage"></div>
                     </div>
-                    <div id="promoAdminMessage" style="margin-top:8px;"></div>
                 </div>
 
                 <h3 class="section-subtitle" style="margin-top:20px;">DANH SÁCH MÃ KHUYẾN MÃI</h3>

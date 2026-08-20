@@ -26,6 +26,7 @@ let paymentRows = [];
 let paymentCurrentPage = 1;
 let feedbackRows = [];
 let feedbackCurrentPage = 1;
+let kitchenOrderFilter = 'pending';
 const escapeHtml = AppUtils.escapeHtml;
 const escapeAttr = AppUtils.escapeAttribute;
 
@@ -207,6 +208,9 @@ function switchTab(tab, event) {
     if (tab === 'today') {
         loadTodayInfo();
     } else if (tab === 'history') {
+        kitchenOrderFilter = 'pending';
+        historyCurrentPage = 1;
+        updateKitchenFilterButtons();
         loadHistory();
     } else if (tab === 'payments') {
         switchPaymentView(currentPaymentView);
@@ -393,6 +397,8 @@ function loadHistoryByDate() {
 
 function loadOrderListByDate(date) {
     currentHistoryDetailDate = date;
+    const dateLabel = document.getElementById('orderToolsDateLabel');
+    if (dateLabel) dateLabel.textContent = `Đang xem ngày ${date}`;
     const list = document.getElementById('historyList');
     list.innerHTML = '<div class="loading">Đang tải...</div>';
 
@@ -411,44 +417,153 @@ function loadOrderListByDate(date) {
 
 function renderHistoryOrders() {
     const list = document.getElementById('historyList');
+    renderKitchenSummary();
     if (!historyOrders.length) {
         list.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">Không có đơn hàng trong ngày này.</div>';
         return;
     }
 
-    const totalPages = Math.ceil(historyOrders.length / PAGE_SIZE);
+    const filteredOrders = historyOrders.filter((order) => {
+        const isDeleted = Boolean(order.is_deleted);
+        const isDone = order.kitchen_status === 'done';
+        if (kitchenOrderFilter === 'pending') {
+            return (!isDeleted && !isDone) || (isDeleted && order.kitchen_status === 'cancel_pending');
+        }
+        if (kitchenOrderFilter === 'done') {
+            return (!isDeleted && isDone) || (isDeleted && order.kitchen_status === 'cancel_done');
+        }
+        if (kitchenOrderFilter === 'changes') {
+            return isDeleted || order.change_action === 'edited';
+        }
+        return true;
+    });
+
+    if (!filteredOrders.length) {
+        list.innerHTML = '<div class="kitchen-empty">Không có đơn phù hợp với trạng thái này.</div>';
+        return;
+    }
+
+    const totalPages = Math.ceil(filteredOrders.length / PAGE_SIZE);
     if (historyCurrentPage > totalPages) historyCurrentPage = totalPages;
     const startIndex = (historyCurrentPage - 1) * PAGE_SIZE;
-    const pageRows = historyOrders.slice(startIndex, startIndex + PAGE_SIZE);
+    const pageRows = filteredOrders.slice(startIndex, startIndex + PAGE_SIZE);
 
-    const rowsHtml = pageRows.map((order) => {
+    const rowsHtml = pageRows.map((order, pageIndex) => {
+        const displayNumber = filteredOrders.length - (startIndex + pageIndex);
         const disc = Number(order.discount_percent || 0);
         const isDeleted = Boolean(order.is_deleted);
+        const isDone = order.kitchen_status === 'done';
+        const isCancelHandled = order.kitchen_status === 'cancel_done';
         const changeAction = order.change_action || 'created';
+        const deletedByLabel = order.actor_type === 'admin' ? 'Admin đã xóa' : 'Khách đã xóa';
         const changeNote = changeAction === 'edited'
-            ? `<div class="order-change-note order-change-edited">Đã sửa lúc ${AppUtils.formatDateTime(order.change_at)}</div>`
+            ? `<div class="order-change-note order-change-edited">Đơn đã sửa lúc ${AppUtils.formatDateTime(order.change_at)}${isDone ? ' · Đã xử lý lại' : ' · Cần kiểm tra lại'}</div>`
             : changeAction === 'deleted'
-                ? `<div class="order-change-note order-change-deleted">Đã xóa lúc ${AppUtils.formatDateTime(order.change_at)}</div>`
+                ? `<div class="order-change-note order-change-deleted">${deletedByLabel} lúc ${AppUtils.formatDateTime(order.change_at)}${isCancelHandled ? ' · Đã xử lý hủy' : ' · Cần xử lý hủy'}</div>`
                 : '';
         const discBadge = disc > 0 ? `<span class="discount-badge">-${disc}% / 1 suất</span>` : '';
         const promoInfo = disc > 0 ? `<div class="admin-payment-meta promo-info-text">Mã KM: ${escapeHtml(order.promo_code || '')} — Giảm ${disc}% cho 1 suất</div>` : '';
+        const kitchenControl = isDeleted
+            ? `<button class="kitchen-cancel-btn ${isCancelHandled ? 'handled' : ''}" type="button"
+                    ${isCancelHandled ? 'disabled' : `onclick="acknowledgeDeletedOrder(${Number(order.change_log_id || 0)}, this)"`}>
+                    ${isCancelHandled ? 'Đã xử lý hủy' : 'Xác nhận đã xử lý hủy'}
+               </button>`
+            : `<label class="kitchen-check ${isDone ? 'checked' : ''}">
+                    <input type="checkbox" ${isDone ? 'checked' : ''}
+                        onchange="toggleOrderKitchenStatus(${order.id}, this)">
+                    <span>${isDone ? `Đã làm xong ${order.quantity} suất` : `Đánh dấu xong ${order.quantity} suất`}</span>
+               </label>`;
         return `
-        <div class="order-row ${disc > 0 ? 'order-row-discounted' : ''} ${isDeleted ? 'order-row-deleted' : ''} ${changeAction === 'edited' ? 'order-row-edited' : ''}">
-            <div class="order-info">
-                <div class="order-name">${escapeHtml(order.name)} ${discBadge}</div>
-                <div class="order-details">Số lượng: ${order.quantity} suất ${order.description ? '</br> Ghi chú: ' + escapeHtml(order.description) : ''}</div>
+        <div class="order-row kitchen-order-card ${isDone ? 'kitchen-order-done' : 'kitchen-order-pending'} ${disc > 0 ? 'order-row-discounted' : ''} ${isDeleted ? 'order-row-deleted' : ''} ${changeAction === 'edited' ? 'order-row-edited' : ''}">
+            <div class="order-info kitchen-order-main">
+                <div class="kitchen-order-heading">
+                    <div class="order-name"><span class="kitchen-order-number">${displayNumber}.</span> ${escapeHtml(order.name)} ${discBadge}</div>
+                    <span class="kitchen-quantity">${order.quantity} suất</span>
+                </div>
+                ${order.description ? `<div class="order-details"><strong>Ghi chú:</strong> ${escapeHtml(order.description)}</div>` : ''}
                 ${promoInfo}
                 ${changeNote}
                 <div class="admin-payment-meta">Thời gian đặt: ${AppUtils.formatDateTime(order.created_at)}</div>
+                ${isDone && order.kitchen_completed_at ? `<div class="kitchen-completed-time">Hoàn thành: ${AppUtils.formatDateTime(order.kitchen_completed_at)}</div>` : ''}
             </div>
-            <div class="admin-payment-actions" style="${isDeleted ? 'display:none' : ''}">
-                <button class="edit-icon-btn" title="Chỉnh sửa đơn" onclick="openOrderEditModal(${order.id}, '${encodeURIComponent(order.name)}', ${order.quantity}, '${encodeURIComponent(order.description || '')}', '${currentHistoryDetailDate}')">✏️</button>
+            <div class="kitchen-order-controls">
+                ${kitchenControl}
+                ${isDeleted ? '' : `<button class="edit-icon-btn" title="Chỉnh sửa đơn" onclick="openOrderEditModal(${order.id}, '${encodeURIComponent(order.name)}', ${order.quantity}, '${encodeURIComponent(order.description || '')}', '${currentHistoryDetailDate}')">Sửa</button>`}
             </div>
         </div>
         `;
     }).join('');
 
     list.innerHTML = rowsHtml + renderPaginationControls('historyCurrentPage', historyCurrentPage, totalPages, 'renderHistoryOrders');
+}
+
+function renderKitchenSummary() {
+    const summary = document.getElementById('kitchenSummary');
+    if (!summary) return;
+    const activeOrders = historyOrders.filter((order) => !order.is_deleted);
+    const pendingServings = activeOrders
+        .filter((order) => order.kitchen_status !== 'done')
+        .reduce((sum, order) => sum + Number(order.quantity || 0), 0);
+    const doneServings = activeOrders
+        .filter((order) => order.kitchen_status === 'done')
+        .reduce((sum, order) => sum + Number(order.quantity || 0), 0);
+    const totalServings = activeOrders.reduce((sum, order) => sum + Number(order.quantity || 0), 0);
+    const pendingChanges = historyOrders.filter((order) => (
+        (order.is_deleted && order.kitchen_status === 'cancel_pending')
+        || (!order.is_deleted && order.change_action === 'edited' && order.kitchen_status !== 'done')
+    )).length;
+    summary.innerHTML = `
+        <div><span>Suất mới đặt</span><strong>${pendingServings} suất</strong></div>
+        <div><span>Đã hoàn thành</span><strong>${doneServings} suất</strong></div>
+        <div class="${pendingChanges ? 'has-alert' : ''}"><span>Sửa / hủy cần xử lý</span><strong>${pendingChanges}</strong></div>
+        <div><span>Tổng số suất</span><strong>${totalServings} suất</strong></div>
+    `;
+}
+
+function setKitchenOrderFilter(filter) {
+    kitchenOrderFilter = ['all', 'pending', 'done', 'changes'].includes(filter) ? filter : 'all';
+    historyCurrentPage = 1;
+    updateKitchenFilterButtons();
+    renderHistoryOrders();
+}
+
+function updateKitchenFilterButtons() {
+    document.querySelectorAll('.kitchen-filter-btn').forEach((button) => {
+        button.classList.toggle('active', button.dataset.filter === kitchenOrderFilter);
+    });
+}
+
+function toggleOrderKitchenStatus(orderId, checkbox) {
+    const status = checkbox.checked ? 'done' : 'pending';
+    checkbox.disabled = true;
+    fetch(`${API_BASE}/api/admin/orders/${orderId}/kitchen-status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+    })
+        .then(res => res.json().then(data => {
+            if (!res.ok || data.error) throw new Error(data.error || 'Không cập nhật được trạng thái');
+        }))
+        .then(() => loadOrderListByDate(currentHistoryDetailDate))
+        .catch((error) => {
+            checkbox.checked = !checkbox.checked;
+            checkbox.disabled = false;
+            showPopup(`Lỗi cập nhật trạng thái: ${error.message}`);
+        });
+}
+
+function acknowledgeDeletedOrder(changeLogId, button) {
+    if (!changeLogId) return;
+    button.disabled = true;
+    fetch(`${API_BASE}/api/admin/order-changes/${changeLogId}/acknowledge`, { method: 'PUT' })
+        .then(res => res.json().then(data => {
+            if (!res.ok || data.error) throw new Error(data.error || 'Không xác nhận được yêu cầu hủy');
+        }))
+        .then(() => loadOrderListByDate(currentHistoryDetailDate))
+        .catch((error) => {
+            button.disabled = false;
+            showPopup(`Lỗi xử lý yêu cầu hủy: ${error.message}`);
+        });
 }
 function openOrderEditModal(orderId, encodedName, quantity, encodedDescription, date) {
     editingOrderId = Number(orderId || 0);
@@ -484,6 +599,9 @@ function saveOrderEdit() {
         .then(data => {
             if (data.error) throw new Error(data.error);
             closeOrderEditModal();
+            kitchenOrderFilter = 'pending';
+            historyCurrentPage = 1;
+            updateKitchenFilterButtons();
             loadHistory();
         })
         .catch(err => showPopup('Lỗi sửa đơn: ' + err.message));

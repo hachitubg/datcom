@@ -40,6 +40,8 @@ class Database {
           quantity INTEGER NOT NULL,
           description TEXT,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          kitchen_status TEXT DEFAULT 'pending',
+          kitchen_completed_at DATETIME,
           FOREIGN KEY (day_id) REFERENCES days(id)
         )
       `);
@@ -140,6 +142,8 @@ class Database {
       this.db.run("ALTER TABLE orders ADD COLUMN user_id INTEGER", () => {});
       this.db.run("ALTER TABLE orders ADD COLUMN updated_at DATETIME", () => {});
       this.db.run("ALTER TABLE orders ADD COLUMN last_action TEXT DEFAULT 'created'", () => {});
+      this.db.run("ALTER TABLE orders ADD COLUMN kitchen_status TEXT DEFAULT 'pending'", () => {});
+      this.db.run("ALTER TABLE orders ADD COLUMN kitchen_completed_at DATETIME", () => {});
       this.db.run("ALTER TABLE promo_codes ADD COLUMN issued_to_user_id INTEGER", () => {});
       this.db.run("ALTER TABLE promo_codes ADD COLUMN issued_to_name TEXT", () => {});
       this.db.run("ALTER TABLE promo_codes ADD COLUMN source TEXT DEFAULT 'manual'", () => {});
@@ -160,9 +164,11 @@ class Database {
           action_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           actor_type TEXT DEFAULT 'user',
           original_created_at DATETIME,
+          kitchen_acknowledged_at DATETIME,
           FOREIGN KEY (day_id) REFERENCES days(id)
         )
       `);
+      this.db.run("ALTER TABLE order_change_log ADD COLUMN kitchen_acknowledged_at DATETIME", () => {});
 
       // Lich nghi rieng cua tung site. Cac ngay nay khong lam gian doan chuoi dat com.
       this.db.run(`
@@ -190,6 +196,7 @@ class Database {
       if (this.seedAdminEnabled) this.seedAdminUser();
       this.seedDefaultSettings();
       this.migrateConsecutivePromoData();
+      this.migrateKitchenWorkflowData();
       this.cleanupExpiredSessions(() => {});
     });
   }
@@ -297,18 +304,31 @@ class Database {
               o.promo_code, o.user_id, COALESCE(o.last_action, 'created') AS change_action,
               CASE WHEN COALESCE(o.last_action, 'created') = 'edited'
                 THEN COALESCE(o.updated_at, o.created_at) ELSE o.created_at END AS change_at,
-              0 AS is_deleted
+              0 AS is_deleted,
+              COALESCE(o.kitchen_status, 'pending') AS kitchen_status,
+              o.kitchen_completed_at, NULL AS kitchen_acknowledged_at,
+              NULL AS change_log_id, NULL AS actor_type,
+              CASE
+                WHEN COALESCE(o.last_action, 'created') = 'edited'
+                  AND COALESCE(o.kitchen_status, 'pending') != 'done' THEN 1
+                WHEN COALESCE(o.kitchen_status, 'pending') != 'done' THEN 2
+                ELSE 4
+              END AS sort_priority
        FROM orders o
        JOIN days d ON o.day_id = d.id
        WHERE d.date = ?
        UNION ALL
        SELECT -l.id AS id, l.name, l.quantity, l.description, l.original_created_at AS created_at,
               0 AS discount_percent, NULL AS promo_code, NULL AS user_id,
-              'deleted' AS change_action, l.action_at AS change_at, 1 AS is_deleted
+              'deleted' AS change_action, l.action_at AS change_at, 1 AS is_deleted,
+              CASE WHEN l.kitchen_acknowledged_at IS NULL THEN 'cancel_pending' ELSE 'cancel_done' END AS kitchen_status,
+              NULL AS kitchen_completed_at, l.kitchen_acknowledged_at,
+              l.id AS change_log_id, l.actor_type,
+              CASE WHEN l.kitchen_acknowledged_at IS NULL THEN 0 ELSE 3 END AS sort_priority
        FROM order_change_log l
        JOIN days d ON l.day_id = d.id
        WHERE d.date = ? AND l.action = 'deleted'
-       ORDER BY change_at DESC, id DESC`,
+       ORDER BY sort_priority ASC, change_at DESC, id DESC`,
       [today, today],
       callback
     );
@@ -541,14 +561,27 @@ class Database {
                     COALESCE(last_action, 'created') AS change_action,
                     CASE WHEN COALESCE(last_action, 'created') = 'edited'
                       THEN COALESCE(updated_at, created_at) ELSE created_at END AS change_at,
-                    0 AS is_deleted
+                    0 AS is_deleted,
+                    COALESCE(kitchen_status, 'pending') AS kitchen_status,
+                    kitchen_completed_at, NULL AS kitchen_acknowledged_at,
+                    NULL AS change_log_id, NULL AS actor_type,
+                    CASE
+                      WHEN COALESCE(last_action, 'created') = 'edited'
+                        AND COALESCE(kitchen_status, 'pending') != 'done' THEN 1
+                      WHEN COALESCE(kitchen_status, 'pending') != 'done' THEN 2
+                      ELSE 4
+                    END AS sort_priority
              FROM orders WHERE day_id = ?
              UNION ALL
              SELECT -id AS id, name, quantity, description, original_created_at AS created_at,
                     0 AS discount_percent, NULL AS promo_code, 'deleted' AS change_action,
-                    action_at AS change_at, 1 AS is_deleted
+                    action_at AS change_at, 1 AS is_deleted,
+                    CASE WHEN kitchen_acknowledged_at IS NULL THEN 'cancel_pending' ELSE 'cancel_done' END AS kitchen_status,
+                    NULL AS kitchen_completed_at, kitchen_acknowledged_at,
+                    id AS change_log_id, actor_type,
+                    CASE WHEN kitchen_acknowledged_at IS NULL THEN 0 ELSE 3 END AS sort_priority
              FROM order_change_log WHERE day_id = ? AND action = 'deleted'
-             ORDER BY change_at DESC, id DESC`,
+             ORDER BY sort_priority ASC, change_at DESC, id DESC`,
             [dayRow.id, dayRow.id],
             (err, orders) => {
               if (err) {
@@ -790,10 +823,57 @@ class Database {
     this.db.run(
       `UPDATE orders
        SET name = ?, quantity = ?, description = ?,
-           updated_at = CURRENT_TIMESTAMP, last_action = 'edited'
+           updated_at = CURRENT_TIMESTAMP, last_action = 'edited',
+           kitchen_status = 'pending', kitchen_completed_at = NULL
        WHERE id = ?`,
       [normalizedName, normalizedQuantity, normalizedDescription, Number(orderId)],
       callback
+    );
+  }
+
+  updateOrderKitchenStatus(orderId, status, callback) {
+    const normalizedOrderId = Number(orderId || 0);
+    const normalizedStatus = String(status || '').trim().toLowerCase();
+    if (!normalizedOrderId || !['pending', 'done'].includes(normalizedStatus)) {
+      callback(new Error('Trạng thái chế biến không hợp lệ'));
+      return;
+    }
+    this.db.run(
+      `UPDATE orders
+       SET kitchen_status = ?,
+           kitchen_completed_at = CASE WHEN ? = 'done' THEN CURRENT_TIMESTAMP ELSE NULL END
+       WHERE id = ?`,
+      [normalizedStatus, normalizedStatus, normalizedOrderId],
+      function onKitchenStatusUpdated(err) {
+        if (err) { callback(err); return; }
+        if (!this.changes) {
+          callback(new Error('Không tìm thấy đơn đặt cơm'));
+          return;
+        }
+        callback(null, { success: true, status: normalizedStatus });
+      }
+    );
+  }
+
+  acknowledgeDeletedOrder(changeLogId, callback) {
+    const normalizedLogId = Number(changeLogId || 0);
+    if (!normalizedLogId) {
+      callback(new Error('Mã thay đổi không hợp lệ'));
+      return;
+    }
+    this.db.run(
+      `UPDATE order_change_log
+       SET kitchen_acknowledged_at = COALESCE(kitchen_acknowledged_at, CURRENT_TIMESTAMP)
+       WHERE id = ? AND action = 'deleted'`,
+      [normalizedLogId],
+      function onDeletedOrderAcknowledged(err) {
+        if (err) { callback(err); return; }
+        if (!this.changes) {
+          callback(new Error('Không tìm thấy yêu cầu hủy'));
+          return;
+        }
+        callback(null, { success: true });
+      }
     );
   }
 
@@ -2509,6 +2589,41 @@ class Database {
          AND earned_streak_date IS NOT NULL;`,
       (err) => {
         if (err) console.error('[Migration] Cannot migrate consecutive promo data:', err.message);
+      }
+    );
+  }
+
+  migrateKitchenWorkflowData() {
+    const today = this.getDateString();
+    this.db.exec(
+      `BEGIN IMMEDIATE TRANSACTION;
+
+       UPDATE orders
+       SET kitchen_status = 'done',
+           kitchen_completed_at = COALESCE(kitchen_completed_at, created_at)
+       WHERE day_id IN (SELECT id FROM days WHERE date < '${today}')
+         AND COALESCE(kitchen_status, 'pending') = 'pending'
+         AND NOT EXISTS (
+           SELECT 1 FROM app_settings
+           WHERE key = 'kitchen_workflow_migration_v1' AND value = '1'
+         );
+
+       UPDATE order_change_log
+       SET kitchen_acknowledged_at = COALESCE(kitchen_acknowledged_at, action_at)
+       WHERE day_id IN (SELECT id FROM days WHERE date < '${today}')
+         AND action = 'deleted'
+         AND NOT EXISTS (
+           SELECT 1 FROM app_settings
+           WHERE key = 'kitchen_workflow_migration_v1' AND value = '1'
+         );
+
+       INSERT INTO app_settings (key, value, description, updated_at)
+       VALUES ('kitchen_workflow_migration_v1', '1', 'Backfill trang thai bep cho du lieu lich su', CURRENT_TIMESTAMP)
+       ON CONFLICT(key) DO UPDATE SET value = '1', updated_at = CURRENT_TIMESTAMP;
+
+       COMMIT`,
+      (err) => {
+        if (err) console.error('[Kitchen Migration]', err.message);
       }
     );
   }

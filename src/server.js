@@ -1042,6 +1042,21 @@ app.put('/api/admin/orders/:orderId', (req, res) => {
   });
 });
 
+app.put('/api/admin/orders/:orderId/kitchen-status', (req, res) => {
+  const status = String(req.body.status || '').trim().toLowerCase();
+  db.updateOrderKitchenStatus(req.params.orderId, status, (err, result) => {
+    if (err) return res.status(400).json({ error: err.message });
+    res.json(result);
+  });
+});
+
+app.put('/api/admin/order-changes/:changeLogId/acknowledge', (req, res) => {
+  db.acknowledgeDeletedOrder(req.params.changeLogId, (err, result) => {
+    if (err) return res.status(400).json({ error: err.message });
+    res.json(result);
+  });
+});
+
 app.get('/api/customers/names', (req, res) => {
   db.getKnownCustomerNames((err, names) => {
     if (err) {
