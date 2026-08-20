@@ -3,8 +3,9 @@ const fs = require('fs');
 const path = require('path');
 
 class Database {
-  constructor(dbPath = path.join(__dirname, '../datcom.db')) {
+  constructor(dbPath = path.join(__dirname, '../datcom.db'), options = {}) {
     this.dbPath = path.resolve(dbPath);
+    this.seedAdminEnabled = options.seedAdmin !== false;
     fs.mkdirSync(path.dirname(this.dbPath), { recursive: true });
     this.db = new sqlite3.Database(this.dbPath, (err) => {
       if (err) {
@@ -186,7 +187,7 @@ class Database {
 
       // Tạo record cho hôm nay nếu chưa có
       this.ensureTodayRecord();
-      this.seedAdminUser();
+      if (this.seedAdminEnabled) this.seedAdminUser();
       this.seedDefaultSettings();
       this.migrateConsecutivePromoData();
       this.cleanupExpiredSessions(() => {});
@@ -2162,6 +2163,31 @@ class Database {
       [passwordHash, salt, id],
       callback
     );
+  }
+
+  removeSiteAdminUsers(callback) {
+    this.db.all(`SELECT id FROM users WHERE role = 'admin'`, (selectErr, rows = []) => {
+      if (selectErr) { callback(selectErr); return; }
+      const adminIds = rows.map((row) => Number(row.id)).filter(Boolean);
+      if (!adminIds.length) {
+        callback(null, { removed: 0 });
+        return;
+      }
+
+      const placeholders = adminIds.map(() => '?').join(',');
+      this.db.serialize(() => {
+        this.db.run(`DELETE FROM user_sessions WHERE user_id IN (${placeholders})`, adminIds, (sessionErr) => {
+          if (sessionErr) { callback(sessionErr); return; }
+          this.db.run(
+            `DELETE FROM users WHERE id IN (${placeholders}) AND role = 'admin'`,
+            adminIds,
+            function onDelete(err) {
+              callback(err, { removed: this?.changes || 0 });
+            }
+          );
+        });
+      });
+    });
   }
 
   getUsersPage(page, limit, callback) {

@@ -476,12 +476,8 @@
             Link site: <strong id="siteUrlPreview">/ten-cong-ty</strong>
           </div>
 
-          <div class="site-field">
-            <label for="siteAdminPassword">
-              <span>Mật khẩu admin site</span>
-              <small>tối thiểu 6 ký tự</small>
-            </label>
-            <input id="siteAdminPassword" type="password" placeholder="Nhập mật khẩu admin site" autocomplete="new-password">
+          <div class="site-url-preview">
+            Quản trị site bằng tài khoản và mật khẩu admin chính.
           </div>
 
           <div class="button-group">
@@ -494,7 +490,7 @@
       <div class="site-panel">
         <div class="site-panel-header">
           <h2>Danh sách site</h2>
-          <p>Mở trang công ty hoặc vào khu vực admin riêng của từng site.</p>
+          <p>Mở trang công ty hoặc vào khu vực admin của từng site bằng mật khẩu chung.</p>
         </div>
         <div class="site-panel-body">
           <div id="siteList" class="site-list">
@@ -604,7 +600,6 @@
       message.innerHTML = '';
       const name = document.getElementById('siteName').value.trim();
       const slug = normalizeSlug(document.getElementById('siteSlug').value);
-      const adminPassword = document.getElementById('siteAdminPassword').value;
 
       button.disabled = true;
       button.textContent = 'Đang tạo...';
@@ -612,12 +607,11 @@
         const site = await fetchJson('/api/admin2/sites', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, slug, adminPassword })
+          body: JSON.stringify({ name, slug })
         });
-        message.innerHTML = `<div class="success-message">Đã tạo site /${escapeHtml(site.slug)}. Admin riêng: /${escapeHtml(site.slug)}/admin</div>`;
+        message.innerHTML = `<div class="success-message">Đã tạo site /${escapeHtml(site.slug)}. Trang admin dùng chung mật khẩu chính: /${escapeHtml(site.slug)}/admin</div>`;
         document.getElementById('siteName').value = '';
         document.getElementById('siteSlug').value = '';
-        document.getElementById('siteAdminPassword').value = '';
         updateSlugPreview();
         loadSites();
       } catch (error) {

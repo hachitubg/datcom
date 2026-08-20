@@ -115,7 +115,15 @@ function getSiteDb(site) {
   }
 
   if (!siteDbBySlug.has(site.slug)) {
-    siteDbBySlug.set(site.slug, new Database(site.db_path));
+    const siteDb = new Database(site.db_path, { seedAdmin: false });
+    siteDbBySlug.set(site.slug, siteDb);
+    siteDb.removeSiteAdminUsers((err, result) => {
+      if (err) {
+        console.error(`[Site Admin] Không dọn được admin riêng của ${site.slug}:`, err.message);
+      } else if (result?.removed) {
+        console.log(`[Site Admin] Đã xóa ${result.removed} admin riêng khỏi ${site.slug}; site dùng admin chính.`);
+      }
+    });
   }
 
   return siteDbBySlug.get(site.slug);
@@ -297,7 +305,8 @@ function loadSessionUser(req, cookieName, expectedRole, callback) {
     return;
   }
 
-  db.getUserById(session.id, (err, user) => {
+  const sessionDatabase = cookieName === 'admin_session' ? mainDb : getActiveDb();
+  sessionDatabase.getUserById(session.id, (err, user) => {
     if (err) {
       callback(err);
       return;
@@ -1542,10 +1551,9 @@ app.get('/api/admin2/sites', requireMainSite, requireAdminApiAuth, (req, res) =>
 app.post('/api/admin2/sites', requireMainSite, requireAdminApiAuth, (req, res) => {
   const name = String(req.body.name || '').trim();
   const slug = String(req.body.slug || '').trim();
-  const adminPassword = String(req.body.adminPassword || '');
 
-  if (!name || !slug || adminPassword.length < 6) {
-    return res.status(400).json({ error: 'Vui lòng nhập tên site, slug và mật khẩu admin tối thiểu 6 ký tự' });
+  if (!name || !slug) {
+    return res.status(400).json({ error: 'Vui lòng nhập tên site và slug' });
   }
 
   let site;
@@ -1556,10 +1564,9 @@ app.post('/api/admin2/sites', requireMainSite, requireAdminApiAuth, (req, res) =
   }
 
   const siteDb = getSiteDb(site);
-  const { hash, salt } = hashPassword(adminPassword);
-  siteDb.createUser('admin', 'Admin', hash, salt, 'admin', (err) => {
+  siteDb.getUsers((err) => {
     if (err) {
-      return res.status(500).json({ error: `Đã tạo site nhưng chưa tạo được admin: ${err.message}` });
+      return res.status(500).json({ error: `Đã tạo site nhưng chưa khởi tạo được database: ${err.message}` });
     }
     res.json({
       ...site,
@@ -1603,7 +1610,7 @@ app.get('/admin-login', (req, res) => {
 app.post('/api/admin/login', (req, res) => {
   const password = String(req.body.password || '');
 
-  db.getUserByPhone('admin', (err, adminUser) => {
+  mainDb.getUserByPhone('admin', (err, adminUser) => {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
@@ -1752,6 +1759,9 @@ app.post('/api/admin/users', (req, res) => {
   }
   if (!['user', 'admin'].includes(role)) {
     return res.status(400).json({ error: 'Vai trò không hợp lệ' });
+  }
+  if (req.site && role === 'admin') {
+    return res.status(400).json({ error: 'Site phụ sử dụng chung tài khoản admin chính' });
   }
 
   const { hash, salt } = hashPassword(password);

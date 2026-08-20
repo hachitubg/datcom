@@ -7,6 +7,11 @@ const API_BASE = SITE_BASE_PATH;
 document.addEventListener('DOMContentLoaded', () => {
     const backBtn = document.querySelector('.back-btn');
     if (backBtn) backBtn.setAttribute('href', SITE_BASE_PATH || '/');
+    if (SITE_BASE_PATH) {
+        const roleSelect = document.getElementById('newUserRole');
+        roleSelect?.querySelector('option[value="admin"]')?.remove();
+        if (roleSelect) roleSelect.value = 'user';
+    }
 });
 let currentHistoryDetailDate = '';
 let currentPaymentView = 'debt';

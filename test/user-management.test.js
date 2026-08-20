@@ -4,6 +4,7 @@ const path = require('path');
 const Database = require('../src/database');
 
 const tempDbPath = path.join(__dirname, '.user-management.db');
+const tempSiteDbPath = path.join(__dirname, '.site-admin.db');
 
 function dbCall(database, method, ...args) {
   return new Promise((resolve, reject) => {
@@ -62,6 +63,18 @@ function close(database) {
     assert.deepStrictEqual(database.parseMenuValue('{"monChinh":"Cá kho"}'), { monChinh: 'Cá kho' });
     assert.strictEqual(database.parseMenuValue('{không hợp lệ}'), '{không hợp lệ}');
 
+    fs.rmSync(tempSiteDbPath, { force: true });
+    const siteDatabase = new Database(tempSiteDbPath, { seedAdmin: false });
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    assert.strictEqual((await dbCall(siteDatabase, 'getUsers')).length, 0);
+    await dbCall(siteDatabase, 'createUser', 'admin', 'Admin', 'hash', 'salt', 'admin');
+    assert.strictEqual((await dbCall(siteDatabase, 'getUsers')).length, 1);
+    const cleanupResult = await dbCall(siteDatabase, 'removeSiteAdminUsers');
+    assert.strictEqual(cleanupResult.removed, 1);
+    assert.strictEqual((await dbCall(siteDatabase, 'getUsers')).length, 0);
+    await close(siteDatabase);
+    fs.rmSync(tempSiteDbPath, { force: true });
+
     console.log('user management tests: OK');
   } catch (error) {
     console.error(error.stack || error.message);
@@ -69,5 +82,6 @@ function close(database) {
   } finally {
     await close(database).catch(() => {});
     fs.rmSync(tempDbPath, { force: true });
+    fs.rmSync(tempSiteDbPath, { force: true });
   }
 })();
