@@ -37,7 +37,7 @@ jobs:
         run: npm audit --omit=dev --audit-level=high
 
   deploy:
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && vars.PRODUCTION_DEPLOY_ENABLED == 'true'
     needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 20

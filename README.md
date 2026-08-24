@@ -134,6 +134,8 @@ Tạo GitHub Environment tên `production` và cấu hình các secret:
 - `VPS_SSH_KEY`: private key dành riêng cho GitHub Actions.
 - `VPS_KNOWN_HOSTS`: kết quả `ssh-keyscan -H -p 22 <VPS_HOST>` đã được kiểm tra fingerprint.
 
+Sau khi key và secret đã sẵn sàng, tạo repository variable `PRODUCTION_DEPLOY_ENABLED=true`. Trước thời điểm đó CI vẫn chạy nhưng job deploy được bỏ qua, tránh báo lỗi hoặc deploy khi cấu hình chưa hoàn tất.
+
 Public key tương ứng phải được giới hạn bằng forced command trong `~/.ssh/authorized_keys` của `VPS_USER`:
 
 ```text
