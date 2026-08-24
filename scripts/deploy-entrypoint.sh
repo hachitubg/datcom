@@ -7,4 +7,4 @@ if [[ ! "$ORIGINAL_COMMAND" =~ ^deploy-datcom\ ([0-9a-f]{40})$ ]]; then
   exit 64
 fi
 
-exec /var/www/datcom/scripts/deploy.sh "${BASH_REMATCH[1]}"
+exec bash /var/www/datcom/scripts/deploy.sh "${BASH_REMATCH[1]}"
