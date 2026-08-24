@@ -558,6 +558,40 @@ async function ensureConsecutivePromoForUser(
   };
 }
 
+async function ensureQuantityPromoForUser(user, settingsInput = null, database = getActiveDb()) {
+  if (!user?.id) return null;
+  const settings = settingsInput || await callDatabase(database, 'getSettings', [
+    'quantity_promo_enabled',
+    'quantity_promo_servings',
+    'quantity_promo_discount',
+    'quantity_promo_start_date'
+  ]);
+  if (settings.quantity_promo_enabled !== '1') return null;
+
+  const requiredServings = Math.max(1, Number(settings.quantity_promo_servings || 10));
+  const discountPercent = Math.max(1, Math.min(100, Number(settings.quantity_promo_discount || 50)));
+  const startDate = String(settings.quantity_promo_start_date || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) return null;
+
+  const totalServings = await callDatabase(database, 'getUserTotalOrderedServings', user.id, startDate);
+  const milestoneCount = Math.floor(totalServings / requiredServings);
+  const createdPromos = [];
+  for (let index = 1; index <= milestoneCount; index++) {
+    const milestoneServings = index * requiredServings;
+    const promo = await callDatabase(
+      database,
+      'createQuantityPromoCode',
+      user.name,
+      discountPercent,
+      user.id,
+      milestoneServings,
+      startDate
+    );
+    if (promo && !promo.existing) createdPromos.push(promo);
+  }
+  return { totalServings, requiredServings, discountPercent, startDate, createdPromos };
+}
+
 const consecutivePromoBatchInProgress = new WeakSet();
 
 function getVietnamBatchTime(date = new Date()) {
@@ -611,9 +645,43 @@ async function runConsecutivePromoBatch(database) {
   }
 }
 
-function runConsecutivePromoBatchAcrossSites() {
+const quantityPromoBatchInProgress = new WeakSet();
+
+async function runQuantityPromoBatch(database) {
+  if (quantityPromoBatchInProgress.has(database)) return;
+  quantityPromoBatchInProgress.add(database);
+  try {
+    const batchTime = getVietnamBatchTime();
+    const settings = await callDatabase(database, 'getSettings', [
+      'quantity_promo_enabled',
+      'quantity_promo_servings',
+      'quantity_promo_discount',
+      'quantity_promo_start_date',
+      'quantity_promo_last_batch_date'
+    ]);
+    if (settings.quantity_promo_enabled !== '1'
+      || batchTime.hour < 6
+      || settings.quantity_promo_last_batch_date === batchTime.date) return;
+
+    const users = await callDatabase(database, 'getUsers');
+    let createdCount = 0;
+    for (const user of users.filter((item) => item.role === 'user')) {
+      const result = await ensureQuantityPromoForUser(user, settings, database);
+      createdCount += result?.createdPromos?.length || 0;
+    }
+    await callDatabase(database, 'updateSetting', 'quantity_promo_last_batch_date', batchTime.date);
+    console.log(`[Quantity Promo Batch] ${database.dbPath}: created ${createdCount} promo(s) for ${batchTime.date}`);
+  } catch (err) {
+    console.error(`[Quantity Promo Batch] ${database.dbPath}:`, err.message);
+  } finally {
+    quantityPromoBatchInProgress.delete(database);
+  }
+}
+
+function runPromoBatchesAcrossSites() {
   for (const database of getAllSiteDatabases()) {
     runConsecutivePromoBatch(database);
+    runQuantityPromoBatch(database);
   }
 }
 
@@ -1486,6 +1554,48 @@ app.get('/api/consecutive-promo/status', (req, res) => {
   });
 });
 
+app.get('/api/quantity-promo/status', (req, res) => {
+  db.getSettings([
+    'quantity_promo_enabled',
+    'quantity_promo_servings',
+    'quantity_promo_discount',
+    'quantity_promo_start_date'
+  ], (settingsErr, settings) => {
+    if (settingsErr) return res.status(500).json({ error: settingsErr.message });
+    const enabled = settings.quantity_promo_enabled === '1';
+    const requiredServings = Math.max(1, Number(settings.quantity_promo_servings || 10));
+    const discountPercent = Math.max(1, Math.min(100, Number(settings.quantity_promo_discount || 50)));
+    const startDate = String(settings.quantity_promo_start_date || '').trim() || null;
+    const baseStatus = {
+      enabled,
+      requiredServings,
+      discountPercent,
+      startDate,
+      loggedIn: false,
+      totalServings: 0,
+      cycleServings: 0,
+      remainingServings: requiredServings
+    };
+    if (!enabled) return res.json(baseStatus);
+
+    getUserSessionInfo(req, (userErr, user) => {
+      if (userErr) return res.status(500).json({ error: userErr.message });
+      if (!user || !startDate) return res.json(baseStatus);
+      db.getUserTotalOrderedServings(user.id, startDate, (totalErr, totalServings) => {
+        if (totalErr) return res.status(500).json({ error: totalErr.message });
+        const cycleServings = Number(totalServings || 0) % requiredServings;
+        res.json({
+          ...baseStatus,
+          loggedIn: true,
+          totalServings: Number(totalServings || 0),
+          cycleServings,
+          remainingServings: cycleServings === 0 ? requiredServings : requiredServings - cycleServings
+        });
+      });
+    });
+  });
+});
+
 app.get('/api/promo-wallet', (req, res) => {
   getUserSessionInfo(req, (userErr, user) => {
     if (userErr) {
@@ -1510,6 +1620,8 @@ app.get('/api/promo-wallet', (req, res) => {
             source: row.source || 'manual',
             earnedStreakDays: Number(row.earned_streak_days || 0),
             earnedStreakDate: row.earned_streak_date || null,
+            earnedQuantityServings: Number(row.earned_quantity_servings || 0),
+            earnedQuantityStartDate: row.earned_quantity_start_date || null,
             seen: Boolean(row.promo_seen_at)
           }));
 
@@ -1849,26 +1961,41 @@ app.put('/api/admin/settings', (req, res) => {
   }
 
   const today = db.getDateString();
-  const settingsToSave = {
-    ...settings,
-    shop_closed_enabled: '0',
-    shop_closed_reason: closureReason || 'Hôm nay quán tạm đóng cửa, hẹn mọi người vào ngày mai nhé.'
-  };
-  db.bulkUpdateSettings(settingsToSave, (err) => {
-    if (err) return res.status(500).json({ error: err.message });
-    const onClosureSaved = (closureErr) => {
-      if (closureErr) return res.status(500).json({ error: closureErr.message });
-      db.updateSetting('consecutive_promo_last_batch_date', '', (settingErr) => {
-        if (settingErr) return res.status(500).json({ error: settingErr.message });
-        runConsecutivePromoBatch(db);
-        res.json({ success: true, shopClosedToday: shouldCloseToday });
-      });
+  db.getSettings(['quantity_promo_start_date'], (existingErr, existingSettings) => {
+    if (existingErr) return res.status(500).json({ error: existingErr.message });
+    const quantityPromoEnabled = settings.quantity_promo_enabled === '1';
+    const quantityPromoStartDate = String(existingSettings.quantity_promo_start_date || '').trim()
+      || (quantityPromoEnabled ? today : '');
+    const settingsToSave = {
+      ...settings,
+      quantity_promo_start_date: quantityPromoStartDate,
+      shop_closed_enabled: '0',
+      shop_closed_reason: closureReason || 'Hôm nay quán tạm đóng cửa, hẹn mọi người vào ngày mai nhé.'
     };
-    if (shouldCloseToday) {
-      db.upsertShopClosureRange(today, today, closureReason, onClosureSaved);
-    } else {
-      db.deleteShopClosureDate(today, onClosureSaved);
-    }
+    db.bulkUpdateSettings(settingsToSave, (err) => {
+      if (err) return res.status(500).json({ error: err.message });
+      const onClosureSaved = (closureErr) => {
+        if (closureErr) return res.status(500).json({ error: closureErr.message });
+        db.updateSetting('consecutive_promo_last_batch_date', '', (settingErr) => {
+          if (settingErr) return res.status(500).json({ error: settingErr.message });
+          db.updateSetting('quantity_promo_last_batch_date', '', (quantityBatchErr) => {
+            if (quantityBatchErr) return res.status(500).json({ error: quantityBatchErr.message });
+            runConsecutivePromoBatch(db);
+            runQuantityPromoBatch(db);
+            res.json({
+              success: true,
+              shopClosedToday: shouldCloseToday,
+              quantityPromoStartDate: quantityPromoStartDate || null
+            });
+          });
+        });
+      };
+      if (shouldCloseToday) {
+        db.upsertShopClosureRange(today, today, closureReason, onClosureSaved);
+      } else {
+        db.deleteShopClosureDate(today, onClosureSaved);
+      }
+    });
   });
 });
 
@@ -2080,8 +2207,8 @@ if (payos.isConfigured()) {
 }
 
 if (process.env.NODE_ENV !== 'test') {
-  setTimeout(runConsecutivePromoBatchAcrossSites, 5000);
-  setInterval(runConsecutivePromoBatchAcrossSites, 60000);
+  setTimeout(runPromoBatchesAcrossSites, 5000);
+  setInterval(runPromoBatchesAcrossSites, 60000);
 }
 
 app.listen(PORT, () => {

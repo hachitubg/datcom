@@ -33,6 +33,7 @@
         </div>
         <div id="userAuthLoggedIn" class="user-auth-state" style="display:none;">
             <button class="user-auth-btn streak-status-btn" id="btnStreakStatus" type="button" title="Chuỗi đặt cơm" style="display:none;">🔥</button>
+            <button class="user-auth-btn streak-status-btn" id="btnQuantityPromoStatus" type="button" title="Tích suất nhận mã" style="display:none;">🍱</button>
             <button class="user-auth-btn promo-wallet-btn" id="btnPromoWallet" type="button" title="Mã khuyến mãi" style="display:none;">
                 🎁
                 <span class="promo-wallet-badge" id="promoWalletBadge" style="display:none;">0</span>
@@ -169,6 +170,48 @@
                 <div id="streakStatusContent">
                     <div class="loading-text">Đang tải...</div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="quantityPromoIntroModal" class="modal">
+        <div class="modal-content streak-modal-content">
+            <div class="modal-header">
+                <h2>Tích suất nhận mã giảm</h2>
+                <button type="button" class="modal-close" id="closeQuantityPromoIntro">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="streak-hero-card">
+                    <div class="streak-hero-icon">🍱</div>
+                    <div>
+                        <h3>Đặt nhiều suất, nhận mã tự động</h3>
+                        <p id="quantityPromoIntroText">Đăng nhập và tích đủ số suất để nhận mã giảm giá cho lần đặt sau.</p>
+                    </div>
+                </div>
+                <div class="streak-rule-list">
+                    <div class="streak-rule-item"><span>1</span><p>Chỉ tính các suất đặt khi tài khoản đang đăng nhập.</p></div>
+                    <div class="streak-rule-item"><span>2</span><p>Số suất được cộng dồn từ ngày chương trình bắt đầu.</p></div>
+                    <div class="streak-rule-item"><span>3</span><p>Mỗi lần đủ mốc, mã mới sẽ xuất hiện trong ví khuyến mãi.</p></div>
+                </div>
+                <label class="streak-dismiss-row">
+                    <input type="checkbox" id="quantityPromoIntroDontShow">
+                    <span>Lần sau không hiển thị trên thiết bị này</span>
+                </label>
+                <div class="form-buttons">
+                    <button type="button" class="btn-submit" id="btnQuantityPromoIntroOk">ĐÃ HIỂU</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="quantityPromoStatusModal" class="modal">
+        <div class="modal-content streak-modal-content">
+            <div class="modal-header">
+                <h2>Tích suất nhận mã</h2>
+                <button type="button" class="modal-close" id="closeQuantityPromoStatus">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="quantityPromoStatusContent"><div class="loading-text">Đang tải...</div></div>
             </div>
         </div>
     </div>
@@ -335,6 +378,7 @@
                         <label for="customerName">Họ và tên *</label>
                         <input type="text" id="customerName" list="customerNameSuggestions" placeholder="Nhập tên của bạn" autocomplete="off" required>
                         <datalist id="customerNameSuggestions"></datalist>
+                        <small id="customerNameLockHint" class="name-lock-hint" hidden>Tên được lấy từ tài khoản đang đăng nhập.</small>
                     </div>
                     <div class="form-group">
                         <label for="quantity">Số lượng (suất) *</label>

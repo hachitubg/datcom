@@ -436,6 +436,33 @@
                     </div>
                 </div>
 
+                <!-- Tặng mã KM theo tổng số suất -->
+                <div class="settings-card">
+                    <div class="settings-card-header">
+                        <div>
+                            <h3 class="settings-card-title">Tặng mã theo tổng số suất đã đặt</h3>
+                            <p class="settings-card-desc">Cứ đủ N suất tích lũy từ khi bật chương trình, tài khoản nhận 1 mã giảm giá</p>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="settingQuantityPromoEnabled">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="settings-card-body" id="quantityPromoFields">
+                        <div class="filter-row">
+                            <div class="filter-field filter-field--grow">
+                                <label for="settingQuantityPromoServings">Số suất cho mỗi mã</label>
+                                <input type="number" id="settingQuantityPromoServings" min="1" placeholder="VD: 10">
+                            </div>
+                            <div class="filter-field filter-field--grow">
+                                <label for="settingQuantityPromoDiscount">Giảm giá (%)</label>
+                                <input type="number" id="settingQuantityPromoDiscount" min="1" max="100" placeholder="VD: 50">
+                            </div>
+                        </div>
+                        <small class="form-hint" id="quantityPromoStartHint">Chương trình sẽ bắt đầu tính từ ngày được bật lần đầu.</small>
+                    </div>
+                </div>
+
                 <div class="button-group" style="margin-top:20px;">
                     <button class="btn-primary" onclick="saveSettings()">LƯU CÀI ĐẶT</button>
                 </div>

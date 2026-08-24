@@ -663,6 +663,26 @@ textarea::placeholder {
     color: var(--outline-variant);
 }
 
+input.name-input-locked {
+    border-color: #aeb9a6;
+    background: #eef3ea;
+    color: #30472c;
+    cursor: not-allowed;
+    font-weight: 600;
+}
+
+.name-lock-hint {
+    display: block;
+    margin-top: 6px;
+    color: #4f6748;
+    font-size: 0.72rem;
+    line-height: 1.4;
+}
+
+.name-lock-hint[hidden] {
+    display: none;
+}
+
 textarea {
     resize: vertical;
     min-height: 80px;

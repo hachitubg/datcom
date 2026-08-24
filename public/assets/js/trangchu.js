@@ -12,6 +12,8 @@ let currentUser = null;
 const escapeHtml = AppUtils.escapeHtml;
 const escapeAttr = AppUtils.escapeAttribute;
 let consecutivePromoStatus = null;
+let quantityPromoStatus = null;
+let pendingQuantityPromoIntroStatus = null;
 let promoWalletStatus = null;
 let orderCutoffState = {
     cutoffTime: '10:45',
@@ -22,6 +24,30 @@ let shopClosedState = {
     reason: 'Hôm nay quán tạm đóng cửa, hẹn mọi người vào ngày mai nhé.'
 };
 const STREAK_INTRO_STORAGE_KEY = 'datcom_streak_intro_dismissed_v1';
+const QUANTITY_PROMO_INTRO_STORAGE_KEY = 'datcom_quantity_promo_intro_dismissed_v1';
+
+function syncCustomerNameField() {
+    const input = document.getElementById('customerName');
+    const hint = document.getElementById('customerNameLockHint');
+    if (!input) return;
+
+    const wasLocked = input.readOnly;
+    const isLocked = Boolean(currentUser?.name);
+    input.readOnly = isLocked;
+    input.classList.toggle('name-input-locked', isLocked);
+    if (isLocked) {
+        input.value = currentUser.name;
+        input.removeAttribute('list');
+        input.setAttribute('aria-readonly', 'true');
+        input.title = 'Tên được khóa theo tài khoản đang đăng nhập';
+    } else {
+        if (wasLocked) input.value = '';
+        input.setAttribute('list', 'customerNameSuggestions');
+        input.removeAttribute('aria-readonly');
+        input.removeAttribute('title');
+    }
+    if (hint) hint.hidden = !isLocked;
+}
 
 function checkUserAuth({ notifyPromos = false } = {}) {
     return fetch(`${API_BASE}/api/auth/me`)
@@ -37,8 +63,10 @@ function checkUserAuth({ notifyPromos = false } = {}) {
                 document.getElementById('userAuthLoggedOut').style.display = 'flex';
                 document.getElementById('userAuthLoggedIn').style.display = 'none';
             }
+            syncCustomerNameField();
             updatePromoAccess();
-            loadConsecutivePromoStatus({ maybeShowIntro: true });
+            loadConsecutivePromoStatus({ maybeShowIntro: true })
+                .finally(() => loadQuantityPromoStatus({ maybeShowIntro: true }));
             loadPromoWalletSummary().then((wallet) => {
                 if (notifyPromos && Number(wallet?.unseenCount || 0) > 0) {
                     showPopup(`Bạn vừa nhận được ${wallet.unseenCount} mã khuyến mãi mới. Nhấn biểu tượng vé để xem mã.`);
@@ -47,8 +75,10 @@ function checkUserAuth({ notifyPromos = false } = {}) {
         })
         .catch(() => {
             currentUser = null;
+            syncCustomerNameField();
             updatePromoAccess();
-            loadConsecutivePromoStatus({ maybeShowIntro: true });
+            loadConsecutivePromoStatus({ maybeShowIntro: true })
+                .finally(() => loadQuantityPromoStatus({ maybeShowIntro: true }));
             updatePromoWalletButton(null);
         });
 }
@@ -156,8 +186,10 @@ document.getElementById('btnUserLogout').addEventListener('click', () => {
             document.getElementById('userMenuDropdown').classList.remove('show');
             document.getElementById('userAuthLoggedOut').style.display = 'flex';
             document.getElementById('userAuthLoggedIn').style.display = 'none';
+            syncCustomerNameField();
             updatePromoAccess();
             loadConsecutivePromoStatus();
+            loadQuantityPromoStatus();
             updatePromoWalletButton(null);
         });
 });
@@ -197,10 +229,7 @@ document.getElementById('btnSaveUserName').addEventListener('click', () => {
         if (!ok) throw new Error(data.error || 'Không thể cập nhật tên');
         currentUser = data.user;
         document.getElementById('userAuthName').textContent = data.user.name;
-        const customerNameInput = document.getElementById('customerName');
-        if (customerNameInput && customerNameInput.value.trim()) {
-            customerNameInput.value = data.user.name;
-        }
+        syncCustomerNameField();
         editNameModal.style.display = 'none';
         loadPromoWalletSummary();
     })
@@ -230,6 +259,8 @@ const paymentHistoryModal = document.getElementById('paymentHistoryModal');
 const feedbackModal = document.getElementById('feedbackModal');
 const streakIntroModal = document.getElementById('streakIntroModal');
 const streakStatusModal = document.getElementById('streakStatusModal');
+const quantityPromoIntroModal = document.getElementById('quantityPromoIntroModal');
+const quantityPromoStatusModal = document.getElementById('quantityPromoStatusModal');
 const promoWalletModal = document.getElementById('promoWalletModal');
 
 const customerNameInput = document.getElementById('customerName');
@@ -282,8 +313,12 @@ document.getElementById('closePaymentHistory').addEventListener('click', () => {
 document.getElementById('closeFeedback').addEventListener('click', closeFeedbackModal);
 document.getElementById('cancelFeedback').addEventListener('click', closeFeedbackModal);
 document.getElementById('btnStreakStatus').addEventListener('click', openStreakStatusModal);
+document.getElementById('btnQuantityPromoStatus').addEventListener('click', openQuantityPromoStatusModal);
 document.getElementById('closeStreakStatus').addEventListener('click', () => {
     streakStatusModal.style.display = 'none';
+});
+document.getElementById('closeQuantityPromoStatus').addEventListener('click', () => {
+    quantityPromoStatusModal.style.display = 'none';
 });
 document.getElementById('btnPromoWallet').addEventListener('click', openPromoWalletModal);
 document.getElementById('closePromoWallet').addEventListener('click', () => {
@@ -291,6 +326,8 @@ document.getElementById('closePromoWallet').addEventListener('click', () => {
 });
 document.getElementById('closeStreakIntro').addEventListener('click', closeStreakIntroModal);
 document.getElementById('btnStreakIntroOk').addEventListener('click', closeStreakIntroModal);
+document.getElementById('closeQuantityPromoIntro').addEventListener('click', closeQuantityPromoIntroModal);
+document.getElementById('btnQuantityPromoIntroOk').addEventListener('click', closeQuantityPromoIntroModal);
 document.addEventListener('click', async (e) => {
     const copyBtn = e.target.closest('.promo-wallet-copy');
     if (!copyBtn) return;
@@ -446,6 +483,11 @@ function closeStreakIntroModal() {
         localStorage.setItem(STREAK_INTRO_STORAGE_KEY, '1');
     }
     streakIntroModal.style.display = 'none';
+    if (pendingQuantityPromoIntroStatus) {
+        const pendingStatus = pendingQuantityPromoIntroStatus;
+        pendingQuantityPromoIntroStatus = null;
+        showQuantityPromoIntro(pendingStatus);
+    }
 }
 
 function updateStreakIntroCopy(status) {
@@ -597,6 +639,102 @@ async function openStreakStatusModal() {
     renderStreakStatus(status);
 }
 
+function shouldShowQuantityPromoIntro(status) {
+    return Boolean(status?.enabled)
+        && localStorage.getItem(QUANTITY_PROMO_INTRO_STORAGE_KEY) !== '1';
+}
+
+function showQuantityPromoIntro(status) {
+    const requiredServings = Number(status?.requiredServings || 10);
+    const discount = Number(status?.discountPercent || 0);
+    document.getElementById('quantityPromoIntroText').textContent = discount > 0
+        ? `Đăng nhập và tích đủ mỗi ${requiredServings} suất để nhận mã giảm ${discount}% cho 1 suất.`
+        : `Đăng nhập và tích đủ mỗi ${requiredServings} suất để nhận mã giảm giá.`;
+    document.getElementById('quantityPromoIntroDontShow').checked = false;
+    quantityPromoIntroModal.style.display = 'flex';
+}
+
+function closeQuantityPromoIntroModal() {
+    if (document.getElementById('quantityPromoIntroDontShow').checked) {
+        localStorage.setItem(QUANTITY_PROMO_INTRO_STORAGE_KEY, '1');
+    }
+    quantityPromoIntroModal.style.display = 'none';
+}
+
+function updateQuantityPromoButton(status) {
+    const button = document.getElementById('btnQuantityPromoStatus');
+    if (!button) return;
+    const shouldShow = Boolean(status?.enabled && status?.loggedIn);
+    button.style.display = shouldShow ? 'inline-flex' : 'none';
+    if (shouldShow) {
+        button.title = `Tích suất: ${status.cycleServings || 0}/${status.requiredServings || 0} suất`;
+    }
+}
+
+function loadQuantityPromoStatus({ maybeShowIntro = false } = {}) {
+    return AppUtils.fetchJson(`${API_BASE}/api/quantity-promo/status`)
+        .then((status) => {
+            quantityPromoStatus = status;
+            updateQuantityPromoButton(status);
+            if (maybeShowIntro && shouldShowQuantityPromoIntro(status)) {
+                if (streakIntroModal.style.display === 'flex') {
+                    pendingQuantityPromoIntroStatus = status;
+                } else {
+                    showQuantityPromoIntro(status);
+                }
+            }
+            return status;
+        })
+        .catch(() => {
+            quantityPromoStatus = null;
+            updateQuantityPromoButton(null);
+            return null;
+        });
+}
+
+function renderQuantityPromoStatus(status) {
+    const container = document.getElementById('quantityPromoStatusContent');
+    if (!status?.enabled) {
+        container.innerHTML = '<div class="leaderboard-empty">Tính năng đang tắt.</div>';
+        return;
+    }
+    if (!status.loggedIn) {
+        container.innerHTML = `
+            <div class="streak-empty-state">
+                <div class="streak-empty-icon">🔐</div>
+                <h3>Cần đăng nhập</h3>
+                <p>Số suất chỉ được tích cho các đơn đặt khi tài khoản đang đăng nhập.</p>
+            </div>`;
+        return;
+    }
+
+    const required = Math.max(1, Number(status.requiredServings || 10));
+    const cycle = Math.max(0, Number(status.cycleServings || 0));
+    const total = Math.max(0, Number(status.totalServings || 0));
+    const remaining = Math.max(0, Number(status.remainingServings || required));
+    const percent = Math.min(100, Math.round((cycle / required) * 100));
+    container.innerHTML = `
+        <div class="streak-status-panel">
+            <div class="streak-status-top">
+                <div>
+                    <span class="streak-kicker">Tổng đã tích: ${total} suất</span>
+                    <h3>${cycle}/${required} suất ở mốc hiện tại</h3>
+                    <p>Còn ${remaining} suất để nhận mã tiếp theo.</p>
+                </div>
+                <div class="streak-ring" style="--streak-pct:${percent}%"><span>${percent}%</span></div>
+            </div>
+            <div class="streak-progress-track"><div class="streak-progress-fill" style="width:${percent}%"></div></div>
+            <div class="streak-status-note">Chương trình bắt đầu tính từ ${escapeHtml(status.startDate || '-')}.</div>
+        </div>`;
+}
+
+async function openQuantityPromoStatusModal() {
+    quantityPromoStatusModal.style.display = 'flex';
+    document.getElementById('quantityPromoStatusContent').innerHTML = '<div class="loading-text">Đang tải...</div>';
+    const status = await loadQuantityPromoStatus();
+    renderQuantityPromoStatus(status);
+}
+
 function getPromoWalletNote(code) {
     if (code.source === 'admin_gift') {
         return `Mã quà tặng được nhận ngày ${AppUtils.formatDateTime(code.createdAt)}`;
@@ -607,6 +745,10 @@ function getPromoWalletNote(code) {
             : '';
         const earnedDateText = code.earnedStreakDate ? ` · Đạt ngày ${code.earnedStreakDate}` : '';
         return `Mã chương trình đặt liên tục${streakText}${earnedDateText}`;
+    }
+    if (code.source === 'auto_quantity') {
+        const milestone = Number(code.earnedQuantityServings || 0);
+        return `Mã chương trình tích suất${milestone ? ` · Mốc ${milestone} suất` : ''}`;
     }
     return `Mã khuyến mãi được tạo ngày ${AppUtils.formatDateTime(code.createdAt)}`;
 }
@@ -1038,10 +1180,7 @@ document.getElementById('btnOrder').addEventListener('click', () => {
     document.getElementById('promoMessage').innerHTML = '';
     loadCustomerNameSuggestions();
     updatePromoAccess();
-    // Auto-fill name if logged in
-    if (currentUser && currentUser.name) {
-        document.getElementById('customerName').value = currentUser.name;
-    }
+    syncCustomerNameField();
     orderModal.style.display = 'flex';
 });
 
@@ -1092,6 +1231,12 @@ window.addEventListener('click', (e) => {
     }
     if (e.target === streakStatusModal) {
         streakStatusModal.style.display = 'none';
+    }
+    if (e.target === quantityPromoIntroModal) {
+        closeQuantityPromoIntroModal();
+    }
+    if (e.target === quantityPromoStatusModal) {
+        quantityPromoStatusModal.style.display = 'none';
     }
     if (e.target === promoWalletModal) {
         promoWalletModal.style.display = 'none';
@@ -1351,7 +1496,9 @@ function loadOrders() {
 document.getElementById('orderForm').addEventListener('submit', (e) => {
     e.preventDefault();
 
-    const name = AppUtils.normalizeName(document.getElementById('customerName').value);
+    const name = currentUser?.name
+        ? currentUser.name
+        : AppUtils.normalizeName(document.getElementById('customerName').value);
     const quantity = parseInt(document.getElementById('quantity').value);
     const description = document.getElementById('description').value.trim();
     const promoCode = document.getElementById('promoCode').value.trim() || null;
@@ -1375,6 +1522,7 @@ document.getElementById('orderForm').addEventListener('submit', (e) => {
                 orderModal.style.display = 'none';
                 loadTodayInfo();
                 loadConsecutivePromoStatus();
+                loadQuantityPromoStatus();
                 loadPromoWalletSummary();
             }, 1500);
         }

@@ -544,7 +544,14 @@ function toggleOrderKitchenStatus(orderId, checkbox) {
         .then(res => res.json().then(data => {
             if (!res.ok || data.error) throw new Error(data.error || 'Không cập nhật được trạng thái');
         }))
-        .then(() => loadOrderListByDate(currentHistoryDetailDate))
+        .then(() => {
+            const order = historyOrders.find((item) => Number(item.id) === Number(orderId));
+            if (order) {
+                order.kitchen_status = status;
+                order.kitchen_completed_at = status === 'done' ? new Date().toISOString() : null;
+            }
+            renderHistoryOrders();
+        })
         .catch((error) => {
             checkbox.checked = !checkbox.checked;
             checkbox.disabled = false;
@@ -559,7 +566,14 @@ function acknowledgeDeletedOrder(changeLogId, button) {
         .then(res => res.json().then(data => {
             if (!res.ok || data.error) throw new Error(data.error || 'Không xác nhận được yêu cầu hủy');
         }))
-        .then(() => loadOrderListByDate(currentHistoryDetailDate))
+        .then(() => {
+            const order = historyOrders.find((item) => Number(item.change_log_id) === Number(changeLogId));
+            if (order) {
+                order.kitchen_status = 'cancel_done';
+                order.kitchen_acknowledged_at = new Date().toISOString();
+            }
+            renderHistoryOrders();
+        })
         .catch((error) => {
             button.disabled = false;
             showPopup(`Lỗi xử lý yêu cầu hủy: ${error.message}`);
@@ -1346,6 +1360,8 @@ function loadPromoCodes() {
                 } else if (c.source === 'auto_consecutive') {
                     const earnedDate = c.earned_streak_date ? ` · Đạt ngày ${escapeHtml(c.earned_streak_date)}` : '';
                     sourceInfo = `<div class="admin-payment-meta">Mã chương trình đặt liên tục cho ${escapeHtml(c.issued_to_name || 'khách hàng')} · Mốc ${Number(c.earned_streak_days || 0)} ngày${earnedDate}</div>`;
+                } else if (c.source === 'auto_quantity') {
+                    sourceInfo = `<div class="admin-payment-meta">Mã chương trình tích suất cho ${escapeHtml(c.issued_to_name || 'khách hàng')} · Mốc ${Number(c.earned_quantity_servings || 0)} suất</div>`;
                 }
                 return `
                     <div class="admin-payment-row ${isUsed ? 'promo-used' : ''}">
@@ -1573,6 +1589,13 @@ function loadSettings() {
             document.getElementById('settingConsecutivePromoEnabled').checked = settings.consecutive_promo_enabled === '1';
             document.getElementById('settingConsecutivePromoDays').value = settings.consecutive_promo_days || '5';
             document.getElementById('settingConsecutivePromoDiscount').value = settings.consecutive_promo_discount || '50';
+            document.getElementById('settingQuantityPromoEnabled').checked = settings.quantity_promo_enabled === '1';
+            document.getElementById('settingQuantityPromoServings').value = settings.quantity_promo_servings || '10';
+            document.getElementById('settingQuantityPromoDiscount').value = settings.quantity_promo_discount || '50';
+            const quantityStartDate = settings.quantity_promo_start_date || '';
+            document.getElementById('quantityPromoStartHint').textContent = quantityStartDate
+                ? `Đang tính các suất đặt từ ngày ${quantityStartDate}.`
+                : 'Chương trình sẽ bắt đầu tính từ ngày được bật lần đầu.';
             document.getElementById('settingShopClosedEnabled').checked = settings.shop_closed_enabled === '1';
             document.getElementById('settingShopClosedReason').value = settings.shop_closed_reason || 'Hôm nay quán tạm đóng cửa, hẹn mọi người vào ngày mai nhé.';
             toggleSettingsFields();
@@ -1587,6 +1610,8 @@ function toggleSettingsFields() {
     document.getElementById('debtLimitFields').style.display = debtEnabled ? 'block' : 'none';
     const promoEnabled = document.getElementById('settingConsecutivePromoEnabled').checked;
     document.getElementById('consecutivePromoFields').style.display = promoEnabled ? 'block' : 'none';
+    const quantityPromoEnabled = document.getElementById('settingQuantityPromoEnabled').checked;
+    document.getElementById('quantityPromoFields').style.display = quantityPromoEnabled ? 'block' : 'none';
     const shopClosedEnabled = document.getElementById('settingShopClosedEnabled').checked;
     document.getElementById('shopClosedFields').style.display = shopClosedEnabled ? 'block' : 'none';
 }
@@ -1666,6 +1691,7 @@ function showClosureHistoryMessage(message, isError = false) {
 
 document.getElementById('settingDebtLimitEnabled').addEventListener('change', toggleSettingsFields);
 document.getElementById('settingConsecutivePromoEnabled').addEventListener('change', toggleSettingsFields);
+document.getElementById('settingQuantityPromoEnabled').addEventListener('change', toggleSettingsFields);
 document.getElementById('settingShopClosedEnabled').addEventListener('change', toggleSettingsFields);
 
 function saveSettings() {
@@ -1676,6 +1702,9 @@ function saveSettings() {
         consecutive_promo_enabled: document.getElementById('settingConsecutivePromoEnabled').checked ? '1' : '0',
         consecutive_promo_days: document.getElementById('settingConsecutivePromoDays').value || '5',
         consecutive_promo_discount: document.getElementById('settingConsecutivePromoDiscount').value || '50',
+        quantity_promo_enabled: document.getElementById('settingQuantityPromoEnabled').checked ? '1' : '0',
+        quantity_promo_servings: document.getElementById('settingQuantityPromoServings').value || '10',
+        quantity_promo_discount: document.getElementById('settingQuantityPromoDiscount').value || '50',
         shop_closed_enabled: document.getElementById('settingShopClosedEnabled').checked ? '1' : '0',
         shop_closed_reason: document.getElementById('settingShopClosedReason').value || 'Hôm nay quán tạm đóng cửa, hẹn mọi người vào ngày mai nhé.'
     };

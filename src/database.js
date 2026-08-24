@@ -90,6 +90,8 @@ class Database {
           used_by TEXT,
           used_at DATETIME,
           order_id INTEGER,
+          earned_quantity_servings INTEGER,
+          earned_quantity_start_date TEXT,
           FOREIGN KEY (order_id) REFERENCES orders(id)
         )
       `);
@@ -150,6 +152,8 @@ class Database {
       this.db.run("ALTER TABLE promo_codes ADD COLUMN earned_streak_days INTEGER", () => {});
       this.db.run("ALTER TABLE promo_codes ADD COLUMN earned_streak_date TEXT", () => {});
       this.db.run("ALTER TABLE promo_codes ADD COLUMN promo_seen_at DATETIME", () => {});
+      this.db.run("ALTER TABLE promo_codes ADD COLUMN earned_quantity_servings INTEGER", () => {});
+      this.db.run("ALTER TABLE promo_codes ADD COLUMN earned_quantity_start_date TEXT", () => {});
       this.db.run("ALTER TABLE users ADD COLUMN session_version INTEGER DEFAULT 1", () => {});
 
       this.db.run(`
@@ -196,6 +200,7 @@ class Database {
       if (this.seedAdminEnabled) this.seedAdminUser();
       this.seedDefaultSettings();
       this.migrateConsecutivePromoData();
+      this.migrateQuantityPromoData();
       this.migrateKitchenWorkflowData();
       this.cleanupExpiredSessions(() => {});
     });
@@ -2084,7 +2089,8 @@ class Database {
     this.db.all(
       `SELECT id, code, discount_percent, created_at, used_by, used_at, order_id,
               issued_to_user_id, issued_to_name, source, earned_streak_days,
-              earned_streak_date, promo_seen_at
+              earned_streak_date, earned_quantity_servings, earned_quantity_start_date,
+              promo_seen_at
        FROM promo_codes
        ORDER BY created_at DESC`,
       callback
@@ -2120,7 +2126,8 @@ class Database {
     this.db.all(
       `SELECT id, code, discount_percent, created_at, used_by, used_at, order_id,
               issued_to_user_id, issued_to_name, source, earned_streak_days,
-              earned_streak_date, promo_seen_at
+              earned_streak_date, earned_quantity_servings, earned_quantity_start_date,
+              promo_seen_at
        FROM promo_codes
        WHERE issued_to_user_id = ?
        ORDER BY created_at DESC, id DESC
@@ -2541,6 +2548,11 @@ class Database {
       { key: 'consecutive_promo_enabled', value: '0', description: 'Bật/tắt tặng mã KM khi đặt liên tục' },
       { key: 'consecutive_promo_days', value: '5', description: 'Số ngày đặt liên tục để được tặng mã' },
       { key: 'consecutive_promo_discount', value: '50', description: 'Phần trăm giảm giá của mã tặng' },
+      { key: 'quantity_promo_enabled', value: '0', description: 'Bật/tắt tặng mã theo tổng số suất' },
+      { key: 'quantity_promo_servings', value: '10', description: 'Số suất tích lũy cho mỗi mã tặng' },
+      { key: 'quantity_promo_discount', value: '50', description: 'Phần trăm giảm giá của mã tích suất' },
+      { key: 'quantity_promo_start_date', value: '', description: 'Ngày bắt đầu tính chương trình tích suất' },
+      { key: 'quantity_promo_last_batch_date', value: '', description: 'Ngày batch tích suất chạy gần nhất' },
       { key: 'order_cutoff_time', value: '10:45', description: 'Giờ chốt đặt cơm hằng ngày (HH:mm)' },
       { key: 'shop_closed_enabled', value: '0', description: 'Tạm đóng cửa website trong ngày' },
       { key: 'shop_closed_reason', value: 'Hôm nay quán tạm đóng cửa, hẹn mọi người vào ngày mai nhé.', description: 'Lý do hiển thị khi tạm đóng cửa' }
@@ -2589,6 +2601,20 @@ class Database {
          AND earned_streak_date IS NOT NULL;`,
       (err) => {
         if (err) console.error('[Migration] Cannot migrate consecutive promo data:', err.message);
+      }
+    );
+  }
+
+  migrateQuantityPromoData() {
+    this.db.run(
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_promo_quantity_milestone
+       ON promo_codes (issued_to_user_id, earned_quantity_servings, earned_quantity_start_date)
+       WHERE source = 'auto_quantity'
+         AND issued_to_user_id IS NOT NULL
+         AND earned_quantity_servings IS NOT NULL
+         AND earned_quantity_start_date IS NOT NULL`,
+      (err) => {
+        if (err) console.error('[Migration] Cannot create quantity promo index:', err.message);
       }
     );
   }
@@ -3098,6 +3124,123 @@ class Database {
       }
       insertNewCode();
     });
+  }
+
+  getUserTotalOrderedServings(userId, startDate, callback) {
+    const normalizedUserId = Number(userId || 0);
+    const normalizedStartDate = String(startDate || '').trim();
+    if (!normalizedUserId || !/^\d{4}-\d{2}-\d{2}$/.test(normalizedStartDate)) {
+      callback(null, 0);
+      return;
+    }
+    this.db.get(
+      `SELECT COALESCE(SUM(o.quantity), 0) AS total_servings
+       FROM orders o
+       JOIN days d ON d.id = o.day_id
+       WHERE o.user_id = ? AND d.date >= ?`,
+      [normalizedUserId, normalizedStartDate],
+      (err, row) => callback(err, Number(row?.total_servings || 0))
+    );
+  }
+
+  getQuantityPromoByMilestone(userId, milestoneServings, startDate, callback) {
+    this.db.get(
+      `SELECT id, code, discount_percent, created_at, used_by, used_at, order_id,
+              issued_to_user_id, issued_to_name, source,
+              earned_quantity_servings, earned_quantity_start_date
+       FROM promo_codes
+       WHERE source = 'auto_quantity'
+         AND issued_to_user_id = ?
+         AND earned_quantity_servings = ?
+         AND earned_quantity_start_date = ?
+       LIMIT 1`,
+      [Number(userId || 0), Number(milestoneServings || 0), String(startDate || '').trim()],
+      callback
+    );
+  }
+
+  createQuantityPromoCode(name, discountPercent, userId, milestoneServings, startDate, callback) {
+    const normalizedUserId = Number(userId || 0);
+    const normalizedMilestone = Number(milestoneServings || 0);
+    const normalizedStartDate = String(startDate || '').trim();
+    if (!normalizedUserId || !normalizedMilestone || !/^\d{4}-\d{2}-\d{2}$/.test(normalizedStartDate)) {
+      callback(new Error('Dữ liệu mốc tích suất không hợp lệ'));
+      return;
+    }
+
+    const database = this;
+    const insertCode = (attempt = 0) => {
+      const code = `QTY${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+      this.db.run(
+        `INSERT INTO promo_codes
+          (code, discount_percent, issued_to_user_id, issued_to_name, source,
+           earned_quantity_servings, earned_quantity_start_date)
+         VALUES (?, ?, ?, ?, 'auto_quantity', ?, ?)`,
+        [
+          code,
+          Number(discountPercent || 0),
+          normalizedUserId,
+          String(name || '').trim(),
+          normalizedMilestone,
+          normalizedStartDate
+        ],
+        function onQuantityPromoInserted(err) {
+          if (!err) {
+            callback(null, {
+              id: this.lastID,
+              code,
+              discountPercent: Number(discountPercent || 0),
+              milestoneServings: normalizedMilestone
+            });
+            return;
+          }
+          if (!String(err.message || '').includes('UNIQUE')) {
+            callback(err);
+            return;
+          }
+          database.getQuantityPromoByMilestone(
+            normalizedUserId,
+            normalizedMilestone,
+            normalizedStartDate,
+            (findErr, existing) => {
+              if (findErr) { callback(findErr); return; }
+              if (existing) {
+                callback(null, {
+                  id: existing.id,
+                  code: existing.code,
+                  discountPercent: Number(existing.discount_percent || discountPercent || 0),
+                  milestoneServings: normalizedMilestone,
+                  existing: true
+                });
+                return;
+              }
+              if (attempt < 3) { insertCode(attempt + 1); return; }
+              callback(err);
+            }
+          );
+        }
+      );
+    };
+
+    this.getQuantityPromoByMilestone(
+      normalizedUserId,
+      normalizedMilestone,
+      normalizedStartDate,
+      (err, existing) => {
+        if (err) { callback(err); return; }
+        if (existing) {
+          callback(null, {
+            id: existing.id,
+            code: existing.code,
+            discountPercent: Number(existing.discount_percent || discountPercent || 0),
+            milestoneServings: normalizedMilestone,
+            existing: true
+          });
+          return;
+        }
+        insertCode();
+      }
+    );
   }
 
   // Bảng xếp hạng theo tháng — đếm số ngày đặt cơm (không phải số suất)
