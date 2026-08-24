@@ -114,6 +114,30 @@ pm2 restart datcom
 pm2 logs datcom --lines 100
 ```
 
+## CI/CD GitHub Actions
+
+Workflow `.github/workflows/ci-cd.yml` chạy khi có pull request hoặc push vào `main`:
+
+1. `npm ci --omit=dev`
+2. kiểm tra cú pháp JavaScript
+3. chạy toàn bộ regression test
+4. `npm audit` cho dependency production
+5. push vào `main` mới được deploy lên VPS
+
+VPS deploy bằng `scripts/deploy.sh`. Script khóa không cho hai deploy chạy đồng thời, backup toàn bộ SQLite, checkout đúng commit, restart PM2 và kiểm tra `/api/today` của main cùng mọi site đang bật. Nếu có lỗi, code và database tự quay lại commit/snapshot trước.
+
+Tạo GitHub Environment tên `production` và cấu hình các secret:
+
+- `VPS_HOST`: IP hoặc hostname VPS.
+- `VPS_PORT`: cổng SSH, thường là `22`.
+- `VPS_USER`: user chạy PM2 và sở hữu `/var/www/datcom`.
+- `VPS_SSH_KEY`: private key dành riêng cho GitHub Actions.
+- `VPS_KNOWN_HOSTS`: kết quả `ssh-keyscan -H -p 22 <VPS_HOST>` đã được kiểm tra fingerprint.
+
+Public key tương ứng phải có trong `~/.ssh/authorized_keys` của `VPS_USER`. VPS cần có `bash`, `flock`, `curl`, Node.js 20, npm và PM2. Không lưu private key hoặc nội dung `.env` trong repository.
+
+Có thể chạy lại deploy thủ công tại tab **Actions → CI and production deploy → Run workflow**. Nên bật branch protection cho `main` và yêu cầu job `test` thành công trước khi merge.
+
 Vi du khoi dong bang PM2:
 
 ```bash
