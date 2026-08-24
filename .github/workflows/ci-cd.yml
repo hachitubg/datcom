@@ -84,7 +84,7 @@ jobs:
             -o BatchMode=yes \
             -o StrictHostKeyChecking=yes \
             "$VPS_USER@$VPS_HOST" \
-            "bash -s -- '$GITHUB_SHA'" < scripts/deploy.sh
+            "deploy-datcom $GITHUB_SHA"
 
       - name: Remove temporary SSH key
         if: always()

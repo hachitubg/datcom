@@ -134,7 +134,13 @@ Tạo GitHub Environment tên `production` và cấu hình các secret:
 - `VPS_SSH_KEY`: private key dành riêng cho GitHub Actions.
 - `VPS_KNOWN_HOSTS`: kết quả `ssh-keyscan -H -p 22 <VPS_HOST>` đã được kiểm tra fingerprint.
 
-Public key tương ứng phải có trong `~/.ssh/authorized_keys` của `VPS_USER`. VPS cần có `bash`, `flock`, `curl`, Node.js 20, npm và PM2. Không lưu private key hoặc nội dung `.env` trong repository.
+Public key tương ứng phải được giới hạn bằng forced command trong `~/.ssh/authorized_keys` của `VPS_USER`:
+
+```text
+command="/usr/local/sbin/datcom-deploy-entrypoint",restrict ssh-ed25519 AAAA... github-actions-datcom
+```
+
+Copy `scripts/deploy-entrypoint.sh` thành `/usr/local/sbin/datcom-deploy-entrypoint` và cấp quyền thực thi. Key này chỉ chấp nhận `deploy-datcom <commit-sha>`, không thể mở shell tùy ý. VPS cần có `bash`, `flock`, `curl`, Node.js 20, npm và PM2. Không lưu private key hoặc nội dung `.env` trong repository.
 
 Có thể chạy lại deploy thủ công tại tab **Actions → CI and production deploy → Run workflow**. Nên bật branch protection cho `main` và yêu cầu job `test` thành công trước khi merge.
 
