@@ -1205,6 +1205,8 @@ window.addEventListener('click', (e) => {
     const customerModal = document.getElementById('customerOrderModal');
     const customerFullHistoryModalEl = document.getElementById('customerFullHistoryModal');
     const confirmModalEl = document.getElementById('confirmModal');
+    const closureAddModalEl = document.getElementById('shopClosureAddModal');
+    const closureHistoryModalEl = document.getElementById('shopClosureHistoryModal');
     if (e.target === modal) {
         modal.style.display = 'none';
     }
@@ -1219,6 +1221,12 @@ window.addEventListener('click', (e) => {
     }
     if (e.target === confirmModalEl) {
         closeConfirmModal();
+    }
+    if (e.target === closureAddModalEl) {
+        closeShopClosureAddModal();
+    }
+    if (e.target === closureHistoryModalEl) {
+        closeShopClosureHistory();
     }
     const cashPaymentModalEl = document.getElementById('cashPaymentModal');
     if (e.target === cashPaymentModalEl) {
@@ -1625,6 +1633,79 @@ function openShopClosureHistory() {
 function closeShopClosureHistory() {
     document.getElementById('shopClosureHistoryModal').style.display = 'none';
 }
+
+function openShopClosureAddModal() {
+    const startInput = document.getElementById('closureStartDate');
+    const endInput = document.getElementById('closureEndDate');
+    if (!startInput.value || !endInput.value) {
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const defaultDate = getLocalDateInputValue(yesterday);
+        startInput.value = defaultDate;
+        endInput.value = defaultDate;
+    }
+    document.getElementById('closureAddMessage').innerHTML = '';
+    document.getElementById('shopClosureAddModal').style.display = 'flex';
+}
+
+function closeShopClosureAddModal() {
+    document.getElementById('shopClosureAddModal').style.display = 'none';
+}
+
+function addShopClosureRange(event) {
+    event.preventDefault();
+    const startDate = document.getElementById('closureStartDate').value;
+    const endDate = document.getElementById('closureEndDate').value;
+    const reasonInput = document.getElementById('closureRangeReason');
+    const reason = reasonInput.value.trim();
+    const button = document.getElementById('btnAddClosureRange');
+    if (!startDate || !endDate || !reason) {
+        showClosureAddMessage('Vui lòng chọn đầy đủ khoảng ngày và nhập lý do nghỉ.', true);
+        return;
+    }
+    if (startDate > endDate) {
+        showClosureAddMessage('Ngày bắt đầu không được sau ngày kết thúc.', true);
+        return;
+    }
+
+    button.disabled = true;
+    button.textContent = 'ĐANG LƯU...';
+    fetch(`${API_BASE}/api/admin/shop-closures`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ startDate, endDate, reason })
+    })
+        .then(res => res.json().then(data => {
+            if (!res.ok || data.error) throw new Error(data.error || 'Không thêm được ngày nghỉ');
+            return data;
+        }))
+        .then(data => {
+            reasonInput.value = '';
+            shopClosurePage = 1;
+            const rangeText = startDate === endDate
+                ? formatDate(startDate)
+                : `${formatDate(startDate)} đến ${formatDate(endDate)}`;
+            showClosureAddMessage(`Đã lưu ${Number(data.count || 1)} ngày nghỉ (${rangeText}) và tính lại chuỗi đặt cơm.`);
+            loadSettings();
+        })
+        .catch(err => showClosureAddMessage(err.message, true))
+        .finally(() => {
+            button.disabled = false;
+            button.textContent = 'LƯU LỊCH NGHỈ';
+        });
+}
+
+function showClosureAddMessage(message, isError = false) {
+    const element = document.getElementById('closureAddMessage');
+    element.innerHTML = `<div class="${isError ? 'error-message' : 'success-message'}">${escapeHtml(message)}</div>`;
+}
+
+document.getElementById('closureStartDate').addEventListener('change', (event) => {
+    const endInput = document.getElementById('closureEndDate');
+    if (!endInput.value || endInput.value < event.target.value) {
+        endInput.value = event.target.value;
+    }
+});
 
 function loadShopClosureHistory(page = 1) {
     const list = document.getElementById('shopClosureHistoryList');

@@ -1850,10 +1850,52 @@ tr:hover {
     flex: 0 0 auto;
 }
 
+.closure-action-buttons {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.closure-action-buttons button {
+    border-radius: 8px;
+    white-space: nowrap;
+}
+
 .closure-history-note {
     margin-top: 4px;
     color: var(--on-surface-variant);
     font-size: 0.8rem;
+}
+
+.closure-add-modal form {
+    margin-top: 14px;
+    border-top: 1px solid var(--outline-variant);
+    padding-top: 16px;
+}
+
+.closure-date-range {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.closure-range-reason {
+    margin-top: 14px;
+}
+
+.closure-range-reason textarea {
+    min-height: 88px;
+}
+
+.closure-modal-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.closure-modal-actions button {
+    min-height: 44px;
+    border-radius: 8px;
 }
 
 .closure-history-modal {
@@ -1910,10 +1952,36 @@ tr:hover {
     .settings-header-actions {
         flex-direction: column-reverse;
         align-items: flex-end;
+        width: 100%;
+    }
+
+    .closure-action-buttons {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        width: 100%;
+    }
+
+    .closure-action-buttons button {
+        width: 100%;
+        padding: 9px 7px;
+        font-size: 0.66rem;
+        white-space: normal;
     }
 
     .shop-closure-item {
         align-items: flex-start;
+    }
+
+    .closure-date-range {
+        grid-template-columns: 1fr;
+    }
+
+    .closure-modal-actions {
+        flex-direction: column;
+    }
+
+    .closure-modal-actions button {
+        width: 100%;
     }
 }
 

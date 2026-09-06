@@ -7,7 +7,7 @@
     "start": "node src/server.js",
     "dev": "node src/server.js",
     "check": "node --check src/server.js && node --check src/database.js && node --check src/payos.js && node --check src/site-registry.js && node --check public/assets/js/common.js && node --check public/assets/js/trangchu.js && node --check public/assets/js/admin.js",
-    "test": "node test/payment-regression.test.js && node test/user-management.test.js && node test/kitchen-workflow.test.js && node test/quantity-promo.test.js"
+    "test": "node test/payment-regression.test.js && node test/user-management.test.js && node test/kitchen-workflow.test.js && node test/quantity-promo.test.js && node test/closure-history.test.js"
   },
   "dependencies": {
     "express": "^4.18.2",

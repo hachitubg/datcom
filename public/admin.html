@@ -365,7 +365,10 @@
                             <p class="settings-card-desc">Bật công tắc, nhập lý do và lưu để ghi ngày nghỉ hôm nay</p>
                         </div>
                         <div class="settings-header-actions">
-                            <button class="btn-secondary btn-small" type="button" onclick="openShopClosureHistory()">XEM LỊCH SỬ NGHỈ</button>
+                            <div class="closure-action-buttons">
+                                <button class="btn-primary btn-small" type="button" onclick="openShopClosureAddModal()">THÊM LỊCH NGHỈ</button>
+                                <button class="btn-secondary btn-small" type="button" onclick="openShopClosureHistory()">XEM LỊCH SỬ NGHỈ</button>
+                            </div>
                             <label class="toggle-switch">
                                 <input type="checkbox" id="settingShopClosedEnabled">
                                 <span class="toggle-slider"></span>
@@ -493,6 +496,35 @@
     </div>
 
     <!-- ===== MODALS ===== -->
+
+    <div id="shopClosureAddModal" class="modal">
+        <div class="modal-content closure-add-modal" style="max-width:560px;">
+            <span class="close" onclick="closeShopClosureAddModal()">&times;</span>
+            <h2>THÊM LỊCH NGHỈ</h2>
+            <p class="closure-history-note">Chọn một ngày hoặc cả khoảng thời gian quán nghỉ. Các ngày này không làm đứt chuỗi đặt cơm.</p>
+            <form id="closureRangeForm" onsubmit="addShopClosureRange(event)">
+                <div class="closure-date-range">
+                    <div class="filter-field">
+                        <label for="closureStartDate">Từ ngày</label>
+                        <input type="date" id="closureStartDate" required>
+                    </div>
+                    <div class="filter-field">
+                        <label for="closureEndDate">Đến ngày</label>
+                        <input type="date" id="closureEndDate" required>
+                    </div>
+                </div>
+                <div class="filter-field closure-range-reason">
+                    <label for="closureRangeReason">Lý do nghỉ</label>
+                    <textarea id="closureRangeReason" rows="3" maxlength="500" placeholder="VD: Quán nghỉ lễ hoặc có việc gia đình" required></textarea>
+                </div>
+                <div id="closureAddMessage"></div>
+                <div class="closure-modal-actions">
+                    <button class="btn-primary" id="btnAddClosureRange" type="submit">LƯU LỊCH NGHỈ</button>
+                    <button class="btn-secondary" type="button" onclick="closeShopClosureAddModal()">HỦY</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <div id="shopClosureHistoryModal" class="modal">
         <div class="modal-content closure-history-modal" style="max-width:640px;">
