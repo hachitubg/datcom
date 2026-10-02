@@ -1859,7 +1859,8 @@ app.get('/api/admin/users', (req, res) => {
   if (req.query.page !== undefined) {
     const page = Math.max(1, Math.floor(Number(req.query.page) || 1));
     const limit = Math.max(1, Math.min(50, Math.floor(Number(req.query.limit) || 10)));
-    db.getUsersPage(page, limit, (err, result) => {
+    const search = String(req.query.search || '').trim();
+    db.getUsersPage(page, limit, search, (err, result) => {
       if (err) return res.status(500).json({ error: err.message });
       res.json(result);
     });

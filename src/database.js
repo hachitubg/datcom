@@ -2277,9 +2277,26 @@ class Database {
     });
   }
 
-  getUsersPage(page, limit, callback) {
+  getUsersPage(page, limit, search, callback) {
+    if (typeof search === 'function') { callback = search; search = ''; }
     const normalizedLimit = Math.max(1, Math.min(50, Math.floor(Number(limit) || 10)));
     const requestedPage = Math.max(1, Math.floor(Number(page) || 1));
+    const keyword = this.getSearchKey(search);
+    if (keyword) {
+      this.getUsers((err, users = []) => {
+        if (err) return callback(err);
+        const filtered = users.filter((user) => this.getSearchKey(user.name).includes(keyword)
+          || this.getSearchKey(user.phone).includes(keyword));
+        const total = filtered.length;
+        const totalPages = Math.max(1, Math.ceil(total / normalizedLimit));
+        const normalizedPage = Math.min(requestedPage, totalPages);
+        callback(null, {
+          rows: filtered.slice((normalizedPage - 1) * normalizedLimit, normalizedPage * normalizedLimit),
+          page: normalizedPage, limit: normalizedLimit, total, totalPages
+        });
+      });
+      return;
+    }
     this.db.get('SELECT COUNT(*) AS total FROM users', (countErr, countRow) => {
       if (countErr) { callback(countErr); return; }
       const total = Number(countRow?.total || 0);

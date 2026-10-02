@@ -346,6 +346,15 @@
                 </div>
 
                 <h3 class="section-subtitle" style="margin-top:20px;">DANH SÁCH NGƯỜI DÙNG</h3>
+                <form class="filter-row user-search-row" onsubmit="event.preventDefault(); loadUsers(1);">
+                    <div class="filter-field filter-field--grow">
+                        <label for="userSearchInput">Tìm tài khoản</label>
+                        <input type="search" id="userSearchInput" placeholder="Nhập tên hoặc số điện thoại" oninput="scheduleUserSearch()">
+                    </div>
+                    <div class="filter-actions">
+                        <button class="btn-primary btn-filter" type="submit">TÌM KIẾM</button>
+                    </div>
+                </form>
                 <div id="userList" class="loading">Đang tải...</div>
                 <div id="userPagination" class="pagination-wrap"></div>
             </div>

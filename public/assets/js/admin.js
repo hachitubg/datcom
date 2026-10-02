@@ -1470,23 +1470,36 @@ async function deletePromoCode(id) {
 // =============================================
 let userCurrentPage = 1;
 const USER_PAGE_SIZE = 10;
+let userSearchTimer;
+let userListRequestId = 0;
+
+function scheduleUserSearch() {
+    clearTimeout(userSearchTimer);
+    userListRequestId += 1;
+    userSearchTimer = setTimeout(() => loadUsers(1), 300);
+}
 
 function loadUsers(page = userCurrentPage) {
+    clearTimeout(userSearchTimer);
+    const requestId = ++userListRequestId;
+    const searchInput = document.getElementById('userSearchInput');
+    const search = searchInput ? searchInput.value.trim() : '';
     const container = document.getElementById('userList');
     const pagination = document.getElementById('userPagination');
     container.innerHTML = '<div class="loading">Đang tải...</div>';
     pagination.innerHTML = '';
 
-    fetch(`${API_BASE}/api/admin/users?page=${page}&limit=${USER_PAGE_SIZE}`)
+    fetch(`${API_BASE}/api/admin/users?page=${page}&limit=${USER_PAGE_SIZE}&search=${encodeURIComponent(search)}`)
         .then(res => res.json().then(data => {
             if (!res.ok || data.error) throw new Error(data.error || 'Không tải được danh sách người dùng');
             return data;
         }))
         .then(data => {
+            if (requestId !== userListRequestId) return;
             const users = data.rows || [];
             userCurrentPage = data.page || 1;
             if (!users || !users.length) {
-                container.innerHTML = '<div style="padding:14px; color:#999; text-align:center;">Chưa có người dùng nào.</div>';
+                container.innerHTML = `<div style="padding:14px; color:#999; text-align:center;">${search ? 'Không tìm thấy tài khoản phù hợp.' : 'Chưa có người dùng nào.'}</div>`;
                 return;
             }
 
@@ -1514,7 +1527,8 @@ function loadUsers(page = userCurrentPage) {
             `;
         })
         .catch(err => {
-            container.innerHTML = `<div style="padding:14px; color:red; text-align:center;">Lỗi: ${err.message}</div>`;
+            if (requestId !== userListRequestId) return;
+            container.innerHTML = `<div style="padding:14px; color:red; text-align:center;">Lỗi: ${escapeHtml(err.message)}</div>`;
         });
 }
 
