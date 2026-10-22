@@ -1528,16 +1528,17 @@ function loadUsers(page = userCurrentPage) {
                     ? '<span class="payment-status-badge psb-paid">Admin</span>'
                     : '<span class="payment-status-badge psb-pending">User</span>';
                 return `
-                    <div class="admin-payment-row">
-                        <div>
-                            <div class="order-name">${escapeHtml(u.name)} ${roleBadge}</div>
-                            <div class="admin-payment-meta">SĐT: ${escapeHtml(u.phone)} · Tạo: ${AppUtils.formatDateTime(u.created_at)}</div>
+                    <article class="admin-user-row">
+                        <div class="admin-user-main">
+                            <div class="admin-user-name"><strong>${escapeHtml(u.name)}</strong> ${roleBadge}</div>
+                            <p class="admin-user-phone">${escapeHtml(u.phone)}</p>
+                            <dl class="admin-user-dates"><div><dt>Đăng nhập gần nhất</dt><dd class="${u.last_login_at ? '' : 'login-not-recorded'}">${u.last_login_at ? escapeHtml(AppUtils.formatDateTime(u.last_login_at)) : 'Chưa ghi nhận'}</dd></div><div><dt>Ngày tạo</dt><dd>${escapeHtml(AppUtils.formatDateTime(u.created_at))}</dd></div></dl>
                         </div>
-                        <div class="admin-payment-actions">
-                            <button class="btn-warning btn-small" onclick="resetUserPassword(${u.id}, '${encodeURIComponent(u.name)}')">Đổi MK</button>
-                            <button class="btn-danger btn-small" onclick="deleteUser(${u.id}, '${encodeURIComponent(u.name)}')">Xóa</button>
+                        <div class="admin-user-actions">
+                            <button class="btn-secondary btn-small" type="button" onclick="resetUserPassword(${u.id}, '${encodeURIComponent(u.name)}')">Đổi mật khẩu</button>
+                            <button class="btn-danger btn-small" type="button" onclick="deleteUser(${u.id}, '${encodeURIComponent(u.name)}')">Xóa</button>
                         </div>
-                    </div>
+                    </article>
                 `;
             }).join('');
             pagination.innerHTML = `

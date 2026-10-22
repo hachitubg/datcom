@@ -54,6 +54,7 @@ if (process.argv.includes('--server')) {
       assert.equal(overview.summary.totalAmount, 220000);
       assert.equal(overview.summary.unpaidServings, 6);
       assert.equal(overview.orders[0].items.length, 2);
+      assert.deepEqual(overview.appliedPromos.map((promo) => promo.code), ['OWN']);
       const [todayInfo] = await sql(database.db, 'SELECT id FROM days WHERE date = ?', [today]);
       await call(database, 'createPaymentRequest', { dayId: todayInfo.id, customerName: owner.name, orderCode: 98765001, amount: 240000 });
       await call(database, 'markPaymentPaid', 98765001, { amount: 120000, reference: 'TEST-OVERVIEW' });
@@ -67,6 +68,7 @@ if (process.argv.includes('--server')) {
       assert.equal(credited.summary.unpaidServings, 0);
       assert.equal(credited.summary.creditAmount, 20000);
       assert.equal(credited.payments[0].amount, 240000);
+      assert.deepEqual(credited.appliedPromos, []);
       await close(database.db);
       database = null;
 
@@ -91,7 +93,7 @@ if (process.argv.includes('--server')) {
       const publicHistory = await (await fetch(`${base}/api/payments/customers/${encodeURIComponent(owner.name)}/orders`)).json();
       assert.equal(publicHistory.orders[0].quantity, 6);
       assert.equal(publicHistory.payments, undefined);
-      assert.deepEqual(publicHistory.summary, { unpaidServings: 0 });
+      assert.deepEqual(publicHistory.summary, { unpaidServings: 0, remainingAmount: 0 });
       const login = await post('/api/admin/login', { password: 'test-order-entry-password' });
       assert.equal(login.status, 200);
       const cookie = login.headers.get('set-cookie').split(';')[0];
@@ -105,6 +107,20 @@ if (process.argv.includes('--server')) {
       const signup = await post('/api/auth/register', { name: 'Khách riêng tư', phone: '0900999003', password: 'test-password' });
       assert.equal(signup.status, 200);
       const userCookie = signup.headers.get('set-cookie').split(';')[0];
+      let userRows = await (await fetch(`${base}/api/admin/users?page=1&limit=50`, { headers: { Cookie: cookie } })).json();
+      const newUser = userRows.rows.find((row) => row.phone === '0900999003');
+      assert(newUser.last_login_at, 'Auto-login after registration is recorded');
+      assert.equal(userRows.rows.find((row) => row.id === owner.id).last_login_at, null);
+      const auditDb = new sqlite3.Database(dbPath);
+      await sql(auditDb, `UPDATE users SET last_login_at = '2001-01-01 00:00:00' WHERE id = ?`, [newUser.id]);
+      assert.equal((await post('/api/auth/login', { phone: '0900999003', password: 'wrong-password' })).status, 401);
+      await fetch(`${base}/api/auth/me`, { headers: { Cookie: userCookie } });
+      assert.equal((await sql(auditDb, 'SELECT last_login_at FROM users WHERE id = ?', [newUser.id]))[0].last_login_at, '2001-01-01 00:00:00');
+      assert.equal((await post('/api/auth/login', { phone: '0900999003', password: 'test-password' })).status, 200);
+      assert.notEqual((await sql(auditDb, 'SELECT last_login_at FROM users WHERE id = ?', [newUser.id]))[0].last_login_at, '2001-01-01 00:00:00');
+      await close(auditDb);
+      userRows = await (await fetch(`${base}/api/admin/users?page=1&search=0900999003`, { headers: { Cookie: cookie } })).json();
+      assert(userRows.rows[0].last_login_at, 'Filtered users return login timestamp');
       const mine = await (await fetch(`${base}/api/payments/me?name=${encodeURIComponent(owner.name)}`, { headers: { Cookie: userCookie } })).json();
       assert.notEqual(mine.name, owner.name);
       assert.equal(mine.summary.totalAmount, 0);

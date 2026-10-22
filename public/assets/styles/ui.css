@@ -332,6 +332,18 @@ body.ui-modal-open { overflow: hidden; }
 .payment-totals strong { display: block; color: var(--primary); margin-top: 5px; font-size: .85rem; overflow-wrap: anywhere; }
 .payment-account-actions { padding: 18px 0 5px; text-align: center; }
 .payment-account-actions button { width: 100%; min-height: 46px; font-size: .88rem; border: 0; border-radius: 8px; }
+.payment-account-actions .pay-btn { display: flex; align-items: center; justify-content: center; gap: 9px; }
+.payment-due-summary { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); padding: 20px 16px; gap: 16px; border-radius: 8px; background: var(--surface-container-low); }
+.payment-due-summary > div + div { border-left: 1px solid var(--ui-border); padding-left: 16px; }
+.payment-due-summary span { display: block; color: var(--on-surface-variant); font-size: .76rem; line-height: 1.5; }
+.payment-due-summary strong { display: block; color: var(--primary); font-size: 1.55rem; line-height: 1.4; margin-top: 6px; }
+.payment-due-summary strong small { font-size: .85rem; font-weight: 500; }
+.payment-applied-promos { margin: 16px 0 0; padding-bottom: 15px; border-bottom: 1px solid var(--ui-border); }
+.payment-applied-promos > span { color: var(--on-surface-variant); font-size: .72rem; }
+.payment-applied-promos p { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: .75rem; margin-top: 8px; }
+.payment-applied-promos code { color: var(--primary); font: 600 .78rem/1.6 monospace; overflow-wrap: anywhere; }
+.payment-applied-promos p > span { color: var(--on-surface-variant); font-size: .73rem; }
+.payment-no-promo { color: var(--on-surface-variant); }
 .payment-help { font-size: .73rem; color: var(--on-surface-variant); line-height: 1.6; margin: 12px 0; }
 .payment-customer-title { font-size: 1rem; margin: 0 0 14px; color: var(--primary); }
 .payment-history-filter { display: block; width: 100%; margin: 0 0 14px; }
@@ -409,4 +421,30 @@ body.ui-modal-open { overflow: hidden; }
     .promo-admin-row { gap: 10px; flex-wrap: wrap; }
     .promo-admin-main { flex-basis: 100%; }
     .promo-admin-actions { width: 100%; flex-direction: row; align-items: center; justify-content: space-between; }
+}
+
+.user-management-heading h3 { margin-bottom: 4px; text-transform: none; }
+.user-management-heading p { color: var(--on-surface-variant); font-size: .8rem; margin-bottom: 18px; }
+.user-search-row { margin-bottom: 10px; }
+.user-login-note { color: var(--on-surface-variant); font-size: .71rem; line-height: 1.6; margin: 10px 0 12px; }
+.admin-user-row { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 18px 0; border-bottom: 1px solid var(--ui-border); }
+.admin-user-main { min-width: 0; flex: 1; }
+.admin-user-name { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.admin-user-name strong { color: var(--primary); font-size: .94rem; overflow-wrap: anywhere; }
+.admin-user-name .payment-status-badge { font-size: .64rem; }
+.admin-user-phone { color: var(--on-surface-variant); font-size: .8rem; margin-top: 4px; }
+.admin-user-dates { display: flex; flex-wrap: wrap; gap: 12px 28px; margin-top: 13px; }
+.admin-user-dates dt { font-size: .67rem; color: var(--on-surface-variant); }
+.admin-user-dates dd { font-size: .76rem; margin: 4px 0 0; line-height: 1.5; }
+.admin-user-dates .login-not-recorded { color: var(--on-surface-variant); }
+.admin-user-actions { display: flex; gap: 7px; flex-shrink: 0; }
+.admin-user-actions .btn-small { flex: 0 0 auto; width: auto; padding: 9px 12px; min-height: 38px; font-size: .72rem; }
+@media (max-width: 600px) {
+    .admin-user-row { align-items: flex-start; flex-direction: column; gap: 14px; }
+    .admin-user-actions { width: 100%; justify-content: flex-end; }
+    .admin-user-dates { gap: 12px 20px; }
+    .admin-user-name strong { font-size: .88rem; }
+    .payment-due-summary { padding: 16px 12px; gap: 12px; }
+    .payment-due-summary > div + div { padding-left: 12px; }
+    .payment-due-summary strong { font-size: 1.3rem; }
 }

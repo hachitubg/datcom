@@ -309,7 +309,7 @@
 
         <div id="users" class="tab-content">
             <div class="section">
-                <h3 class="section-subtitle">DANH SÁCH NGƯỜI DÙNG</h3>
+                <div class="user-management-heading"><h3 class="section-subtitle">Người dùng</h3><p>Tìm tài khoản theo tên hoặc số điện thoại.</p></div>
                 <form class="filter-row user-search-row" onsubmit="event.preventDefault(); loadUsers(1);">
                     <div class="filter-field filter-field--grow">
                         <label for="userSearchInput">Tìm tài khoản</label>
@@ -319,6 +319,7 @@
                         <button class="btn-primary btn-filter" type="submit">TÌM KIẾM</button>
                     </div>
                 </form>
+                <p class="user-login-note">Lần đăng nhập gần nhất được ghi nhận từ khi cập nhật tính năng. Tài khoản cũ có thể chưa có dữ liệu.</p>
                 <div id="userList" class="loading">Đang tải...</div>
                 <div id="userPagination" class="pagination-wrap"></div>
             </div>

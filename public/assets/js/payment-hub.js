@@ -11,7 +11,10 @@
     const pageSize = 10;
 
     function summaryHtml(summary) {
-        return `<div class="payment-balance"><span>Chưa thanh toán</span><strong>${Number(summary.unpaidServings || 0)} <small>suất</small></strong></div>`;
+        return `<div class="payment-due-summary"><div><span>Chưa thanh toán</span><strong>${Number(summary.unpaidServings || 0)} <small>suất</small></strong></div><div><span>Còn phải trả</span><strong>${money(summary.remainingAmount || 0)}</strong></div></div>`;
+    }
+    function promoSummaryHtml(promos = []) {
+        return `<div class="payment-applied-promos"><span>Mã đã áp dụng cho các suất còn nợ</span>${promos.length ? promos.map((promo) => `<p><code>${esc(promo.code)}</code><span>Giảm ${Number(promo.discountPercent)}% cho 1 suất · ${esc(dateLabel(promo.date))}</span></p>`).join('') : '<p class="payment-no-promo">Không sử dụng mã khuyến mãi.</p>'}</div>`;
     }
     function renderHistory(container, rows, kind) {
         let page = 1;
@@ -52,20 +55,16 @@
         $('paymentPublicSection').hidden = !isList;
         content.hidden = isList;
         document.querySelectorAll('[data-payment-tab]').forEach((button) => {
-            const active = button.dataset.paymentTab === selectedTab || (selectedTab === 'checkout' && button.dataset.paymentTab === 'overview');
+            const active = button.dataset.paymentTab === selectedTab;
             button.classList.toggle('active', active);
             button.setAttribute('aria-pressed', String(active));
         });
         if (isList) { loadDebtList(); return; }
-        if (selectedTab === 'checkout') {
-            content.innerHTML = `<button type="button" class="payment-back-button" data-payment-back>← Quay lại</button><div class="payment-balance"><span>Số tiền cần thanh toán</span><strong>${money(account.summary.remainingAmount)}</strong>${account.summary.creditAmount > 0 ? `<p>Số dư trả trước ${money(account.summary.creditAmount)}</p>` : ''}</div><div class="payment-account-actions">${account.summary.remainingAmount > 0 ? `<button class="btn-submit pay-btn" data-customer-name="${encodeURIComponent(account.name)}">Thanh toán qua PayOS</button>` : '<p class="settled">Bạn đã thanh toán đủ tiền cơm.</p>'}</div><p class="payment-help">Bạn sẽ được chuyển đến PayOS để kiểm tra số tiền và thanh toán.</p>`;
-            return;
-        }
         if (selectedTab === 'orders' || selectedTab === 'payments') {
             renderHistory(content, account[selectedTab] || [], selectedTab);
             return;
         }
-        content.innerHTML = `${summaryHtml(account.summary)}<div class="payment-account-actions">${account.summary.remainingAmount > 0 ? '<button class="btn-submit" type="button" data-payment-checkout>Xem và thanh toán</button>' : '<p class="settled">Bạn đã thanh toán đủ tiền cơm.</p>'}</div><p class="payment-help">Xem chi tiết từng ngày trong “Lịch sử đặt” và các lần trả tiền trong “Đã thanh toán”.</p>`;
+        content.innerHTML = `${summaryHtml(account.summary)}${account.summary.remainingAmount > 0 ? promoSummaryHtml(account.appliedPromos) : ''}<div class="payment-account-actions">${account.summary.remainingAmount > 0 ? `<button class="btn-submit pay-btn" type="button" data-customer-name="${encodeURIComponent(account.name)}"><span data-icon="credit-card" aria-hidden="true"></span>Thanh toán qua PayOS</button>` : '<p class="settled">Bạn đã thanh toán đủ tiền cơm.</p>'}</div><p class="payment-help">Số tiền trên đã tính ưu đãi và các khoản đã trả. Xem chi tiết trong lịch sử.</p>`;
     }
     async function open() {
         const request = ++requestId;
@@ -105,7 +104,7 @@
             const rows = await AppUtils.fetchJson(`${API_BASE}/api/payments/today?search=${encodeURIComponent($('paymentSearch').value.trim())}`);
             if (request !== debtRequest) return;
             const debts = (Array.isArray(rows) ? rows : []).filter((row) => Number(row.remainingAmount) > 0);
-            list.innerHTML = debts.length ? debts.map((row) => `<article class="customer-payment-row"><div class="customer-payment-heading"><div class="order-info"><h4>${esc(row.name)}</h4><p>${Number(row.quantity || 0)} suất chưa thanh toán</p></div></div><div class="payment-action-group"><button type="button" class="payment-detail-btn" data-customer-name="${encodeURIComponent(row.name)}">Chi tiết</button><button type="button" class="pay-btn" data-customer-name="${encodeURIComponent(row.name)}">Thanh toán</button></div></article>`).join('') : '<div class="customer-list-empty">Không có công nợ phù hợp.</div>';
+            list.innerHTML = debts.length ? debts.map((row) => `<article class="customer-payment-row"><div class="customer-payment-heading"><div class="order-info"><h4>${esc(row.name)}</h4><p>${Number(row.quantity || 0)} suất chưa thanh toán</p></div><div class="customer-payment-amount"><span>Còn phải trả</span><strong>${money(row.remainingAmount)}</strong></div></div><div class="payment-action-group"><button type="button" class="payment-detail-btn" data-customer-name="${encodeURIComponent(row.name)}">Chi tiết</button><button type="button" class="pay-btn" data-customer-name="${encodeURIComponent(row.name)}">Thanh toán</button></div></article>`).join('') : '<div class="customer-list-empty">Không có công nợ phù hợp.</div>';
         } catch (error) { if (request === debtRequest) list.innerHTML = `<div class="error-message">${esc(error.message)}</div>`; }
     }
     async function showCustomerOrders(name) {
@@ -116,7 +115,7 @@
         try {
             const data = await AppUtils.fetchJson(`${API_BASE}/api/payments/customers/${encodeURIComponent(name)}/orders`);
             if (request !== detailRequest) return;
-            container.innerHTML = `<h3 class="payment-customer-title">${esc(data.name)}</h3>${summaryHtml(data.summary)}<p class="payment-help">Lịch sử gồm cả ngày đã thanh toán và chưa thanh toán.</p><div id="customerOrderHistory"></div>`;
+            container.innerHTML = `<h3 class="payment-customer-title">${esc(data.name)}</h3>${summaryHtml(data.summary)}${data.summary.remainingAmount > 0 ? promoSummaryHtml(data.appliedPromos) : ''}<p class="payment-help">Lịch sử gồm cả ngày đã thanh toán và chưa thanh toán.</p><div id="customerOrderHistory"></div>`;
             renderHistory($('customerOrderHistory'), data.orders || [], 'orders');
         } catch (error) { if (request === detailRequest) container.innerHTML = `<div class="error-message">${esc(error.message)}</div>`; }
     }
@@ -124,8 +123,6 @@
         button.onclick = () => { selectedTab = button.dataset.paymentTab; renderAccountTab(); };
     });
     $('paymentPersonalContent').addEventListener('click', (event) => {
-        if (event.target.closest('[data-payment-checkout]')) { selectedTab = 'checkout'; renderAccountTab(); return; }
-        if (event.target.closest('[data-payment-back]')) { selectedTab = 'overview'; renderAccountTab(); return; }
         const button = event.target.closest('.pay-btn');
         if (button && account && !button.disabled) window.openPayQr(account.name);
     });

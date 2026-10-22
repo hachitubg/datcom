@@ -1508,7 +1508,7 @@ app.get('/api/payments/customers/:name/orders', (req, res) => {
   if (!name || name.length > 150) return res.status(400).json({ error: 'Tên khách không hợp lệ.' });
   db.getCustomerPaymentOverview(name, (err, data) => {
     if (err) return res.status(500).json({ error: err.message });
-    res.json({ name: data.name, summary: { unpaidServings: data.summary.unpaidServings }, orders: data.orders });
+    res.json({ name: data.name, summary: { unpaidServings: data.summary.unpaidServings, remainingAmount: data.summary.remainingAmount }, appliedPromos: data.appliedPromos, orders: data.orders });
   });
 });
 
@@ -1804,8 +1804,11 @@ app.post('/api/admin/login', (req, res) => {
       sv: Number(adminUser.session_version || 1),
       exp: Date.now() + maxAgeSeconds * 1000
     });
-    setSessionCookieForRequest(req, res, 'admin_session', sessionToken, maxAgeSeconds);
-    res.json({ success: true });
+    mainDb.recordUserLogin(adminUser.id, (loginErr) => {
+      if (loginErr) return res.status(500).json({ error: 'Không ghi nhận được lần đăng nhập. Vui lòng thử lại.' });
+      setSessionCookieForRequest(req, res, 'admin_session', sessionToken, maxAgeSeconds);
+      res.json({ success: true });
+    });
   });
 });
 
@@ -2150,8 +2153,11 @@ app.post('/api/auth/register', (req, res) => {
       sv: Number(user.session_version || 1),
       exp: Date.now() + maxAgeSeconds * 1000
     });
-    setSessionCookieForRequest(req, res, 'user_session', sessionToken, maxAgeSeconds);
-    res.json({ success: true, user: { id: user.id, name: user.name, phone: user.phone } });
+    db.recordUserLogin(user.id, (loginErr) => {
+      if (loginErr) return res.status(500).json({ error: 'Không ghi nhận được lần đăng nhập. Vui lòng thử lại.' });
+      setSessionCookieForRequest(req, res, 'user_session', sessionToken, maxAgeSeconds);
+      res.json({ success: true, user: { id: user.id, name: user.name, phone: user.phone } });
+    });
   });
 });
 
@@ -2198,8 +2204,11 @@ app.post('/api/auth/login', (req, res) => {
       sv: Number(user.session_version || 1),
       exp: Date.now() + maxAgeSeconds * 1000
     });
-    setSessionCookieForRequest(req, res, 'user_session', sessionToken, maxAgeSeconds);
-    res.json({ success: true, user: { id: user.id, name: user.name, phone: user.phone, role: user.role } });
+    db.recordUserLogin(user.id, (loginErr) => {
+      if (loginErr) return res.status(500).json({ error: 'Không ghi nhận được lần đăng nhập. Vui lòng thử lại.' });
+      setSessionCookieForRequest(req, res, 'user_session', sessionToken, maxAgeSeconds);
+      res.json({ success: true, user: { id: user.id, name: user.name, phone: user.phone, role: user.role } });
+    });
   });
 });
 

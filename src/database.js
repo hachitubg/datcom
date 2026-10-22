@@ -155,6 +155,7 @@ class Database {
       this.db.run("ALTER TABLE promo_codes ADD COLUMN earned_quantity_servings INTEGER", () => {});
       this.db.run("ALTER TABLE promo_codes ADD COLUMN earned_quantity_start_date TEXT", () => {});
       this.db.run("ALTER TABLE users ADD COLUMN session_version INTEGER DEFAULT 1", () => {});
+      this.db.run("ALTER TABLE users ADD COLUMN last_login_at DATETIME", () => {});
 
       this.db.run(`
         CREATE TABLE IF NOT EXISTS order_change_log (
@@ -1862,13 +1863,22 @@ class Database {
               if (!byDate.has(order.date)) byDate.set(order.date, []);
               byDate.get(order.date).push(order);
             }
-            callback(null, { name: customerName,
+            this.getTodayCustomerOrderDetails(customerName, (detailsErr, details) => {
+            if (detailsErr) return callback(detailsErr);
+            const promos = new Map();
+            for (const row of details.rows || []) {
+              if (row.promo_code && Number(row.discount_percent) > 0) promos.set(row.promo_code, {
+                code: row.promo_code, discountPercent: Number(row.discount_percent), date: row.date
+              });
+            }
+            callback(null, { name: customerName, appliedPromos: [...promos.values()],
               summary: { totalServings: history.totalOrders, totalAmount: history.totalAmount,
                 unpaidServings: history.rows.reduce((sum, row) => sum + (row.remainingAmount > 0 && row.totalAmount > 0
                   ? Math.min(row.quantity, Math.ceil(row.remainingAmount * row.quantity / row.totalAmount)) : 0), 0),
                 paidAmount: paid, remainingAmount: history.totalRemaining, creditAmount: Math.max(0, paid - history.totalAmount) },
               orders: history.rows.map((row) => ({ ...row, items: byDate.get(row.date) || [] })),
               payments: payments.map((row) => ({ id: row.id, amount: Number(row.amount), date: row.transaction_date || row.created_at }))
+            });
             });
           });
         });
@@ -2279,9 +2289,13 @@ class Database {
     );
   }
 
+  recordUserLogin(userId, callback) {
+    this.db.run('UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE id = ?', [Number(userId)], callback);
+  }
+
   getUsers(callback) {
     this.db.all(
-      `SELECT id, phone, name, role, created_at, COALESCE(session_version, 1) AS session_version FROM users ORDER BY created_at DESC`,
+      `SELECT id, phone, name, role, created_at, last_login_at, COALESCE(session_version, 1) AS session_version FROM users ORDER BY created_at DESC, id DESC`,
       callback
     );
   }
@@ -2365,7 +2379,7 @@ class Database {
       const totalPages = Math.max(1, Math.ceil(total / normalizedLimit));
       const normalizedPage = Math.min(requestedPage, totalPages);
       this.db.all(
-        `SELECT id, phone, name, role, created_at, COALESCE(session_version, 1) AS session_version
+        `SELECT id, phone, name, role, created_at, last_login_at, COALESCE(session_version, 1) AS session_version
          FROM users ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`,
         [normalizedLimit, (normalizedPage - 1) * normalizedLimit],
         (err, rows = []) => callback(err, {
