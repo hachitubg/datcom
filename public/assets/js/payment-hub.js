@@ -11,22 +11,22 @@
     const pageSize = 10;
 
     function summaryHtml(summary) {
-        return `<div class="payment-balance"><span>Còn phải thanh toán</span><strong>${money(summary.remainingAmount)}</strong>${summary.creditAmount > 0 ? `<p>Số dư trả trước: <strong>${money(summary.creditAmount)}</strong></p>` : ''}</div>
-            <div class="payment-totals"><span>Tiền cơm<strong>${money(summary.totalAmount)}</strong></span><span>Đã trả<strong>${money(summary.paidAmount)}</strong></span><span>Đã đặt<strong>${Number(summary.totalServings)} suất</strong></span></div>`;
+        return `<div class="payment-balance"><span>Chưa thanh toán</span><strong>${Number(summary.unpaidServings || 0)} <small>suất</small></strong></div>`;
     }
     function renderHistory(container, rows, kind) {
         let page = 1;
         let month = '';
+        const months = [...new Set(rows.map((row) => String(kind === 'orders' ? row.date : localDate(row.date)).slice(0, 7)))]
+            .filter((value) => /^\d{4}-\d{2}$/.test(value)).sort().reverse();
         const draw = () => {
             const filtered = month ? rows.filter((row) => String(kind === 'orders' ? row.date : localDate(row.date)).startsWith(month)) : rows;
             const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
             page = Math.min(page, pages);
             const records = filtered.slice((page - 1) * pageSize, page * pageSize);
-            container.innerHTML = `<div class="payment-history-filter"><label>Tháng <input type="month" data-history-month value="${esc(month)}"></label><button type="button" class="btn-secondary" data-reset-month>Tất cả</button></div>
+            container.innerHTML = `<div class="payment-history-filter"><label>Tháng xem lịch sử<span class="payment-month-select"><select data-history-month aria-label="Tháng xem lịch sử"><option value="">Tất cả các tháng</option>${months.map((value) => `<option value="${value}" ${value === month ? 'selected' : ''}>Tháng ${value.slice(5)} / ${value.slice(0, 4)}</option>`).join('')}</select><span data-icon="chevron-down" aria-hidden="true"></span></span></label></div>
                 <div class="payment-timeline">${records.length ? records.map((row) => kind === 'orders' ? orderRow(row) : `<article class="payment-history-row"><div><strong>${esc(dateLabel(row.date))}</strong><small>Đã thanh toán</small></div><strong>${money(row.amount)}</strong></article>`).join('') : '<div class="customer-list-empty">Chưa có lịch sử trong khoảng này.</div>'}</div>
                 <div class="payment-paging"><button type="button" class="btn-secondary" data-page-back ${page === 1 ? 'disabled' : ''}>Trước</button><span>${page}/${pages} · ${filtered.length} ${kind === 'orders' ? 'ngày' : 'lần'}</span><button type="button" class="btn-secondary" data-page-next ${page === pages ? 'disabled' : ''}>Sau</button></div>`;
             container.querySelector('[data-history-month]').onchange = (event) => { month = event.target.value; page = 1; draw(); };
-            container.querySelector('[data-reset-month]').onclick = () => { month = ''; page = 1; draw(); };
             container.querySelector('[data-page-back]').onclick = () => { page--; draw(); };
             container.querySelector('[data-page-next]').onclick = () => { page++; draw(); };
         };
@@ -52,15 +52,20 @@
         $('paymentPublicSection').hidden = !isList;
         content.hidden = isList;
         document.querySelectorAll('[data-payment-tab]').forEach((button) => {
-            button.classList.toggle('active', button.dataset.paymentTab === selectedTab);
-            button.setAttribute('aria-pressed', String(button.dataset.paymentTab === selectedTab));
+            const active = button.dataset.paymentTab === selectedTab || (selectedTab === 'checkout' && button.dataset.paymentTab === 'overview');
+            button.classList.toggle('active', active);
+            button.setAttribute('aria-pressed', String(active));
         });
         if (isList) { loadDebtList(); return; }
+        if (selectedTab === 'checkout') {
+            content.innerHTML = `<button type="button" class="payment-back-button" data-payment-back>← Quay lại</button><div class="payment-balance"><span>Số tiền cần thanh toán</span><strong>${money(account.summary.remainingAmount)}</strong>${account.summary.creditAmount > 0 ? `<p>Số dư trả trước ${money(account.summary.creditAmount)}</p>` : ''}</div><div class="payment-account-actions">${account.summary.remainingAmount > 0 ? `<button class="btn-submit pay-btn" data-customer-name="${encodeURIComponent(account.name)}">Thanh toán qua PayOS</button>` : '<p class="settled">Bạn đã thanh toán đủ tiền cơm.</p>'}</div><p class="payment-help">Bạn sẽ được chuyển đến PayOS để kiểm tra số tiền và thanh toán.</p>`;
+            return;
+        }
         if (selectedTab === 'orders' || selectedTab === 'payments') {
             renderHistory(content, account[selectedTab] || [], selectedTab);
             return;
         }
-        content.innerHTML = `${summaryHtml(account.summary)}<div class="payment-account-actions">${account.summary.remainingAmount > 0 ? `<button class="btn-submit pay-btn" data-customer-name="${encodeURIComponent(account.name)}">Thanh toán ${money(account.summary.remainingAmount)}</button>` : '<p class="settled">Bạn đã thanh toán đủ tiền cơm.</p>'}</div><p class="payment-help">Các khoản đã trả được trừ vào đơn cũ trước. Xem từng ngày tại “Lịch sử đặt”.</p>`;
+        content.innerHTML = `${summaryHtml(account.summary)}<div class="payment-account-actions">${account.summary.remainingAmount > 0 ? '<button class="btn-submit" type="button" data-payment-checkout>Xem và thanh toán</button>' : '<p class="settled">Bạn đã thanh toán đủ tiền cơm.</p>'}</div><p class="payment-help">Xem chi tiết từng ngày trong “Lịch sử đặt” và các lần trả tiền trong “Đã thanh toán”.</p>`;
     }
     async function open() {
         const request = ++requestId;
@@ -100,7 +105,7 @@
             const rows = await AppUtils.fetchJson(`${API_BASE}/api/payments/today?search=${encodeURIComponent($('paymentSearch').value.trim())}`);
             if (request !== debtRequest) return;
             const debts = (Array.isArray(rows) ? rows : []).filter((row) => Number(row.remainingAmount) > 0);
-            list.innerHTML = debts.length ? debts.map((row) => `<article class="customer-payment-row"><div class="customer-payment-heading"><div class="order-info"><h4>${esc(row.name)}</h4><p>${Number(row.quantity || 0)} suất còn nợ</p></div><div class="customer-payment-amount"><span>Còn phải trả</span><strong>${money(row.remainingAmount)}</strong></div></div><div class="payment-action-group"><button type="button" class="payment-detail-btn" data-customer-name="${encodeURIComponent(row.name)}">Chi tiết</button><button type="button" class="pay-btn" data-customer-name="${encodeURIComponent(row.name)}">Thanh toán</button></div></article>`).join('') : '<div class="customer-list-empty">Không có công nợ phù hợp.</div>';
+            list.innerHTML = debts.length ? debts.map((row) => `<article class="customer-payment-row"><div class="customer-payment-heading"><div class="order-info"><h4>${esc(row.name)}</h4><p>${Number(row.quantity || 0)} suất chưa thanh toán</p></div></div><div class="payment-action-group"><button type="button" class="payment-detail-btn" data-customer-name="${encodeURIComponent(row.name)}">Chi tiết</button><button type="button" class="pay-btn" data-customer-name="${encodeURIComponent(row.name)}">Thanh toán</button></div></article>`).join('') : '<div class="customer-list-empty">Không có công nợ phù hợp.</div>';
         } catch (error) { if (request === debtRequest) list.innerHTML = `<div class="error-message">${esc(error.message)}</div>`; }
     }
     async function showCustomerOrders(name) {
@@ -119,6 +124,8 @@
         button.onclick = () => { selectedTab = button.dataset.paymentTab; renderAccountTab(); };
     });
     $('paymentPersonalContent').addEventListener('click', (event) => {
+        if (event.target.closest('[data-payment-checkout]')) { selectedTab = 'checkout'; renderAccountTab(); return; }
+        if (event.target.closest('[data-payment-back]')) { selectedTab = 'overview'; renderAccountTab(); return; }
         const button = event.target.closest('.pay-btn');
         if (button && account && !button.disabled) window.openPayQr(account.name);
     });

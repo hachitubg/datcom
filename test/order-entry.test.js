@@ -52,13 +52,19 @@ if (process.argv.includes('--server')) {
       const overview = await call(database, 'getCustomerPaymentOverview', owner.name);
       assert.equal(overview.summary.totalServings, 6);
       assert.equal(overview.summary.totalAmount, 220000);
+      assert.equal(overview.summary.unpaidServings, 6);
       assert.equal(overview.orders[0].items.length, 2);
       const [todayInfo] = await sql(database.db, 'SELECT id FROM days WHERE date = ?', [today]);
       await call(database, 'createPaymentRequest', { dayId: todayInfo.id, customerName: owner.name, orderCode: 98765001, amount: 240000 });
+      await call(database, 'markPaymentPaid', 98765001, { amount: 120000, reference: 'TEST-OVERVIEW' });
+      const partiallyPaid = await call(database, 'getCustomerPaymentOverview', owner.name);
+      assert.equal(partiallyPaid.summary.remainingAmount, 100000);
+      assert.equal(partiallyPaid.summary.unpaidServings, 3);
       await call(database, 'markPaymentPaid', 98765001, { amount: 240000, reference: 'TEST-OVERVIEW' });
       const credited = await call(database, 'getCustomerPaymentOverview', owner.name);
       assert.equal(credited.summary.paidAmount, 240000);
       assert.equal(credited.summary.remainingAmount, 0);
+      assert.equal(credited.summary.unpaidServings, 0);
       assert.equal(credited.summary.creditAmount, 20000);
       assert.equal(credited.payments[0].amount, 240000);
       await close(database.db);
@@ -85,7 +91,7 @@ if (process.argv.includes('--server')) {
       const publicHistory = await (await fetch(`${base}/api/payments/customers/${encodeURIComponent(owner.name)}/orders`)).json();
       assert.equal(publicHistory.orders[0].quantity, 6);
       assert.equal(publicHistory.payments, undefined);
-      assert.equal(publicHistory.summary.creditAmount, 20000);
+      assert.deepEqual(publicHistory.summary, { unpaidServings: 0 });
       const login = await post('/api/admin/login', { password: 'test-order-entry-password' });
       assert.equal(login.status, 200);
       const cookie = login.headers.get('set-cookie').split(';')[0];

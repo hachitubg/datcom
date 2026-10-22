@@ -1508,7 +1508,7 @@ app.get('/api/payments/customers/:name/orders', (req, res) => {
   if (!name || name.length > 150) return res.status(400).json({ error: 'Tên khách không hợp lệ.' });
   db.getCustomerPaymentOverview(name, (err, data) => {
     if (err) return res.status(500).json({ error: err.message });
-    res.json({ name: data.name, summary: data.summary, orders: data.orders });
+    res.json({ name: data.name, summary: { unpaidServings: data.summary.unpaidServings }, orders: data.orders });
   });
 });
 

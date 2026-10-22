@@ -258,12 +258,13 @@
              ============================================= -->
         <div id="promos" class="tab-content">
             <div class="section">
-                <div class="filter-card">
-                    <h3 class="section-subtitle">TẠO MÃ KHUYẾN MÃI MỚI</h3>
+                <form class="promo-composer" id="promoCreateForm" onsubmit="event.preventDefault(); createPromoCode();">
+                    <h3 class="section-subtitle">Tạo mã khuyến mãi</h3>
+                    <p class="promo-composer-note">Chọn mức giảm và người nhận. Hệ thống sẽ tự sinh mã.</p>
                     <div class="promo-create-grid">
                         <div class="filter-field promo-discount-field">
                             <label for="newPromoDiscount">Giảm giá (%)</label>
-                            <input type="number" id="newPromoDiscount" min="1" max="100" placeholder="Nhập % giảm giá">
+                            <input type="number" id="newPromoDiscount" min="1" max="100" step="1" placeholder="Ví dụ: 50" required>
                         </div>
                         <div class="filter-field promo-recipient-field">
                             <label for="promoRecipientButton">Gửi tặng tài khoản</label>
@@ -275,17 +276,17 @@
                                     <div id="promoRecipientOptions" class="recipient-options"></div>
                                 </div>
                             </div>
-                            <small class="form-hint">Mã được hệ thống tự sinh khi bấm Tạo mã.</small>
                         </div>
+                        <button class="btn-primary" type="submit" id="createPromoButton"><span data-icon="ticket" aria-hidden="true"></span>Tạo mã</button>
                     </div>
-                    <div class="promo-create-footer">
-                        <button class="btn-primary" id="createPromoButton" onclick="createPromoCode()">TẠO MÃ</button>
-                        <div id="promoAdminMessage"></div>
-                    </div>
-                </div>
+                    <div id="promoAdminMessage" aria-live="polite"></div>
+                </form>
 
-                <h3 class="section-subtitle" style="margin-top:20px;">DANH SÁCH MÃ KHUYẾN MÃI</h3>
+                <div class="promo-list-toolbar"><div><h3 class="section-subtitle">Danh sách mã</h3><p id="promoListSummary" class="promo-composer-note" aria-live="polite"></p></div>
+                    <label for="promoStatusFilter">Trạng thái<select id="promoStatusFilter"><option value="unused">Chưa sử dụng</option><option value="used">Đã sử dụng</option><option value="all">Tất cả</option></select></label>
+                </div>
                 <div id="promoCodeList" class="loading">Đang tải...</div>
+                <div id="promoPagination" class="pagination-wrap"></div>
             </div>
         </div>
 

@@ -324,6 +324,8 @@ body.ui-modal-open { overflow: hidden; }
 .payment-balance { text-align: center; padding: 18px 12px; background: var(--surface-container-low); border-radius: 8px; }
 .payment-balance > span { display: block; font-size: .8rem; color: var(--on-surface-variant); }
 .payment-balance > strong { display: block; margin-top: 4px; color: var(--primary); font-size: 1.8rem; }
+.payment-balance > strong small { font-size: 1rem; font-weight: 500; }
+.payment-back-button { border: 0; background: none; color: var(--primary); padding: 8px 0; margin-bottom: 10px; min-height: 40px; font-size: .8rem; }
 .payment-balance p { font-size: .8rem; color: #406343; margin-top: 6px; }
 .payment-totals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding: 18px 0; border-bottom: 1px solid var(--ui-border); }
 .payment-totals > span { font-size: .7rem; color: var(--on-surface-variant); text-align: center; }
@@ -332,10 +334,11 @@ body.ui-modal-open { overflow: hidden; }
 .payment-account-actions button { width: 100%; min-height: 46px; font-size: .88rem; border: 0; border-radius: 8px; }
 .payment-help { font-size: .73rem; color: var(--on-surface-variant); line-height: 1.6; margin: 12px 0; }
 .payment-customer-title { font-size: 1rem; margin: 0 0 14px; color: var(--primary); }
-.payment-history-filter { display: flex; align-items: flex-end; gap: 8px; margin: 0 0 14px; }
-.payment-history-filter label { flex: 1; min-width: 0; text-transform: none; font-size: .75rem; }
-.payment-history-filter input { display: block; margin-top: 6px; width: 100%; padding: 10px; }
-.payment-history-filter button { font-size: .75rem; padding: 9px 14px; flex-shrink: 0; }
+.payment-history-filter { display: block; width: 100%; margin: 0 0 14px; }
+.payment-history-filter label { display: block; width: 100%; margin: 0; min-width: 0; text-transform: none; font-size: .75rem; }
+.payment-month-select { position: relative; display: block; width: 100%; margin-top: 6px; }
+.payment-month-select select { display: block; width: 100%; min-width: 0; max-width: 100%; height: 46px; padding: 10px 40px 10px 12px; box-sizing: border-box; -webkit-appearance: none; appearance: none; text-align: left; font-family: inherit; font-size: 16px; line-height: 24px; background: #fff; color: var(--on-surface); border: 1px solid var(--ui-border); border-radius: 8px; }
+.payment-month-select > .ui-icon { position: absolute; right: 12px; top: 14px; width: 18px; height: 18px; pointer-events: none; color: var(--primary); }
 .payment-day-row { padding: 14px 0; border-bottom: 1px solid var(--ui-border); }
 .payment-day-heading, .payment-day-money { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .payment-day-heading { font-size: .85rem; }
@@ -365,4 +368,45 @@ body.ui-modal-open { overflow: hidden; }
     #promos .promo-create-grid { grid-template-columns: 1fr; gap: 14px; }
     .payment-hub-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .payment-totals strong { font-size: .78rem; }
+}
+
+.promo-composer { margin-bottom: 22px; padding-bottom: 22px; border-bottom: 1px solid var(--ui-border); }
+#promos .section-subtitle { margin: 0; font-size: 1rem; line-height: 1.5; color: var(--primary); text-transform: none; }
+.promo-composer-note { margin: 5px 0 16px; font-size: .76rem; line-height: 1.6; color: var(--on-surface-variant); }
+#promos .promo-composer .promo-create-grid { grid-template-columns: 145px minmax(0, 1fr) auto; gap: 14px; align-items: start; }
+#promos .promo-composer .promo-recipient-field { padding-top: 0; border-top: 0; }
+.promo-composer label { font-size: .78rem; text-transform: none; letter-spacing: 0; margin-bottom: 7px; line-height: 1.5; }
+.promo-composer input[type="number"], .promo-composer .promo-picker-button { width: 100%; min-height: 46px; margin: 0; font-size: .85rem; }
+.promo-composer #createPromoButton { margin-top: 26px; min-height: 46px; min-width: 112px; padding: 10px 15px; font-size: .8rem; white-space: nowrap; }
+#promoAdminMessage:empty { display: none; }
+#promoAdminMessage { margin-top: 12px; }
+#promoAdminMessage .success-message, #promoAdminMessage .error-message { margin-bottom: 0; font-size: .8rem; }
+#promoAdminMessage strong { overflow-wrap: anywhere; }
+.promo-list-toolbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+.promo-list-toolbar .promo-composer-note { margin: 5px 0 0; }
+.promo-list-toolbar > label { flex: 0 0 175px; font-size: .75rem; line-height: 1.5; }
+.promo-list-toolbar select { width: 100%; margin-top: 6px; padding: 10px 12px; font-size: .8rem; -webkit-appearance: auto; appearance: auto; }
+.promo-admin-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 15px 0; border-bottom: 1px solid var(--ui-border); }
+.promo-admin-main { min-width: 0; flex: 1; }
+.promo-admin-heading { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: baseline; }
+.promo-admin-heading code { color: var(--primary); font: 600 .82rem/1.6 monospace; overflow-wrap: anywhere; min-width: 0; }
+.promo-admin-discount { display: inline-block; flex-shrink: 0; color: var(--primary); background: var(--secondary-container); padding: 2px 7px; border-radius: 5px; font-size: .75rem; font-weight: 600; }
+.promo-admin-recipient { font-size: .82rem; margin: 5px 0 3px; line-height: 1.6; overflow-wrap: anywhere; }
+.promo-admin-row .admin-payment-meta { margin-top: 3px; font-size: .7rem; }
+.promo-admin-actions { display: flex; flex-direction: column; align-items: flex-end; flex: 0 0 auto; gap: 10px; }
+.promo-admin-actions .payment-status-badge { font-size: .65rem; white-space: nowrap; }
+.promo-admin-actions .btn-small { flex: 0 0 auto; width: auto; min-width: 48px; min-height: 34px; padding: 7px 11px; font-size: .72rem; }
+#promoPagination { display: flex; justify-content: center; align-items: center; gap: 10px; padding-top: 16px; }
+#promoPagination:empty { display: none; }
+#promoPagination span { font-size: .75rem; }
+@media (max-width: 700px) {
+    #promos .promo-composer .promo-create-grid { grid-template-columns: 1fr; gap: 14px; }
+    .promo-composer #createPromoButton { width: 100%; margin-top: 0; }
+    .promo-composer input[type="number"], .promo-composer .promo-picker-button { font-size: 16px; }
+    .promo-list-toolbar { flex-direction: column; gap: 12px; }
+    .promo-list-toolbar > label { width: 100%; flex: auto; }
+    .promo-list-toolbar select { font-size: 16px; }
+    .promo-admin-row { gap: 10px; flex-wrap: wrap; }
+    .promo-admin-main { flex-basis: 100%; }
+    .promo-admin-actions { width: 100%; flex-direction: row; align-items: center; justify-content: space-between; }
 }

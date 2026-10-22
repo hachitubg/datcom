@@ -1392,50 +1392,60 @@ document.getElementById('promoRecipientPicker').addEventListener('keydown', (eve
 });
 document.addEventListener('click', (event) => { if (!event.target.closest('#promoRecipientPicker')) closeRecipientPicker(); });
 
-function loadPromoCodes() {
+let promoCodeRows = [];
+let promoCurrentPage = 1;
+let promoListRequest = 0;
+const PROMO_PAGE_SIZE = 10;
+
+function renderPromoCodes() {
+    const status = document.getElementById('promoStatusFilter').value;
+    const filtered = promoCodeRows.filter((code) => status === 'all' || (status === 'used' ? Boolean(code.used_by) : !code.used_by));
+    const totalPages = Math.max(1, Math.ceil(filtered.length / PROMO_PAGE_SIZE));
+    promoCurrentPage = Math.max(1, Math.min(promoCurrentPage, totalPages));
+    const start = (promoCurrentPage - 1) * PROMO_PAGE_SIZE;
+    const rows = filtered.slice(start, start + PROMO_PAGE_SIZE);
+    const unused = promoCodeRows.filter((code) => !code.used_by).length;
+    document.getElementById('promoListSummary').textContent = `${promoCodeRows.length} mã · ${unused} chưa dùng · ${promoCodeRows.length - unused} đã dùng`;
+    document.getElementById('promoCodeList').innerHTML = rows.length ? rows.map((code) => {
+        const used = Boolean(code.used_by);
+        const source = code.source === 'auto_consecutive' ? `Đặt liên tục · Mốc ${Number(code.earned_streak_days || 0)} ngày`
+            : code.source === 'auto_quantity' ? `Tích suất · Mốc ${Number(code.earned_quantity_servings || 0)} suất`
+            : code.source === 'admin_gift' ? 'Quà tặng từ admin' : 'Mã dùng chung';
+        return `<article class="promo-admin-row">
+            <div class="promo-admin-main"><div class="promo-admin-heading"><code>${escapeHtml(code.code)}</code><span class="promo-admin-discount">−${Number(code.discount_percent)}%</span></div>
+                <p class="promo-admin-recipient">${escapeHtml(code.issued_to_name || 'Dùng chung, không gắn tài khoản')}</p>
+                <p class="admin-payment-meta">${escapeHtml(source)}</p>
+                <p class="admin-payment-meta">Tạo: ${escapeHtml(AppUtils.formatDateTime(code.created_at))}</p>
+                ${used ? `<p class="admin-payment-meta">Dùng bởi ${escapeHtml(code.used_by)} · ${escapeHtml(AppUtils.formatDateTime(code.used_at))}</p>` : ''}
+            </div>
+            <div class="promo-admin-actions"><span class="payment-status-badge ${used ? 'psb-paid' : 'psb-pending'}">${used ? 'Đã sử dụng' : 'Chưa sử dụng'}</span>
+                ${!used ? `<button type="button" class="btn-danger btn-small" onclick="deletePromoCode(${Number(code.id)})">Xóa</button>` : ''}
+            </div></article>`;
+    }).join('') : '<div class="customer-list-empty">Không có mã ở trạng thái này.</div>';
+    document.getElementById('promoPagination').innerHTML = filtered.length ? `<button type="button" class="btn-secondary btn-small" data-promo-page="${promoCurrentPage - 1}" ${promoCurrentPage <= 1 ? 'disabled' : ''}>Trước</button><span>Trang ${promoCurrentPage}/${totalPages} · ${filtered.length} mã</span><button type="button" class="btn-secondary btn-small" data-promo-page="${promoCurrentPage + 1}" ${promoCurrentPage >= totalPages ? 'disabled' : ''}>Sau</button>` : '';
+}
+document.getElementById('promoStatusFilter').addEventListener('change', () => { promoCurrentPage = 1; renderPromoCodes(); });
+document.getElementById('promoPagination').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-promo-page]');
+    if (!button || button.disabled) return;
+    promoCurrentPage = Number(button.dataset.promoPage);
+    renderPromoCodes();
+});
+async function loadPromoCodes() {
+    const request = ++promoListRequest;
     const container = document.getElementById('promoCodeList');
-    container.innerHTML = '<div class="loading">Đang tải...</div>';
-
-    fetch(`${API_BASE}/api/admin/promo-codes`)
-        .then(res => res.json())
-        .then(codes => {
-            if (!codes || !codes.length) {
-                container.innerHTML = '<div style="padding:14px; color:#999; text-align:center;">Chưa có mã khuyến mãi nào.</div>';
-                return;
-            }
-
-            container.innerHTML = codes.map(c => {
-                const isUsed = !!c.used_by;
-                const statusCls = isUsed ? 'psb-paid' : 'psb-pending';
-                const statusLabel = isUsed ? `Đã dùng bởi ${c.used_by}` : 'Chưa sử dụng';
-                let sourceInfo = '<div class="admin-payment-meta">Mã tạo thủ công, không gắn tài khoản cụ thể</div>';
-                if (c.source === 'admin_gift') {
-                    sourceInfo = `<div class="admin-payment-meta">Mã quà tặng cho ${escapeHtml(c.issued_to_name || 'khách hàng')} · Nhận ngày ${AppUtils.formatDateTime(c.created_at)}</div>`;
-                } else if (c.source === 'auto_consecutive') {
-                    const earnedDate = c.earned_streak_date ? ` · Đạt ngày ${escapeHtml(c.earned_streak_date)}` : '';
-                    sourceInfo = `<div class="admin-payment-meta">Mã chương trình đặt liên tục cho ${escapeHtml(c.issued_to_name || 'khách hàng')} · Mốc ${Number(c.earned_streak_days || 0)} ngày${earnedDate}</div>`;
-                } else if (c.source === 'auto_quantity') {
-                    sourceInfo = `<div class="admin-payment-meta">Mã chương trình tích suất cho ${escapeHtml(c.issued_to_name || 'khách hàng')} · Mốc ${Number(c.earned_quantity_servings || 0)} suất</div>`;
-                }
-                return `
-                    <div class="admin-payment-row ${isUsed ? 'promo-used' : ''}">
-                        <div>
-                            <div class="order-name" style="font-family:monospace; letter-spacing:1px;">${escapeHtml(c.code)}</div>
-                            <div class="admin-payment-meta">Giảm <strong>${c.discount_percent}%</strong> · Tạo: ${AppUtils.formatDateTime(c.created_at)}</div>
-                            ${sourceInfo}
-                            <span class="payment-status-badge ${statusCls}">${escapeHtml(statusLabel)}</span>
-                            ${isUsed ? `<div class="admin-payment-meta">Dùng lúc: ${AppUtils.formatDateTime(c.used_at)}</div>` : ''}
-                        </div>
-                        <div class="admin-payment-actions">
-                            ${!isUsed ? `<button class="btn-danger btn-small" onclick="deletePromoCode(${c.id})">Xóa</button>` : ''}
-                        </div>
-                    </div>
-                `;
-            }).join('');
-        })
-        .catch(err => {
-            container.innerHTML = `<div style="padding:14px; color:red; text-align:center;">Lỗi: ${err.message}</div>`;
-        });
+    container.innerHTML = '<div class="loading">Đang tải mã…</div>';
+    document.getElementById('promoPagination').innerHTML = '';
+    try {
+        const rows = await AppUtils.fetchJson(`${API_BASE}/api/admin/promo-codes`);
+        if (request !== promoListRequest) return;
+        promoCodeRows = Array.isArray(rows) ? rows : [];
+        renderPromoCodes();
+    } catch (error) {
+        if (request !== promoListRequest) return;
+        container.innerHTML = `<div class="error-message">${escapeHtml(error.message)}</div>`;
+        document.getElementById('promoListSummary').textContent = 'Không tải được danh sách mã. Mở lại tab để thử.';
+    }
 }
 
 async function createPromoCode() {
@@ -1455,10 +1465,12 @@ async function createPromoCode() {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ discountPercent, issuedToUserId })
         });
         message.innerHTML = `<div class="success-message">Đã tạo mã <strong>${escapeHtml(data.code)}</strong>${issuedToUserId ? ' và gửi vào tài khoản được chọn' : ''}.</div>`;
+        document.getElementById('promoStatusFilter').value = 'unused';
+        promoCurrentPage = 1;
         loadPromoCodes();
     } catch (error) {
         message.innerHTML = `<div class="error-message">${escapeHtml(error.message)}</div>`;
-    } finally { button.disabled = false; button.textContent = 'TẠO MÃ'; }
+    } finally { button.disabled = false; button.innerHTML = '<span data-icon="ticket" aria-hidden="true"></span>Tạo mã'; }
 }
 
 async function deletePromoCode(id) {

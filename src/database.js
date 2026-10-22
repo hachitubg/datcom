@@ -1864,6 +1864,8 @@ class Database {
             }
             callback(null, { name: customerName,
               summary: { totalServings: history.totalOrders, totalAmount: history.totalAmount,
+                unpaidServings: history.rows.reduce((sum, row) => sum + (row.remainingAmount > 0 && row.totalAmount > 0
+                  ? Math.min(row.quantity, Math.ceil(row.remainingAmount * row.quantity / row.totalAmount)) : 0), 0),
                 paidAmount: paid, remainingAmount: history.totalRemaining, creditAmount: Math.max(0, paid - history.totalAmount) },
               orders: history.rows.map((row) => ({ ...row, items: byDate.get(row.date) || [] })),
               payments: payments.map((row) => ({ id: row.id, amount: Number(row.amount), date: row.transaction_date || row.created_at }))
@@ -2143,7 +2145,7 @@ class Database {
               earned_streak_date, earned_quantity_servings, earned_quantity_start_date,
               promo_seen_at
        FROM promo_codes
-       ORDER BY created_at DESC`,
+       ORDER BY created_at DESC, id DESC`,
       callback
     );
   }
