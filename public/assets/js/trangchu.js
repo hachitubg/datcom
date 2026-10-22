@@ -88,6 +88,7 @@ function updatePromoAccess() {
     if (!promoGroup) return;
     document.getElementById('promoCode').disabled = !currentUser;
     if (!currentUser) document.getElementById('promoCode').innerHTML = '<option value="">Đăng nhập để chọn mã</option>';
+    renderPromoPicker();
     if (currentUser) {
         promoGroup.classList.remove('promo-group-disabled');
         const hint = promoGroup.querySelector('.promo-login-hint');
@@ -432,6 +433,9 @@ function loadCustomerNameSuggestions() {
 function openFeedbackModal() {
     document.getElementById('feedbackMessage').innerHTML = '';
     document.getElementById('feedbackForm').reset();
+    const submit = document.querySelector('#feedbackForm [type="submit"]');
+    submit.disabled = false;
+    submit.textContent = 'Gửi góp ý';
     updateFeedbackCounter();
     feedbackModal.style.display = 'flex';
     feedbackContentInput.focus();
@@ -448,6 +452,8 @@ function updateFeedbackCounter() {
 
 document.getElementById('feedbackForm').addEventListener('submit', async (event) => {
     event.preventDefault();
+    const submitButton = event.currentTarget.querySelector('[type="submit"]');
+    if (submitButton.disabled) return;
 
     const message = (feedbackContentInput.value || '').trim();
     const messageBox = document.getElementById('feedbackMessage');
@@ -457,6 +463,9 @@ document.getElementById('feedbackForm').addEventListener('submit', async (event)
         return;
     }
 
+    submitButton.disabled = true;
+    submitButton.textContent = 'Đang gửi…';
+    let sent = false;
     try {
         await AppUtils.fetchJson(`${API_BASE}/api/feedback`, {
             method: 'POST',
@@ -464,6 +473,7 @@ document.getElementById('feedbackForm').addEventListener('submit', async (event)
             body: JSON.stringify({ message })
         });
 
+        sent = true;
         messageBox.innerHTML = '<div class="success-message">Cảm ơn bạn. Góp ý đã được gửi ẩn danh thành công.</div>';
         document.getElementById('feedbackForm').reset();
         updateFeedbackCounter();
@@ -471,7 +481,10 @@ document.getElementById('feedbackForm').addEventListener('submit', async (event)
             closeFeedbackModal();
         }, 1200);
     } catch (error) {
-        messageBox.innerHTML = `<div class="error-message">${error.message}</div>`;
+        messageBox.innerHTML = `<div class="error-message">${escapeHtml(error.message)}</div>`;
+    } finally {
+        submitButton.disabled = sent;
+        submitButton.textContent = sent ? 'Đã gửi góp ý' : 'Gửi góp ý';
     }
 });
 
@@ -844,10 +857,10 @@ function loadPaymentList() {
             }
 
             list.innerHTML = rows.map((row) => `
-                <div class="order-item payment-order-item">
-                    <div class="order-info">
-                        <h4>${escapeHtml(row.name)} - ${row.quantity} suất</h4>
-                        <p><strong>Còn phải thanh toán:</strong> ${AppUtils.formatCurrency(row.remainingAmount)}</p>
+                <div class="order-item payment-order-item customer-payment-row">
+                    <div class="customer-payment-heading">
+                        <div class="order-info"><h4>${escapeHtml(row.name)}</h4><p>${Number(row.quantity || 0)} suất</p></div>
+                        <div class="customer-payment-amount"><span>Còn phải trả</span><strong>${AppUtils.formatCurrency(row.remainingAmount)}</strong></div>
                     </div>
                     <div class="payment-action-group">
                         <button class="payment-detail-btn" data-customer-name="${encodeURIComponent(row.name)}">Chi tiết</button>
@@ -857,7 +870,7 @@ function loadPaymentList() {
             `).join('');
         })
         .catch(err => {
-            list.innerHTML = `<div style="padding:16px;color:#9b3f3f">Lỗi tải danh sách thanh toán: ${err.message}</div>`;
+            list.innerHTML = `<div class="customer-list-empty">Lỗi tải danh sách thanh toán: ${escapeHtml(err.message)}</div>`;
         });
 }
 
@@ -1147,14 +1160,72 @@ function loadPaymentHistory() {
 // Promo Code Check
 // =============================================
 let promoOptionsRequest = 0;
+function closePromoPicker(returnFocus = false) {
+    document.getElementById('promoPickerOptions').hidden = true;
+    document.getElementById('promoPickerButton').setAttribute('aria-expanded', 'false');
+    if (returnFocus) document.getElementById('promoPickerButton').focus({ preventScroll: true });
+}
+
+function renderPromoPicker() {
+    const select = document.getElementById('promoCode');
+    const button = document.getElementById('promoPickerButton');
+    button.disabled = select.disabled;
+    document.getElementById('promoPickerLabel').textContent = select.selectedOptions[0]?.textContent || 'Không sử dụng mã';
+    document.getElementById('promoPickerOptions').innerHTML = [...select.options].map((option, index) =>
+        `<button type="button" role="option" tabindex="-1" class="promo-picker-option" data-index="${index}" aria-selected="${option.selected}"><span>${escapeHtml(option.textContent)}</span><span class="promo-option-mark" aria-hidden="true">${option.selected ? '✓' : ''}</span></button>`
+    ).join('');
+    if (select.disabled) closePromoPicker();
+}
+
+function openPromoPicker() {
+    const button = document.getElementById('promoPickerButton');
+    if (button.disabled) return;
+    const list = document.getElementById('promoPickerOptions');
+    list.hidden = false;
+    button.setAttribute('aria-expanded', 'true');
+    (list.querySelector('[aria-selected="true"]') || list.querySelector('[role="option"]'))?.focus({ preventScroll: true });
+}
+
+document.getElementById('promoPickerButton').addEventListener('click', () => {
+    if (document.getElementById('promoPickerOptions').hidden) openPromoPicker();
+    else closePromoPicker();
+});
+document.getElementById('promoPickerOptions').addEventListener('click', (event) => {
+    const option = event.target.closest('[data-index]');
+    if (!option) return;
+    document.getElementById('promoCode').selectedIndex = Number(option.dataset.index);
+    closePromoPicker(true);
+    document.getElementById('promoCode').dispatchEvent(new Event('change', { bubbles: true }));
+});
+document.getElementById('promoPicker').addEventListener('keydown', (event) => {
+    const list = document.getElementById('promoPickerOptions');
+    if (event.key === 'Escape' && !list.hidden) { event.preventDefault(); event.stopPropagation(); closePromoPicker(true); return; }
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    if (list.hidden) { openPromoPicker(); return; }
+    const options = [...list.querySelectorAll('[role="option"]')];
+    const current = options.indexOf(document.activeElement);
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? options.length - 1
+        : (current + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length;
+    options[next]?.focus();
+});
+document.getElementById('promoPicker').addEventListener('focusout', (event) => {
+    if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) closePromoPicker();
+});
+document.addEventListener('click', (event) => {
+    if (!event.target.closest('#promoPicker')) closePromoPicker();
+});
+
 async function loadOrderPromoOptions() {
     const request = ++promoOptionsRequest;
     const select = document.getElementById('promoCode');
     const message = document.getElementById('promoMessage');
     select.innerHTML = '<option value="">Không sử dụng mã</option>';
-    if (!currentUser) { select.disabled = true; return; }
+    closePromoPicker();
+    if (!currentUser) { select.disabled = true; renderPromoPicker(); return; }
     const userId = currentUser.id;
     select.disabled = true;
+    renderPromoPicker();
     message.textContent = 'Đang tải mã của bạn…';
     try {
         const data = await AppUtils.fetchJson(`${API_BASE}/api/promo-wallet/available`);
@@ -1165,12 +1236,13 @@ async function loadOrderPromoOptions() {
     } catch {
         if (request === promoOptionsRequest) message.textContent = 'Chưa tải được mã. Vui lòng đóng và mở lại cửa sổ đặt cơm để thử lại.';
     } finally {
-        if (request === promoOptionsRequest) select.disabled = !currentUser;
+        if (request === promoOptionsRequest) { select.disabled = !currentUser; renderPromoPicker(); }
     }
 }
 
 let promoValidationRequest = 0;
 document.getElementById('promoCode').addEventListener('change', () => {
+    renderPromoPicker();
     const request = ++promoValidationRequest;
     const code = document.getElementById('promoCode').value.trim();
     const msg = document.getElementById('promoMessage');
@@ -1478,49 +1550,38 @@ function updateMenuDisplay(menuObj) {
     }
 }
 
-// Load orders list
+let customerOrderRows = [];
+function renderCustomerOrderList() {
+    const query = AppUtils.getSearchKey(document.getElementById('orderListSearch').value);
+    const rows = customerOrderRows.map((order, index) => ({ order, number: customerOrderRows.length - index }))
+        .filter(({ order }) => AppUtils.getSearchKey(order.name).includes(query));
+    const total = rows.reduce((sum, { order }) => sum + (order.is_deleted ? 0 : Number(order.quantity || 0)), 0);
+    document.getElementById('orderListSummary').textContent = `${total} suất ${query ? 'theo tìm kiếm' : 'hôm nay'}`;
+    document.getElementById('ordersList').innerHTML = rows.length ? rows.map(({ order, number }) => {
+        const disc = Number(order.discount_percent || 0);
+        const deleted = Boolean(order.is_deleted);
+        const owner = !deleted && currentUser && order.user_id === currentUser.id;
+        const action = order.change_action || 'created';
+        const changeNote = action === 'edited'
+            ? `<p class="order-change-note order-change-edited">Đã sửa lúc ${escapeHtml(AppUtils.formatDateTime(order.change_at))}</p>`
+            : action === 'deleted' ? `<p class="order-change-note order-change-deleted">Đã xóa lúc ${escapeHtml(AppUtils.formatDateTime(order.change_at))}</p>` : '';
+        return `<div class="order-item customer-order-row ${deleted ? 'order-item-deleted' : ''} ${action === 'edited' ? 'order-item-edited' : ''}">
+            <span class="customer-order-number">${number}</span>
+            <div class="order-info"><div class="customer-order-heading"><h4>${escapeHtml(order.name)}</h4><span class="customer-order-quantity">${Number(order.quantity)} suất</span></div>
+                ${disc > 0 ? `<span class="discount-badge">Giảm ${disc}% / 1 suất</span>` : ''}
+                ${order.description ? `<p class="customer-order-note">${escapeHtml(order.description)}</p>` : ''}
+                ${changeNote}<p class="order-time">${escapeHtml(AppUtils.formatDateTime(order.created_at))}</p>
+                ${owner ? `<div class="order-actions"><button class="btn-edit-order" data-id="${order.id}" data-quantity="${order.quantity}" data-description="${escapeAttr(order.description || '')}">Sửa</button><button class="btn-delete-order" data-id="${order.id}">Xóa</button></div>` : ''}
+            </div></div>`;
+    }).join('') : '<div class="customer-list-empty">Không có suất cơm phù hợp.</div>';
+}
+document.getElementById('orderListSearch').addEventListener('input', renderCustomerOrderList);
 function loadOrders() {
+    listModal.style.display = 'flex';
+    document.getElementById('ordersList').innerHTML = '<div class="loading-text">Đang tải danh sách…</div>';
     AppUtils.fetchJson(`${API_BASE}/api/orders/today`)
-        .then(orders => {
-            const ordersList = document.getElementById('ordersList');
-            if (orders.length === 0) {
-                ordersList.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">Chưa có đơn hàng</div>';
-            } else {
-                ordersList.innerHTML = orders.map((order, index) => {
-                    const disc = Number(order.discount_percent || 0);
-                    const discBadge = disc > 0 ? `<span class="discount-badge">-${disc}% / 1 suất</span>` : '';
-                    const isDeleted = Boolean(order.is_deleted);
-                    const isOwner = !isDeleted && currentUser && order.user_id === currentUser.id;
-                    const changeAction = order.change_action || 'created';
-                    const changeNote = changeAction === 'edited'
-                        ? `<p class="order-change-note order-change-edited">Đã sửa lúc ${AppUtils.formatDateTime(order.change_at)}</p>`
-                        : changeAction === 'deleted'
-                            ? `<p class="order-change-note order-change-deleted">Đã xóa lúc ${AppUtils.formatDateTime(order.change_at)}</p>`
-                            : '';
-                    const orderSummary = isDeleted
-                        ? `${escapeHtml(order.name)} đã xóa đơn ${order.quantity} suất`
-                        : `${escapeHtml(order.name)} đã đặt ${order.quantity} suất ${discBadge}`;
-                    return `
-                        <div class="order-item ${disc > 0 ? 'order-item-discounted' : ''} ${isDeleted ? 'order-item-deleted' : ''} ${changeAction === 'edited' ? 'order-item-edited' : ''}">
-                            <div class="order-info">
-                                <h4>${orders.length - index}. ${orderSummary}</h4>
-                                ${order.description ? `<p><strong>Ghi chú:</strong> ${escapeHtml(order.description)}</p>` : ''}
-                                <p class="order-time">${AppUtils.formatDateTime(order.created_at)}</p>
-                                ${changeNote}
-                                ${isOwner ? `
-                                    <div class="order-actions">
-                                        <button class="btn-edit-order" data-id="${order.id}" data-quantity="${order.quantity}" data-description="${escapeAttr(order.description || '')}">Sửa</button>
-                                        <button class="btn-delete-order" data-id="${order.id}">Xóa</button>
-                                    </div>
-                                ` : ''}
-                            </div>
-                        </div>
-                    `;
-                }).join('');
-            }
-            listModal.style.display = 'flex';
-        })
-        .catch(err => console.error('Lỗi:', err));
+        .then((orders) => { customerOrderRows = Array.isArray(orders) ? orders : []; renderCustomerOrderList(); })
+        .catch((err) => { document.getElementById('ordersList').innerHTML = `<div class="customer-list-empty">${escapeHtml(err.message)}</div>`; });
 }
 
 // Submit order
@@ -1682,9 +1743,14 @@ function renderLeaderboard(data) {
     leaderboardTitle.textContent = 'Bảng xếp hạng';
 
     if (!leaders || leaders.length === 0) {
+        const latestMonth = (data.availableMonths || []).find((value) => value !== month);
         leaderboardContent.innerHTML = `
             <p class="leaderboard-month">${escapeHtml(formatMonthVi(month))}</p>
-            <div class="leaderboard-empty">Chưa có dữ liệu tháng này</div>`;
+            <div class="leaderboard-empty"><p>Tháng này chưa có dữ liệu đặt cơm.</p>${latestMonth ? `<button type="button" class="btn-secondary leaderboard-latest" id="leaderboardLatestMonth">Xem ${escapeHtml(formatMonthVi(latestMonth))}</button>` : '<p>Danh sách sẽ xuất hiện khi có đơn đặt cơm.</p>'}</div>`;
+        document.getElementById('leaderboardLatestMonth')?.addEventListener('click', () => {
+            leaderboardMonthInput.value = latestMonth;
+            loadLeaderboard(latestMonth);
+        });
         return;
     }
 
@@ -1721,12 +1787,15 @@ function renderLeaderboard(data) {
     });
 }
 
+let leaderboardRequest = 0;
 async function loadLeaderboard(month) {
+    const request = ++leaderboardRequest;
     leaderboardContent.innerHTML = '<div class="loading-text">Đang tải...</div>';
     try {
         const selectedMonth = month || leaderboardMonthInput.value || getCurrentMonthValue();
         const res = await fetch(`${API_BASE}/api/leaderboard/monthly?month=${encodeURIComponent(selectedMonth)}`);
         const data = await res.json();
+        if (request !== leaderboardRequest) return;
         if (data.error) {
             leaderboardContent.innerHTML = `<div class="leaderboard-empty">${escapeHtml(data.error)}</div>`;
         } else {
@@ -1734,6 +1803,7 @@ async function loadLeaderboard(month) {
             renderLeaderboard(data);
         }
     } catch (err) {
+        if (request !== leaderboardRequest) return;
         leaderboardContent.innerHTML = '<div class="leaderboard-empty">Không thể tải dữ liệu</div>';
     }
 }

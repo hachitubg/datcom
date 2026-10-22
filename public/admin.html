@@ -153,13 +153,13 @@
                     </div>
                 </details>
 
-                <div id="kitchenSummary" class="kitchen-summary"></div>
                 <div class="kitchen-filter-bar" aria-label="Lọc trạng thái chế biến">
-                    <button class="kitchen-filter-btn" data-filter="all" onclick="setKitchenOrderFilter('all')">Tất cả</button>
-                    <button class="kitchen-filter-btn active" data-filter="pending" onclick="setKitchenOrderFilter('pending')">Suất mới</button>
-                    <button class="kitchen-filter-btn" data-filter="done" onclick="setKitchenOrderFilter('done')">Đã hoàn thành</button>
-                    <button class="kitchen-filter-btn" data-filter="changes" onclick="setKitchenOrderFilter('changes')">Sửa / hủy</button>
+                    <button class="kitchen-filter-btn active" data-filter="pending" onclick="setKitchenOrderFilter('pending')"><span>Suất mới</span><span class="kitchen-filter-count">0</span></button>
+                    <button class="kitchen-filter-btn" data-filter="done" onclick="setKitchenOrderFilter('done')"><span>Đã hoàn thành</span><span class="kitchen-filter-count">0</span></button>
+                    <button class="kitchen-filter-btn" data-filter="changes" onclick="setKitchenOrderFilter('changes')"><span>Sửa / hủy</span><span class="kitchen-filter-count">0</span></button>
+                    <button class="kitchen-filter-btn" data-filter="all" onclick="setKitchenOrderFilter('all')"><span>Tất cả</span><span class="kitchen-filter-count">0</span></button>
                 </div>
+                <p class="kitchen-sync-note" id="kitchenSyncNote" role="status">Số trên nút là số suất · Tự cập nhật khi mở danh sách hôm nay.</p>
 
                 <div id="historyList" class="loading">Đang tải...</div>
             </div>
@@ -316,38 +316,7 @@
 
         <div id="users" class="tab-content">
             <div class="section">
-                <div class="filter-card">
-                    <h3 class="section-subtitle">TẠO TÀI KHOẢN MỚI</h3>
-                    <div class="filter-row">
-                        <div class="filter-field filter-field--grow">
-                            <label for="newUserPhone">Số điện thoại</label>
-                            <input type="text" id="newUserPhone" placeholder="Nhập số điện thoại">
-                        </div>
-                        <div class="filter-field filter-field--grow">
-                            <label for="newUserName">Họ và tên</label>
-                            <input type="text" id="newUserName" placeholder="Nhập họ tên">
-                        </div>
-                    </div>
-                    <div class="filter-row">
-                        <div class="filter-field filter-field--grow">
-                            <label for="newUserPassword">Mật khẩu</label>
-                            <input type="password" id="newUserPassword" placeholder="Tối thiểu 6 ký tự">
-                        </div>
-                        <div class="filter-field">
-                            <label for="newUserRole">Vai trò</label>
-                            <select id="newUserRole">
-                                <option value="user">Người dùng</option>
-                                <option value="admin">Admin</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="button-group" style="margin-top:12px;">
-                        <button class="btn-primary" onclick="createUser()">TẠO TÀI KHOẢN</button>
-                    </div>
-                    <div id="userAdminMessage" style="margin-top:8px;"></div>
-                </div>
-
-                <h3 class="section-subtitle" style="margin-top:20px;">DANH SÁCH NGƯỜI DÙNG</h3>
+                <h3 class="section-subtitle">DANH SÁCH NGƯỜI DÙNG</h3>
                 <form class="filter-row user-search-row" onsubmit="event.preventDefault(); loadUsers(1);">
                     <div class="filter-field filter-field--grow">
                         <label for="userSearchInput">Tìm tài khoản</label>

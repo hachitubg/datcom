@@ -3345,7 +3345,14 @@ class Database {
             };
           });
 
-          finalCallback(null, { month: selectedMonth, leaders });
+          this.db.all(
+            `SELECT DISTINCT strftime('%Y-%m', d.date) AS month
+             FROM days d JOIN orders o ON o.day_id = d.id ORDER BY month DESC`,
+            (monthsErr, months = []) => {
+              if (monthsErr) return finalCallback(monthsErr);
+              finalCallback(null, { month: selectedMonth, leaders, availableMonths: months.map((row) => row.month).filter(Boolean) });
+            }
+          );
         }
       );
     });

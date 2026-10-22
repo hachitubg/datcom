@@ -7,11 +7,6 @@ const API_BASE = SITE_BASE_PATH;
 document.addEventListener('DOMContentLoaded', () => {
     const backBtn = document.querySelector('.back-btn');
     if (backBtn) backBtn.setAttribute('href', SITE_BASE_PATH || '/');
-    if (SITE_BASE_PATH) {
-        const roleSelect = document.getElementById('newUserRole');
-        roleSelect?.querySelector('option[value="admin"]')?.remove();
-        if (roleSelect) roleSelect.value = 'user';
-    }
 });
 let currentHistoryDetailDate = '';
 let currentPaymentView = 'debt';
@@ -19,6 +14,9 @@ let editingOrderId = 0;
 
 const PAGE_SIZE = 10;
 let historyOrders = [];
+let kitchenListRequest = 0;
+let kitchenRefreshRunning = false;
+const kitchenUpdatingIds = new Set();
 let historyCurrentPage = 1;
 let debtRows = [];
 let debtCurrentPage = 1;
@@ -396,6 +394,7 @@ function loadHistoryByDate() {
 }
 
 function loadOrderListByDate(date) {
+    const request = ++kitchenListRequest;
     currentHistoryDetailDate = date;
     const dateLabel = document.getElementById('orderToolsDateLabel');
     if (dateLabel) dateLabel.textContent = `Đang xem ngày ${date}`;
@@ -405,12 +404,14 @@ function loadOrderListByDate(date) {
     fetch(`${API_BASE}/api/admin/day/${date}`)
         .then(res => res.json())
         .then(data => {
+            if (request !== kitchenListRequest) return;
             if (data.error) throw new Error(data.error);
             historyOrders = (data.orders || []);
             historyCurrentPage = 1;
             renderHistoryOrders();
         })
         .catch(err => {
+            if (request !== kitchenListRequest) return;
             list.innerHTML = `<div style="padding:20px; color:red; text-align:center;">Lỗi: ${err.message}</div>`;
         });
 }
@@ -427,13 +428,14 @@ function renderHistoryOrders() {
         const isDeleted = Boolean(order.is_deleted);
         const isDone = order.kitchen_status === 'done';
         if (kitchenOrderFilter === 'pending') {
-            return (!isDeleted && !isDone) || (isDeleted && order.kitchen_status === 'cancel_pending');
+            return !isDeleted && !isDone;
         }
         if (kitchenOrderFilter === 'done') {
             return (!isDeleted && isDone) || (isDeleted && order.kitchen_status === 'cancel_done');
         }
         if (kitchenOrderFilter === 'changes') {
-            return isDeleted || order.change_action === 'edited';
+            return (isDeleted && order.kitchen_status !== 'cancel_done')
+                || (!isDeleted && order.change_action === 'edited' && !isDone);
         }
         return true;
     });
@@ -498,8 +500,6 @@ function renderHistoryOrders() {
 }
 
 function renderKitchenSummary() {
-    const summary = document.getElementById('kitchenSummary');
-    if (!summary) return;
     const activeOrders = historyOrders.filter((order) => !order.is_deleted);
     const pendingServings = activeOrders
         .filter((order) => order.kitchen_status !== 'done')
@@ -509,15 +509,20 @@ function renderKitchenSummary() {
         .reduce((sum, order) => sum + Number(order.quantity || 0), 0);
     const totalServings = activeOrders.reduce((sum, order) => sum + Number(order.quantity || 0), 0);
     const pendingChanges = historyOrders.filter((order) => (
-        (order.is_deleted && order.kitchen_status === 'cancel_pending')
+        (order.is_deleted && order.kitchen_status !== 'cancel_done')
         || (!order.is_deleted && order.change_action === 'edited' && order.kitchen_status !== 'done')
-    )).length;
-    summary.innerHTML = `
-        <div><span>Suất mới đặt</span><strong>${pendingServings} suất</strong></div>
-        <div><span>Đã hoàn thành</span><strong>${doneServings} suất</strong></div>
-        <div class="${pendingChanges ? 'has-alert' : ''}"><span>Sửa / hủy cần xử lý</span><strong>${pendingChanges}</strong></div>
-        <div><span>Tổng số suất</span><strong>${totalServings} suất</strong></div>
-    `;
+    )).reduce((sum, order) => sum + Number(order.quantity || 0), 0);
+    const counts = { pending: pendingServings, done: doneServings, changes: pendingChanges, all: totalServings };
+    const labels = { pending: 'Suất mới', done: 'Đã hoàn thành', changes: 'Sửa / hủy', all: 'Tất cả' };
+    document.querySelectorAll('.kitchen-filter-btn').forEach((button) => {
+        const filter = button.dataset.filter;
+        const attention = (filter === 'pending' || filter === 'changes') && counts[filter] > 0;
+        button.classList.toggle('needs-attention', attention);
+        button.setAttribute('aria-label', `${labels[filter]}: ${counts[filter]} suất${attention ? ', cần xử lý' : ''}`);
+        button.title = filter === 'changes' ? 'Số suất sửa hoặc hủy chưa được xử lý' : `${counts[filter]} suất`;
+        button.innerHTML = `<span>${labels[filter]}</span><span class="kitchen-filter-count">${counts[filter]}</span>${attention ? '<span class="kitchen-filter-warning" title="Cần xử lý" aria-hidden="true"><span data-icon="triangle-alert"></span></span>' : ''}`;
+    });
+    updateKitchenFilterButtons();
 }
 
 function setKitchenOrderFilter(filter) {
@@ -530,10 +535,13 @@ function setKitchenOrderFilter(filter) {
 function updateKitchenFilterButtons() {
     document.querySelectorAll('.kitchen-filter-btn').forEach((button) => {
         button.classList.toggle('active', button.dataset.filter === kitchenOrderFilter);
+        button.setAttribute('aria-pressed', String(button.dataset.filter === kitchenOrderFilter));
     });
 }
 
 function toggleOrderKitchenStatus(orderId, checkbox) {
+    kitchenUpdatingIds.add(String(orderId));
+    ++kitchenListRequest;
     const status = checkbox.checked ? 'done' : 'pending';
     checkbox.disabled = true;
     fetch(`${API_BASE}/api/admin/orders/${orderId}/kitchen-status`, {
@@ -556,11 +564,14 @@ function toggleOrderKitchenStatus(orderId, checkbox) {
             checkbox.checked = !checkbox.checked;
             checkbox.disabled = false;
             showPopup(`Lỗi cập nhật trạng thái: ${error.message}`);
-        });
+        })
+        .finally(() => kitchenUpdatingIds.delete(String(orderId)));
 }
 
 function acknowledgeDeletedOrder(changeLogId, button) {
     if (!changeLogId) return;
+    kitchenUpdatingIds.add(`change-${changeLogId}`);
+    ++kitchenListRequest;
     button.disabled = true;
     fetch(`${API_BASE}/api/admin/order-changes/${changeLogId}/acknowledge`, { method: 'PUT' })
         .then(res => res.json().then(data => {
@@ -577,8 +588,39 @@ function acknowledgeDeletedOrder(changeLogId, button) {
         .catch((error) => {
             button.disabled = false;
             showPopup(`Lỗi xử lý yêu cầu hủy: ${error.message}`);
-        });
+        })
+        .finally(() => kitchenUpdatingIds.delete(`change-${changeLogId}`));
 }
+
+async function refreshKitchenQueue() {
+    if (kitchenRefreshRunning || document.hidden || kitchenUpdatingIds.size
+        || !document.getElementById('history').classList.contains('active')
+        || currentHistoryDetailDate !== getLocalDateInputValue()
+        || document.querySelector('.modal[style*="flex"], .popup-overlay')) return;
+    kitchenRefreshRunning = true;
+    const request = kitchenListRequest;
+    const date = currentHistoryDetailDate;
+    const note = document.getElementById('kitchenSyncNote');
+    try {
+        const data = await AppUtils.fetchJson(`${API_BASE}/api/admin/day/${date}`);
+        if (request !== kitchenListRequest || date !== currentHistoryDetailDate || kitchenUpdatingIds.size) return;
+        const rows = data.orders || [];
+        if (document.querySelector('#historyList button:active, #historyList input:active')) return;
+        if (JSON.stringify(rows) !== JSON.stringify(historyOrders)) {
+            historyOrders = rows;
+            const scrollY = window.scrollY;
+            renderHistoryOrders();
+            window.scrollTo(0, scrollY);
+        }
+        note.textContent = 'Số trên nút là số suất · Đang tự cập nhật mỗi 15 giây.';
+        note.classList.remove('sync-error');
+    } catch {
+        note.textContent = 'Chưa cập nhật được dữ liệu mới. Đang thử lại…';
+        note.classList.add('sync-error');
+    } finally { kitchenRefreshRunning = false; }
+}
+setInterval(refreshKitchenQueue, 15000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshKitchenQueue(); });
 function openOrderEditModal(orderId, encodedName, quantity, encodedDescription, date) {
     editingOrderId = Number(orderId || 0);
     currentHistoryDetailDate = date || currentHistoryDetailDate;
@@ -1530,37 +1572,6 @@ function loadUsers(page = userCurrentPage) {
             if (requestId !== userListRequestId) return;
             container.innerHTML = `<div style="padding:14px; color:red; text-align:center;">Lỗi: ${escapeHtml(err.message)}</div>`;
         });
-}
-
-function createUser() {
-    const phone = document.getElementById('newUserPhone').value.trim();
-    const name = document.getElementById('newUserName').value.trim();
-    const password = document.getElementById('newUserPassword').value;
-    const role = document.getElementById('newUserRole').value;
-    const msgEl = document.getElementById('userAdminMessage');
-
-    if (!phone || !name || !password) {
-        msgEl.innerHTML = '<div class="error-message">Vui lòng nhập đầy đủ thông tin</div>';
-        return;
-    }
-
-    fetch(`${API_BASE}/api/admin/users`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, name, password, role })
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.error) throw new Error(data.error);
-        msgEl.innerHTML = '<div class="success-message">Tạo tài khoản thành công!</div>';
-        document.getElementById('newUserPhone').value = '';
-        document.getElementById('newUserName').value = '';
-        document.getElementById('newUserPassword').value = '';
-        loadUsers(1);
-    })
-    .catch(err => {
-        msgEl.innerHTML = `<div class="error-message">${err.message}</div>`;
-    });
 }
 
 async function deleteUser(id, encodedName) {

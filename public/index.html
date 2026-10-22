@@ -393,8 +393,12 @@
                         <textarea id="description" placeholder="Ví dụ: Ít mặn, thêm rau..."></textarea>
                     </div>
                     <div class="form-group" id="promoGroup">
-                        <label for="promoCode">Chọn mã khuyến mãi</label>
-                        <select id="promoCode" aria-describedby="promoMessage"><option value="">Không sử dụng mã</option></select>
+                        <label for="promoPickerButton">Chọn mã khuyến mãi</label>
+                        <div class="promo-picker" id="promoPicker">
+                            <select id="promoCode" hidden aria-hidden="true" tabindex="-1"><option value="">Không sử dụng mã</option></select>
+                            <button type="button" id="promoPickerButton" class="promo-picker-button" role="combobox" aria-expanded="false" aria-haspopup="listbox" aria-controls="promoPickerOptions" aria-describedby="promoMessage"><span id="promoPickerLabel">Không sử dụng mã</span><span data-icon="chevron-down" aria-hidden="true"></span></button>
+                            <div id="promoPickerOptions" class="promo-picker-options" role="listbox" aria-label="Mã khuyến mãi của bạn" hidden></div>
+                        </div>
                         <div id="promoMessage" class="promo-message" aria-live="polite"></div>
                     </div>
                     <div class="form-buttons">
@@ -414,6 +418,7 @@
                 <button type="button" class="modal-close" id="closeList">&times;</button>
             </div>
             <div class="modal-body">
+                <div class="customer-list-toolbar"><span id="orderListSummary" class="customer-list-summary">Suất cơm hôm nay</span><label class="sr-only" for="orderListSearch">Tìm tên trong danh sách</label><input type="search" id="orderListSearch" placeholder="Tìm tên người đặt…"></div>
                 <div id="ordersList" class="orders-list">
                     <div class="loading-text">Đang tải...</div>
                 </div>
@@ -430,6 +435,7 @@
             </div>
             <div class="modal-body">
                 <div class="payment-toolbar">
+                    <label class="sr-only" for="paymentSearch">Tìm khách cần thanh toán</label>
                     <input type="text" id="paymentSearch" placeholder="Tìm theo tên...">
                     <div class="payment-toolbar-actions">
                         <button class="btn-submit btn-payment-toolbar" id="btnSearchPayment" type="button">Tìm kiếm</button>
@@ -501,22 +507,22 @@
             </div>
             <div class="modal-body">
                 <div class="feedback-intro-card">
-                    <span class="feedback-intro-label">Ẩn danh mặc định</span>
-                    <p>Mọi góp ý ở đây đều không cần tên hay đăng nhập. Bạn chỉ cần viết điều muốn nhắn để bên mình cải thiện dịch vụ.</p>
+                    <span class="feedback-intro-label"><span data-icon="message-square" aria-hidden="true"></span> Bếp lắng nghe bạn</span>
+                    <p>Góp ý được gửi ẩn danh. Bạn không cần nhập tên hay đăng nhập.</p>
                 </div>
                 <div id="feedbackMessage"></div>
                 <form id="feedbackForm">
                     <div class="form-group">
                         <label for="feedbackContent">Nội dung góp ý</label>
-                        <textarea id="feedbackContent" maxlength="2000" placeholder="Ví dụ: Cơm hôm nay rất ổn, nhưng phần canh hơi mặn. Nếu được mong thêm lựa chọn ít cơm cho người ăn ít."></textarea>
+                        <textarea id="feedbackContent" rows="5" maxlength="2000" placeholder="Bạn muốn bếp cải thiện điều gì?"></textarea>
                     </div>
                     <div class="feedback-meta-row">
                         <span class="feedback-anonymous-note">Gửi với tư cách ẩn danh</span>
                         <span class="feedback-counter" id="feedbackCounter">0 / 2000</span>
                     </div>
                     <div class="form-buttons">
-                        <button type="submit" class="btn-submit">GỬI GÓP Ý</button>
-                        <button type="button" class="btn-cancel" id="cancelFeedback">HỦY</button>
+                        <button type="submit" class="btn-submit">Gửi góp ý</button>
+                        <button type="button" class="btn-cancel" id="cancelFeedback">Đóng</button>
                     </div>
                 </form>
             </div>
