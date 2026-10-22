@@ -1826,9 +1826,55 @@ function saveSettings() {
     });
 }
 
-// Load today info on page load
-loadTodayInfo();
-loadHistory();
+function openAdminAddOrder() {
+    document.getElementById('adminAddOrderForm').reset();
+    document.getElementById('adminAddOrderMessage').innerHTML = '';
+    document.getElementById('adminOrderNames').innerHTML = [...new Set(allCustomerNames)]
+        .map((name) => `<option value="${escapeAttr(name)}"></option>`).join('');
+    document.getElementById('adminAddOrderModal').style.display = 'flex';
+}
+
+function closeAdminAddOrder() {
+    document.getElementById('adminAddOrderModal').style.display = 'none';
+}
+
+document.getElementById('adminAddOrderForm').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const button = document.getElementById('adminAddOrderSubmit');
+    if (button.disabled) return;
+    const name = document.getElementById('adminOrderName').value.trim();
+    const quantity = Number(document.getElementById('adminOrderQuantity').value);
+    const description = document.getElementById('adminOrderDescription').value.trim();
+    const message = document.getElementById('adminAddOrderMessage');
+    if (!name || !Number.isSafeInteger(quantity) || quantity <= 0) {
+        message.innerHTML = '<div class="error-message">Vui lòng nhập tên và số suất nguyên dương.</div>';
+        return;
+    }
+    button.disabled = true;
+    button.textContent = 'Đang thêm…';
+    message.innerHTML = '';
+    try {
+        await AppUtils.fetchJson(`${API_BASE}/api/admin/orders`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, quantity, description })
+        });
+        closeAdminAddOrder();
+        selectedOrderDate = getLocalDateInputValue();
+        kitchenOrderFilter = 'pending';
+        historyCurrentPage = 1;
+        updateKitchenFilterButtons();
+        loadHistory();
+        loadAllCustomerNames();
+        showPopup(`Đã thêm ${quantity} suất cho ${name}.`);
+    } catch (error) {
+        message.innerHTML = `<div class="error-message">${escapeHtml(error.message)}</div>`;
+    } finally {
+        button.disabled = false;
+        button.textContent = 'Thêm suất';
+    }
+});
+
+// Open the kitchen queue first; other tabs load their data on demand.
+switchTab('history');
 loadAllCustomerNames();
 togglePaymentDateInputs();
-switchPaymentView('debt');

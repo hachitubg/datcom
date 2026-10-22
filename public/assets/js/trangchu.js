@@ -69,7 +69,7 @@ function checkUserAuth({ notifyPromos = false } = {}) {
                 .finally(() => loadQuantityPromoStatus({ maybeShowIntro: true }));
             loadPromoWalletSummary().then((wallet) => {
                 if (notifyPromos && Number(wallet?.unseenCount || 0) > 0) {
-                    showPopup(`Bạn vừa nhận được ${wallet.unseenCount} mã khuyến mãi mới. Nhấn biểu tượng vé để xem mã.`);
+                    showPopup(`Bạn vừa nhận được ${wallet.unseenCount} mã khuyến mãi mới. Nhấn "Mã của tôi" để xem mã.`);
                 }
             });
         })
@@ -86,6 +86,8 @@ function checkUserAuth({ notifyPromos = false } = {}) {
 function updatePromoAccess() {
     const promoGroup = document.getElementById('promoGroup');
     if (!promoGroup) return;
+    document.getElementById('promoCode').disabled = !currentUser;
+    if (!currentUser) document.getElementById('promoCode').innerHTML = '<option value="">Đăng nhập để chọn mã</option>';
     if (currentUser) {
         promoGroup.classList.remove('promo-group-disabled');
         const hint = promoGroup.querySelector('.promo-login-hint');
@@ -519,6 +521,7 @@ function updatePromoWalletButton(status) {
     btn.style.display = shouldShow ? 'inline-flex' : 'none';
 
     const unseenCount = Number(status?.unseenCount || 0);
+    btn.setAttribute('aria-label', unseenCount > 0 ? `Mã của tôi, có ${unseenCount} mã mới` : 'Mã của tôi');
     if (shouldShow && unseenCount > 0) {
         badge.textContent = unseenCount > 9 ? '9+' : String(unseenCount);
         badge.style.display = 'inline-flex';
@@ -1143,7 +1146,32 @@ function loadPaymentHistory() {
 // =============================================
 // Promo Code Check
 // =============================================
-document.getElementById('btnCheckPromo').addEventListener('click', () => {
+let promoOptionsRequest = 0;
+async function loadOrderPromoOptions() {
+    const request = ++promoOptionsRequest;
+    const select = document.getElementById('promoCode');
+    const message = document.getElementById('promoMessage');
+    select.innerHTML = '<option value="">Không sử dụng mã</option>';
+    if (!currentUser) { select.disabled = true; return; }
+    const userId = currentUser.id;
+    select.disabled = true;
+    message.textContent = 'Đang tải mã của bạn…';
+    try {
+        const data = await AppUtils.fetchJson(`${API_BASE}/api/promo-wallet/available`);
+        if (request !== promoOptionsRequest || currentUser?.id !== userId) return;
+        const codes = Array.isArray(data.codes) ? data.codes : [];
+        select.innerHTML += codes.map((item) => `<option value="${escapeAttr(item.code)}">${escapeHtml(item.code)} · Giảm ${Number(item.discountPercent)}% cho 1 suất</option>`).join('');
+        message.textContent = codes.length ? 'Chỉ hiển thị mã chưa sử dụng của bạn. Mỗi mã giảm cho 1 suất.' : 'Bạn chưa có mã chưa sử dụng.';
+    } catch {
+        if (request === promoOptionsRequest) message.textContent = 'Chưa tải được mã. Vui lòng đóng và mở lại cửa sổ đặt cơm để thử lại.';
+    } finally {
+        if (request === promoOptionsRequest) select.disabled = !currentUser;
+    }
+}
+
+let promoValidationRequest = 0;
+document.getElementById('promoCode').addEventListener('change', () => {
+    const request = ++promoValidationRequest;
     const code = document.getElementById('promoCode').value.trim();
     const msg = document.getElementById('promoMessage');
     if (!currentUser) {
@@ -1159,6 +1187,7 @@ document.getElementById('btnCheckPromo').addEventListener('click', () => {
     })
     .then(res => res.json())
     .then(data => {
+        if (request !== promoValidationRequest || document.getElementById('promoCode').value !== code) return;
         if (data.valid) {
             msg.innerHTML = `<span class="promo-valid">Mã hợp lệ — Giảm ${data.discountPercent}%</span>`;
         } else {
@@ -1166,6 +1195,7 @@ document.getElementById('btnCheckPromo').addEventListener('click', () => {
         }
     })
     .catch(() => {
+        if (request !== promoValidationRequest || document.getElementById('promoCode').value !== code) return;
         msg.innerHTML = `<span class="promo-invalid">Lỗi kiểm tra mã</span>`;
     });
 });
@@ -1181,6 +1211,7 @@ document.getElementById('btnOrder').addEventListener('click', () => {
     loadCustomerNameSuggestions();
     updatePromoAccess();
     syncCustomerNameField();
+    loadOrderPromoOptions();
     orderModal.style.display = 'flex';
 });
 
@@ -1310,7 +1341,7 @@ function applyOrderButtonState(data) {
     if (shopClosedState.isClosed) {
         orderBtn.disabled = true;
         orderBtn.classList.add('disabled');
-        orderBtn.innerHTML = '<span class="btn-icon">🍱</span><span>TẠM ĐÓNG</span>';
+        orderBtn.innerHTML = '<span data-icon="circle-pause" aria-hidden="true"></span><span>Tạm đóng</span>';
         if (mobileOrderBtn) mobileOrderBtn.disabled = true;
         if (mobileText) mobileText.textContent = 'Tạm đóng';
         return;
@@ -1319,7 +1350,7 @@ function applyOrderButtonState(data) {
     if (orderCutoffState.isOrderClosed) {
         orderBtn.disabled = true;
         orderBtn.classList.add('disabled');
-        orderBtn.innerHTML = '<span class="btn-icon">⏰</span><span>ĐÃ CHỐT</span>';
+        orderBtn.innerHTML = '<span data-icon="circle-pause" aria-hidden="true"></span><span>Đã chốt</span>';
         if (mobileOrderBtn) mobileOrderBtn.disabled = true;
         if (mobileText) mobileText.textContent = 'Đã chốt';
         return;
@@ -1328,7 +1359,7 @@ function applyOrderButtonState(data) {
     if (remaining <= 0) {
         orderBtn.disabled = true;
         orderBtn.classList.add('disabled');
-        orderBtn.innerHTML = '<span class="btn-icon">❌</span><span>HẾT SUẤT</span>';
+        orderBtn.innerHTML = '<span data-icon="circle-pause" aria-hidden="true"></span><span>Hết suất</span>';
         if (mobileOrderBtn) mobileOrderBtn.disabled = true;
         if (mobileText) mobileText.textContent = 'Hết suất';
         return;
@@ -1336,7 +1367,7 @@ function applyOrderButtonState(data) {
 
     orderBtn.disabled = false;
     orderBtn.classList.remove('disabled');
-    orderBtn.innerHTML = '<span class="btn-icon">🍚</span><span>ĐẶT CƠM</span>';
+    orderBtn.innerHTML = '<span data-icon="utensils" aria-hidden="true"></span><span>Đặt cơm</span>';
     if (mobileOrderBtn) mobileOrderBtn.disabled = false;
     if (mobileText) mobileText.textContent = 'Đặt cơm';
 }
@@ -1648,7 +1679,7 @@ function getRankIcon(rank) {
 
 function renderLeaderboard(data) {
     const { month, leaders } = data;
-    leaderboardTitle.textContent = '🏆 Bảng xếp hạng';
+    leaderboardTitle.textContent = 'Bảng xếp hạng';
 
     if (!leaders || leaders.length === 0) {
         leaderboardContent.innerHTML = `

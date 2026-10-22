@@ -7,15 +7,17 @@
   <link rel="icon" type="image/png" href="/images/datcom_icon.png">
   <link rel="apple-touch-icon" href="/images/datcom_icon.png">
   <link rel="stylesheet" href="/assets/styles/admin.css">
+  <link rel="stylesheet" href="/assets/styles/ui.css">
 </head>
 <body>
   <div class="admin-auth-overlay" style="display:flex;">
     <div class="admin-auth-card">
-      <div class="admin-auth-icon">🔐</div>
+      <img class="admin-brand-logo" src="/images/datcom_icon.png" alt="Cơm Cô Giang">
       <h2>Khu vực quản trị</h2>
       <p>Vui lòng nhập mật khẩu quản trị để tiếp tục.</p>
       <div class="admin-auth-input-wrap">
-        <input id="adminPasswordInput" type="password" placeholder="Nhập mật khẩu admin">
+        <label for="adminPasswordInput">Mật khẩu quản trị</label>
+        <input id="adminPasswordInput" type="password" placeholder="Nhập mật khẩu admin" autocomplete="current-password">
       </div>
       <div id="adminAuthMessage" class="admin-auth-message"></div>
       <button class="btn-primary admin-auth-submit" type="button" id="loginBtn">Đăng nhập</button>

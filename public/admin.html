@@ -7,51 +7,52 @@
     <link rel="icon" type="image/png" href="/images/datcom_icon.png">
     <link rel="apple-touch-icon" href="/images/datcom_icon.png">
     <link rel="stylesheet" href="/assets/styles/admin.css">
+    <link rel="stylesheet" href="/assets/styles/ui.css">
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>QUẢN LÝ CƠM ONLINE</h1>
-            <a href="/" class="back-btn">QUAY LẠI TRANG CHỦ</a>
+            <div class="brand-heading"><img src="/images/datcom_icon.png" alt=""><h1>Quản lý cơm online</h1></div>
+            <a href="/" class="back-btn"><span data-icon="house" aria-hidden="true"></span><span>Trang chủ</span></a>
         </header>
 
         <div class="tab-buttons">
-            <button class="tab-btn active" onclick="switchTab('today', event)">
-                <span class="tab-icon">🍽️</span>
-                <span class="tab-label">MENU</span>
+            <button class="tab-btn active" onclick="switchTab('history', event)">
+                <span data-icon="clipboard-list" aria-hidden="true"></span>
+                <span class="tab-label">Đặt cơm</span>
             </button>
-            <button class="tab-btn" onclick="switchTab('history', event)">
-                <span class="tab-icon">📋</span>
-                <span class="tab-label">ĐẶT CƠM</span>
+            <button class="tab-btn" onclick="switchTab('today', event)">
+                <span data-icon="chef-hat" aria-hidden="true"></span>
+                <span class="tab-label">Menu</span>
             </button>
             <button class="tab-btn" onclick="switchTab('payments', event)">
-                <span class="tab-icon">💳</span>
-                <span class="tab-label">THANH TOÁN</span>
+                <span data-icon="credit-card" aria-hidden="true"></span>
+                <span class="tab-label">Thanh toán</span>
             </button>
             <button class="tab-btn" onclick="switchTab('promos', event)">
-                <span class="tab-icon">🏷️</span>
-                <span class="tab-label">KHUYẾN MÃI</span>
+                <span data-icon="ticket" aria-hidden="true"></span>
+                <span class="tab-label">Khuyến mãi</span>
             </button>
             <button class="tab-btn" onclick="switchTab('streaks', event)">
-                <span class="tab-icon">🔥</span>
-                <span class="tab-label">CHUỖI ĐẶT CƠM</span>
+                <span data-icon="flame" aria-hidden="true"></span>
+                <span class="tab-label">Chuỗi đặt cơm</span>
             </button>
             <button class="tab-btn" onclick="switchTab('users', event)">
-                <span class="tab-icon">👥</span>
-                <span class="tab-label">NGƯỜI DÙNG</span>
+                <span data-icon="users" aria-hidden="true"></span>
+                <span class="tab-label">Người dùng</span>
             </button>
             <button class="tab-btn" onclick="switchTab('settings', event)">
-                <span class="tab-icon">⚙️</span>
-                <span class="tab-label">CÀI ĐẶT</span>
+                <span data-icon="settings" aria-hidden="true"></span>
+                <span class="tab-label">Cài đặt</span>
             </button>
             <button class="tab-btn" onclick="switchTab('feedback', event)">
-                <span class="tab-icon">✍️</span>
-                <span class="tab-label">GÓP Ý</span>
+                <span data-icon="message-square" aria-hidden="true"></span>
+                <span class="tab-label">Góp ý</span>
             </button>
         </div>
 
         <!-- Tab Quản lý hôm nay -->
-        <div id="today" class="tab-content active">
+        <div id="today" class="tab-content">
             <div class="section">
                 <div id="todayMessage"></div>
 
@@ -114,8 +115,9 @@
         <!-- =============================================
              Tab Danh sách đặt cơm
              ============================================= -->
-        <div id="history" class="tab-content">
+        <div id="history" class="tab-content active">
             <div class="section">
+                <div class="order-section-actions"><span>Quản lý suất cơm</span><button class="btn-primary btn-small" type="button" onclick="openAdminAddOrder()"><span data-icon="plus" aria-hidden="true"></span>Thêm suất</button></div>
                 <details class="order-tools-details">
                     <summary>
                         <span>Bộ lọc ngày & tìm lịch sử</span>
@@ -374,15 +376,15 @@
                             <p class="settings-card-desc">Bật công tắc, nhập lý do và lưu để ghi ngày nghỉ hôm nay</p>
                         </div>
                         <div class="settings-header-actions">
-                            <div class="closure-action-buttons">
-                                <button class="btn-primary btn-small" type="button" onclick="openShopClosureAddModal()">THÊM LỊCH NGHỈ</button>
-                                <button class="btn-secondary btn-small" type="button" onclick="openShopClosureHistory()">XEM LỊCH SỬ NGHỈ</button>
-                            </div>
                             <label class="toggle-switch">
-                                <input type="checkbox" id="settingShopClosedEnabled">
+                                <input type="checkbox" id="settingShopClosedEnabled" aria-label="Quán tạm nghỉ hôm nay">
                                 <span class="toggle-slider"></span>
                             </label>
                         </div>
+                    </div>
+                    <div class="closure-action-buttons settings-closure-tools">
+                        <button class="btn-primary btn-small" type="button" onclick="openShopClosureAddModal()"><span data-icon="calendar-days" aria-hidden="true"></span><span>Thêm lịch nghỉ</span></button>
+                        <button class="btn-secondary btn-small" type="button" onclick="openShopClosureHistory()"><span data-icon="history" aria-hidden="true"></span><span>Lịch sử nghỉ</span></button>
                     </div>
                     <div class="settings-card-body" id="shopClosedFields">
                         <div class="filter-row">
@@ -402,7 +404,7 @@
                             <p class="settings-card-desc">Chặn đặt cơm khi khách hàng có dư nợ vượt số suất cho phép</p>
                         </div>
                         <label class="toggle-switch">
-                            <input type="checkbox" id="settingDebtLimitEnabled">
+                            <input type="checkbox" id="settingDebtLimitEnabled" aria-label="Bật giới hạn nợ">
                             <span class="toggle-slider"></span>
                         </label>
                     </div>
@@ -430,7 +432,7 @@
                             <p class="settings-card-desc">Tự động tạo mã giảm giá khi khách đặt cơm liên tục N ngày</p>
                         </div>
                         <label class="toggle-switch">
-                            <input type="checkbox" id="settingConsecutivePromoEnabled">
+                            <input type="checkbox" id="settingConsecutivePromoEnabled" aria-label="Bật tặng mã đặt liên tục">
                             <span class="toggle-slider"></span>
                         </label>
                     </div>
@@ -456,7 +458,7 @@
                             <p class="settings-card-desc">Cứ đủ N suất tích lũy từ khi bật chương trình, tài khoản nhận 1 mã giảm giá</p>
                         </div>
                         <label class="toggle-switch">
-                            <input type="checkbox" id="settingQuantityPromoEnabled">
+                            <input type="checkbox" id="settingQuantityPromoEnabled" aria-label="Bật tặng mã theo số suất">
                             <span class="toggle-slider"></span>
                         </label>
                     </div>
@@ -628,8 +630,24 @@
         </div>
     </div>
 
+    <div id="adminAddOrderModal" class="modal">
+        <div class="modal-content admin-add-order-modal">
+            <button class="close" type="button" aria-label="Đóng" onclick="closeAdminAddOrder()">&times;</button>
+            <h2>Thêm suất cơm hôm nay</h2>
+            <div id="adminAddOrderMessage" aria-live="polite"></div>
+            <form id="adminAddOrderForm">
+                <div class="form-group"><label for="adminOrderName">Người đặt *</label><input type="text" id="adminOrderName" list="adminOrderNames" maxlength="150" required autocomplete="off" placeholder="Chọn tên có sẵn hoặc nhập tên mới"><datalist id="adminOrderNames"></datalist></div>
+                <div class="form-group"><label for="adminOrderQuantity">Số suất *</label><input type="number" id="adminOrderQuantity" min="1" step="1" value="1" required></div>
+                <div class="form-group"><label for="adminOrderDescription">Ghi chú cho bếp</label><textarea id="adminOrderDescription" rows="3" maxlength="2000" placeholder="Đổi món, ít cơm…"></textarea></div>
+                <p class="form-hint">Có thể thêm sau giờ chốt. Nếu vượt số suất hiện có, số suất hôm nay được tăng tương ứng. Đơn vẫn tính công nợ bình thường.</p>
+                <div class="button-group"><button type="submit" class="btn-primary" id="adminAddOrderSubmit">Thêm suất</button><button type="button" class="btn-secondary" onclick="closeAdminAddOrder()">Hủy</button></div>
+            </form>
+        </div>
+    </div>
+
     <script src="/assets/js/common.js"></script>
     <script src="/assets/js/admin.js"></script>
+    <script src="/assets/js/ui.js"></script>
 
 </body>
 </html>

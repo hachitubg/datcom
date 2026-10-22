@@ -1079,6 +1079,20 @@ app.post('/api/admin/quantity', (req, res) => {
   });
 });
 
+// Admin can accept extra servings after cutoff or beyond the current capacity.
+app.post('/api/admin/orders', (req, res) => {
+  const name = normalizeName(String(req.body.name || ''));
+  const quantity = Number(req.body.quantity);
+  const description = String(req.body.description || '').trim();
+  if (!name || name.length > 150 || !Number.isSafeInteger(quantity) || quantity <= 0 || description.length > 2000) {
+    return res.status(400).json({ error: 'Vui lòng nhập tên, số suất nguyên dương và ghi chú tối đa 2.000 ký tự.' });
+  }
+  db.addAdminOrder(name, quantity, description, (err, order) => {
+    if (err) return res.status(400).json({ error: err.message });
+    res.status(201).json(order);
+  });
+});
+
 // Xóa đơn hàng
 app.delete('/api/admin/orders/:orderId', (req, res) => {
   const { orderId } = req.params;
@@ -1592,6 +1606,17 @@ app.get('/api/quantity-promo/status', (req, res) => {
           remainingServings: cycleServings === 0 ? requiredServings : requiredServings - cycleServings
         });
       });
+    });
+  });
+});
+
+app.get('/api/promo-wallet/available', (req, res) => {
+  getUserSessionInfo(req, (userErr, user) => {
+    if (userErr) return res.status(500).json({ error: userErr.message });
+    if (!user) return res.status(401).json({ error: 'Vui lòng đăng nhập để chọn mã khuyến mãi.' });
+    db.getAvailablePromoCodesForUser(user.id, (err, rows = []) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ codes: rows.map((row) => ({ code: row.code, discountPercent: Number(row.discount_percent), source: row.source })) });
     });
   });
 });

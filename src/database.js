@@ -339,7 +339,15 @@ class Database {
     );
   }
 
-  addOrder(name, quantity, description, promoCode, userId, callback) {
+  addAdminOrder(name, quantity, description, callback) {
+    this.findRegisteredUserByName(name, (err, user) => {
+      if (err) return callback(err);
+      const owner = user?.role === 'user' ? user : null;
+      this.addOrder(owner ? owner.name : name, quantity, description, null, owner?.id || null, callback, { admin: true });
+    });
+  }
+
+  addOrder(name, quantity, description, promoCode, userId, callback, options = {}) {
     if (typeof promoCode === 'function') {
       callback = promoCode;
       promoCode = null;
@@ -416,18 +424,29 @@ class Database {
                       return;
                     }
 
-                    if (!Number.isFinite(normalizedQuantity) || normalizedQuantity <= 0) {
+                    if (!Number.isSafeInteger(normalizedQuantity) || normalizedQuantity <= 0
+                      || !Number.isSafeInteger(Number(orderRow?.ordered || 0) + normalizedQuantity)) {
                       rollback(new Error('So luong dat khong hop le'));
                       return;
                     }
 
                     const remaining = Number(dayInfo.quantity || 0) - Number(orderRow?.ordered || 0);
-                    if (remaining < normalizedQuantity) {
+                    if (remaining < normalizedQuantity && !options.admin) {
                       rollback(new Error('Khong du so luong suat con lai'));
                       return;
                     }
 
                     const insertOrder = (discountPercent, codeUsed, promoId) => {
+                      if (options.admin && remaining < normalizedQuantity) {
+                        dbConn.run('UPDATE days SET quantity = ? WHERE id = ?',
+                          [Number(orderRow?.ordered || 0) + normalizedQuantity, dayInfo.id], (capacityErr) => {
+                            if (capacityErr) { rollback(capacityErr); return; }
+                            insertOrderRow();
+                          });
+                      } else {
+                        insertOrderRow();
+                      }
+                      function insertOrderRow() {
                       dbConn.run(
                         `INSERT INTO orders (day_id, name, quantity, description, discount_percent, promo_code, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)`,
                         [dayInfo.id, name, normalizedQuantity, normalizedDescription, discountPercent || 0, codeUsed || null, finalUserId],
@@ -471,6 +490,7 @@ class Database {
                           );
                         }
                       );
+                      }
                     };
 
                     if (!normalizedPromoCode) {
@@ -2113,6 +2133,15 @@ class Database {
       `SELECT id, code, discount_percent, issued_to_user_id, source FROM promo_codes WHERE UPPER(code) = ? AND used_by IS NULL`,
       [normalizedCode],
       callback
+    );
+  }
+
+  getAvailablePromoCodesForUser(userId, callback) {
+    this.db.all(
+      `SELECT code, discount_percent, source, created_at FROM promo_codes
+       WHERE issued_to_user_id = ? AND used_by IS NULL
+       ORDER BY discount_percent DESC, created_at ASC, id ASC`,
+      [Number(userId || 0)], callback
     );
   }
 
