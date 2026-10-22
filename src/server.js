@@ -1492,6 +1492,26 @@ app.delete('/api/admin/payments/:orderCode', (req, res) => {
   });
 });
 
+app.get('/api/payments/me', (req, res) => {
+  getUserSessionInfo(req, (err, user) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!user) return res.status(401).json({ error: 'Vui lòng đăng nhập để xem lịch sử của bạn.' });
+    db.getCustomerPaymentOverview(user.name, (dataErr, data) => {
+      if (dataErr) return res.status(500).json({ error: dataErr.message });
+      res.json(data);
+    });
+  });
+});
+
+app.get('/api/payments/customers/:name/orders', (req, res) => {
+  const name = String(req.params.name || '').trim();
+  if (!name || name.length > 150) return res.status(400).json({ error: 'Tên khách không hợp lệ.' });
+  db.getCustomerPaymentOverview(name, (err, data) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ name: data.name, summary: data.summary, orders: data.orders });
+  });
+});
+
 // Lịch sử thanh toán
 app.get('/api/payments/history', (req, res) => {
   const filters = {
@@ -1836,11 +1856,12 @@ app.get('/api/admin/promo-codes', (req, res) => {
 });
 
 app.post('/api/admin/promo-codes', (req, res) => {
-  const code = String(req.body.code || '').trim();
+  const code = `DATCOM-${new Date().toISOString().replace(/\D/g, '').slice(0, 14)}-${crypto.randomBytes(5).toString('hex').toUpperCase()}`;
   const discountPercent = Number(req.body.discountPercent || 0);
   const issuedToUserId = Number(req.body.issuedToUserId || 0);
-  if (!code || discountPercent <= 0 || discountPercent > 100) {
-    return res.status(400).json({ error: 'Mã và phần trăm giảm giá không hợp lệ (1-100%)' });
+  if (!Number.isInteger(discountPercent) || discountPercent <= 0 || discountPercent > 100
+    || !Number.isSafeInteger(issuedToUserId) || issuedToUserId < 0) {
+    return res.status(400).json({ error: 'Phần trăm giảm giá (1–100%) hoặc tài khoản nhận không hợp lệ.' });
   }
   const createPromo = (user) => {
     db.createPromoCode(

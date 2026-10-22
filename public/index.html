@@ -434,15 +434,24 @@
                 <button type="button" class="modal-close" id="closePayment">&times;</button>
             </div>
             <div class="modal-body">
+                <div id="paymentAccountPanel" hidden></div>
+                <div class="payment-hub-tabs" id="paymentHubTabs" hidden>
+                    <button type="button" data-payment-tab="overview">Của tôi</button>
+                    <button type="button" data-payment-tab="orders">Lịch sử đặt</button>
+                    <button type="button" data-payment-tab="payments">Đã thanh toán</button>
+                    <button type="button" data-payment-tab="list">Danh sách chung</button>
+                </div>
+                <div id="paymentPersonalContent" hidden></div>
+                <div id="paymentPublicSection">
                 <div class="payment-toolbar">
                     <label class="sr-only" for="paymentSearch">Tìm khách cần thanh toán</label>
                     <input type="text" id="paymentSearch" placeholder="Tìm theo tên...">
                     <div class="payment-toolbar-actions">
                         <button class="btn-submit btn-payment-toolbar" id="btnSearchPayment" type="button">Tìm kiếm</button>
-                        <button class="btn-cancel btn-payment-toolbar" id="btnPaymentHistory" type="button">Lịch sử</button>
                     </div>
                 </div>
                 <div id="paymentList" class="orders-list"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -471,33 +480,6 @@
         </div>
     </div>
 
-    <div id="paymentHistoryModal" class="modal">
-        <div class="modal-content modal-wide">
-            <div class="modal-header">
-                <h2>Lịch sử thanh toán</h2>
-                <button type="button" class="modal-close" id="closePaymentHistory">&times;</button>
-            </div>
-            <div class="modal-body">
-                <div class="payment-history-toolbar">
-                    <input type="text" id="historyNameSearch" placeholder="Tìm theo tên người dùng...">
-                    <select id="historyPeriodFilter" class="hct-input">
-                        <option value="all">Toàn bộ</option>
-                        <option value="date">Theo ngày</option>
-                        <option value="week">Theo tuần</option>
-                        <option value="month">Theo tháng</option>
-                    </select>
-                    <input type="date" id="historyDateFilter" style="display:none;" class="hct-input">
-                    <input type="week" id="historyWeekFilter" style="display:none;" class="hct-input">
-                    <input type="month" id="historyMonthFilter" style="display:none;" class="hct-input">
-                    <div class="filter-actions">
-                        <button class="btn-submit" type="button" id="btnApplyHistoryFilter">Lọc</button>
-                        <button class="btn-cancel" type="button" id="btnResetHistoryFilter">Đặt lại</button>
-                    </div>
-                </div>
-                <div id="paymentHistoryList" class="orders-list"></div>
-            </div>
-        </div>
-    </div>
 
     <div id="feedbackModal" class="modal">
         <div class="modal-content">
@@ -550,6 +532,7 @@
 
     <script src="/assets/js/common.js"></script>
     <script src="/assets/js/trangchu.js"></script>
+    <script src="/assets/js/payment-hub.js"></script>
     <script src="/assets/js/ui.js"></script>
 
     <!-- Modal scroll-lock -->

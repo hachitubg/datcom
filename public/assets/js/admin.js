@@ -480,7 +480,7 @@ function renderHistoryOrders() {
             <div class="order-info kitchen-order-main">
                 <div class="kitchen-order-heading">
                     <div class="order-name"><span class="kitchen-order-number">${displayNumber}.</span> ${escapeHtml(order.name)} ${discBadge}</div>
-                    <span class="kitchen-quantity">${order.quantity} suất</span>
+                    <span class="kitchen-quantity ${Number(order.quantity) > 1 ? 'quantity-multiple' : ''}">${order.quantity} suất</span>
                 </div>
                 ${order.description ? `<div class="order-details"><strong>Ghi chú:</strong> ${escapeHtml(order.description)}</div>` : ''}
                 ${promoInfo}
@@ -1349,44 +1349,48 @@ function loadConsecutiveStreaks() {
 let promoUserAccounts = [];
 
 function renderPromoUserOptions(searchValue = '') {
-    const select = document.getElementById('newPromoUser');
-    if (!select) return;
-    const selectedValue = select.value;
-    const searchKey = AppUtils.getSearchKey(searchValue);
-    const filteredUsers = promoUserAccounts.filter((user) => {
-        if (!searchKey) return true;
-        return AppUtils.getSearchKey(`${user.name} ${user.phone}`).includes(searchKey);
-    });
-    const userOptions = filteredUsers
-        .map(user => `<option value="${user.id}">${escapeHtml(user.name)} - ${escapeHtml(user.phone)}</option>`)
-        .join('');
-    const emptyOption = searchKey && !filteredUsers.length
-        ? '<option value="" disabled>Không tìm thấy tài khoản phù hợp</option>'
-        : '';
-    select.innerHTML = `<option value="">Không gửi tới tài khoản cụ thể</option>${emptyOption}${userOptions}`;
-    if (filteredUsers.some((user) => String(user.id) === selectedValue)) {
-        select.value = selectedValue;
-    }
+    const query = AppUtils.getSearchKey(searchValue);
+    const users = promoUserAccounts.filter((user) => AppUtils.getSearchKey(user.name).includes(query) || AppUtils.getSearchKey(user.phone).includes(query));
+    const selected = document.getElementById('newPromoUser').value;
+    document.getElementById('promoRecipientOptions').innerHTML = '<button type="button" class="recipient-option" data-user="">Mã dùng chung</button>' + users.map((user) => `<button type="button" class="recipient-option ${String(user.id) === selected ? 'selected' : ''}" data-user="${user.id}"><strong>${escapeHtml(user.name)}</strong><small>${escapeHtml(user.phone)}</small></button>`).join('') + (!users.length && query ? '<p class="customer-list-empty">Không tìm thấy tài khoản.</p>' : '');
 }
-
+function closeRecipientPicker() {
+    document.getElementById('promoRecipientDropdown').hidden = true;
+    document.getElementById('promoRecipientButton').setAttribute('aria-expanded', 'false');
+}
 function loadPromoUserOptions() {
-    const select = document.getElementById('newPromoUser');
-    if (!select) return;
-
-    fetch(`${API_BASE}/api/admin/users`)
-        .then(res => res.json())
-        .then(users => {
-            promoUserAccounts = (users || []).filter(user => user.role === 'user');
-            renderPromoUserOptions(document.getElementById('newPromoUserSearch')?.value || '');
-        })
-        .catch(() => {
-            select.innerHTML = '<option value="">Không tải được danh sách tài khoản</option>';
-        });
+    const button = document.getElementById('promoRecipientButton');
+    button.disabled = true;
+    AppUtils.fetchJson(`${API_BASE}/api/admin/users`).then((users) => {
+        promoUserAccounts = users.filter((user) => user.role === 'user');
+        renderPromoUserOptions('');
+        button.disabled = false;
+    }).catch(() => { document.getElementById('promoRecipientLabel').textContent = 'Không tải được tài khoản. Mở lại tab để thử.'; });
 }
-
-document.getElementById('newPromoUserSearch')?.addEventListener('input', (event) => {
-    renderPromoUserOptions(event.target.value);
+document.getElementById('newPromoUserSearch').addEventListener('input', (event) => renderPromoUserOptions(event.target.value));
+document.getElementById('promoRecipientButton').addEventListener('click', () => {
+    const dropdown = document.getElementById('promoRecipientDropdown');
+    if (!dropdown.hidden) { closeRecipientPicker(); return; }
+    dropdown.hidden = false;
+    document.getElementById('promoRecipientButton').setAttribute('aria-expanded', 'true');
+    document.getElementById('newPromoUserSearch').value = '';
+    renderPromoUserOptions('');
+    document.getElementById('newPromoUserSearch').focus();
 });
+document.getElementById('promoRecipientOptions').addEventListener('click', (event) => {
+    const option = event.target.closest('[data-user]');
+    if (!option) return;
+    const user = promoUserAccounts.find((row) => String(row.id) === option.dataset.user);
+    document.getElementById('newPromoUser').value = user ? user.id : '';
+    document.getElementById('promoRecipientLabel').textContent = user ? `${user.name} · ${user.phone}` : 'Mã dùng chung';
+    closeRecipientPicker();
+    document.getElementById('promoRecipientButton').focus();
+});
+document.getElementById('promoRecipientPicker').addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') { event.stopPropagation(); closeRecipientPicker(); document.getElementById('promoRecipientButton').focus(); }
+    if (event.key === 'ArrowDown' && event.target.id === 'newPromoUserSearch') { event.preventDefault(); document.querySelector('.recipient-option')?.focus(); }
+});
+document.addEventListener('click', (event) => { if (!event.target.closest('#promoRecipientPicker')) closeRecipientPicker(); });
 
 function loadPromoCodes() {
     const container = document.getElementById('promoCodeList');
@@ -1434,65 +1438,27 @@ function loadPromoCodes() {
         });
 }
 
-function generatePromoCode() {
-    const now = new Date();
-    const pad = (value) => String(value).padStart(2, '0');
-    const datePart = [
-        now.getFullYear(),
-        pad(now.getMonth() + 1),
-        pad(now.getDate())
-    ].join('');
-    const timePart = [
-        pad(now.getHours()),
-        pad(now.getMinutes()),
-        pad(now.getSeconds())
-    ].join('');
-    const suffix = Math.random().toString(36).slice(2, 4).toUpperCase();
-    const code = `DATCOM-${datePart}-${timePart}${suffix}`;
-    const input = document.getElementById('newPromoCode');
-    input.value = code;
-    input.focus();
-    input.select();
-}
-
-function createPromoCode() {
-    const codeInput = document.getElementById('newPromoCode');
-    if (!codeInput.value.trim()) {
-        generatePromoCode();
-    }
-    const code = codeInput.value.trim().toUpperCase();
-    const discount = Number(document.getElementById('newPromoDiscount').value || 0);
-    const issuedToUserId = Number(document.getElementById('newPromoUser')?.value || 0);
-    const msgEl = document.getElementById('promoAdminMessage');
-
-    if (!code || discount <= 0 || discount > 100) {
-        msgEl.innerHTML = '<div class="error-message">Vui lòng nhập mã và phần trăm giảm giá hợp lệ (1-100%)</div>';
+async function createPromoCode() {
+    const button = document.getElementById('createPromoButton');
+    if (button.disabled) return;
+    const discountPercent = Number(document.getElementById('newPromoDiscount').value);
+    const issuedToUserId = Number(document.getElementById('newPromoUser').value || 0);
+    const message = document.getElementById('promoAdminMessage');
+    if (!Number.isInteger(discountPercent) || discountPercent < 1 || discountPercent > 100) {
+        message.innerHTML = '<div class="error-message">Nhập phần trăm giảm giá nguyên từ 1 đến 100.</div>';
         return;
     }
-
-    fetch(`${API_BASE}/api/admin/promo-codes`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, discountPercent: discount, issuedToUserId })
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.error) throw new Error(data.error);
-        msgEl.innerHTML = '<div class="success-message">Tạo mã khuyến mãi thành công!</div>';
-        document.getElementById('newPromoCode').value = '';
-        document.getElementById('newPromoDiscount').value = '';
-        if (document.getElementById('newPromoUser')) {
-            document.getElementById('newPromoUser').value = '';
-        }
-        if (document.getElementById('newPromoUserSearch')) {
-            document.getElementById('newPromoUserSearch').value = '';
-            renderPromoUserOptions('');
-        }
+    button.disabled = true;
+    button.textContent = 'Đang tạo…';
+    try {
+        const data = await AppUtils.fetchJson(`${API_BASE}/api/admin/promo-codes`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ discountPercent, issuedToUserId })
+        });
+        message.innerHTML = `<div class="success-message">Đã tạo mã <strong>${escapeHtml(data.code)}</strong>${issuedToUserId ? ' và gửi vào tài khoản được chọn' : ''}.</div>`;
         loadPromoCodes();
-    })
-    .catch(err => {
-        msgEl.innerHTML = `<div class="error-message">${err.message}</div>`;
-    });
+    } catch (error) {
+        message.innerHTML = `<div class="error-message">${escapeHtml(error.message)}</div>`;
+    } finally { button.disabled = false; button.textContent = 'TẠO MÃ'; }
 }
 
 async function deletePromoCode(id) {

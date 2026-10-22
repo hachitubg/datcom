@@ -258,7 +258,6 @@ const listModal = document.getElementById('listModal');
 const paymentModal = document.getElementById('paymentModal');
 const paymentDetailModal = document.getElementById('paymentDetailModal');
 const paymentQrModal = document.getElementById('paymentQrModal');
-const paymentHistoryModal = document.getElementById('paymentHistoryModal');
 const feedbackModal = document.getElementById('feedbackModal');
 const streakIntroModal = document.getElementById('streakIntroModal');
 const streakStatusModal = document.getElementById('streakStatusModal');
@@ -270,11 +269,8 @@ const customerNameInput = document.getElementById('customerName');
 const feedbackContentInput = document.getElementById('feedbackContent');
 
 document.getElementById('btnPayment').addEventListener('click', () => {
-    if (currentUser && currentUser.name) {
-        document.getElementById('paymentSearch').value = currentUser.name;
-    }
     paymentModal.style.display = 'flex';
-    loadPaymentList();
+    window.PaymentHub.open();
 });
 
 document.getElementById('mobileBtnOrder').addEventListener('click', () => {
@@ -309,9 +305,6 @@ document.getElementById('closePaymentQr').addEventListener('click', () => {
     paymentQrModal.style.display = 'none';
 });
 
-document.getElementById('closePaymentHistory').addEventListener('click', () => {
-    paymentHistoryModal.style.display = 'none';
-});
 
 document.getElementById('closeFeedback').addEventListener('click', closeFeedbackModal);
 document.getElementById('cancelFeedback').addEventListener('click', closeFeedbackModal);
@@ -352,15 +345,6 @@ document.getElementById('paymentSearch').addEventListener('keydown', (e) => {
     }
 });
 
-document.getElementById('btnPaymentHistory').addEventListener('click', () => {
-    if (currentUser && currentUser.name && !document.getElementById('historyNameSearch').value.trim()) {
-        document.getElementById('historyNameSearch').value = currentUser.name;
-    }
-    loadPaymentHistory();
-});
-document.getElementById('historyPeriodFilter').addEventListener('change', togglePaymentHistoryInputs);
-document.getElementById('btnApplyHistoryFilter').addEventListener('click', loadPaymentHistory);
-document.getElementById('btnResetHistoryFilter').addEventListener('click', resetPaymentHistoryFilter);
 
 feedbackContentInput.addEventListener('input', updateFeedbackCounter);
 
@@ -835,97 +819,9 @@ async function openPromoWalletModal() {
     }
 }
 
-function loadPaymentList() {
-    const keyword = document.getElementById('paymentSearch').value.trim();
-    const url = keyword ? `${API_BASE}/api/payments/today?search=${encodeURIComponent(keyword)}` : `${API_BASE}/api/payments/today`;
-    // API trả về công nợ chưa thanh toán được cộng dồn toàn bộ thời gian
-    const list = document.getElementById('paymentList');
-    list.innerHTML = '<div style="padding: 16px">Đang tải...</div>';
-
-    fetch(url)
-        .then(async (res) => {
-            const data = await res.json();
-            if (!res.ok) {
-                throw new Error(data.error || 'Không thể tải danh sách thanh toán');
-            }
-            return data;
-        })
-        .then(rows => {
-            if (!Array.isArray(rows) || rows.length === 0) {
-                list.innerHTML = '<div style="padding: 16px">Không có dữ liệu phù hợp.</div>';
-                return;
-            }
-
-            list.innerHTML = rows.map((row) => `
-                <div class="order-item payment-order-item customer-payment-row">
-                    <div class="customer-payment-heading">
-                        <div class="order-info"><h4>${escapeHtml(row.name)}</h4><p>${Number(row.quantity || 0)} suất</p></div>
-                        <div class="customer-payment-amount"><span>Còn phải trả</span><strong>${AppUtils.formatCurrency(row.remainingAmount)}</strong></div>
-                    </div>
-                    <div class="payment-action-group">
-                        <button class="payment-detail-btn" data-customer-name="${encodeURIComponent(row.name)}">Chi tiết</button>
-                        <button class="pay-btn" data-customer-name="${encodeURIComponent(row.name)}" ${row.remainingAmount <= 0 ? 'disabled' : ''}>Thanh toán</button>
-                    </div>
-                </div>
-            `).join('');
-        })
-        .catch(err => {
-            list.innerHTML = `<div class="customer-list-empty">Lỗi tải danh sách thanh toán: ${escapeHtml(err.message)}</div>`;
-        });
-}
-
-function formatDateTime(value) {
-    return AppUtils.formatDateTime(value);
-}
-
-function openPaymentDetail(name) {
-    const container = document.getElementById('paymentDetailContent');
-    container.innerHTML = '<div style="padding: 16px">Đang tải chi tiết...</div>';
-    paymentDetailModal.style.display = 'flex';
-
-    AppUtils.fetchJson(`${API_BASE}/api/payments/today/${encodeURIComponent(name)}/details`)
-        .then((data) => {
-            const rows = Array.isArray(data.rows) ? data.rows : [];
-            if (!rows.length) {
-                container.innerHTML = '<div style="padding: 16px">Không có suất chưa thanh toán.</div>';
-                return;
-            }
-
-            let html = `
-                <div class="payment-detail-header">
-                    <strong>${escapeHtml(data.name)}</strong>
-                    <span>Tổng ${data.totalQuantity} suất • ${AppUtils.formatCurrency(data.totalAmount)}</span>
-                </div>
-                <div class="payment-detail-list">
-            `;
-
-            rows.forEach((row, index) => {
-                const disc = Number(row.discount_percent || 0);
-                const discBadge = disc > 0 ? `<span class="discount-badge">-${disc}% / 1 suất</span>` : '';
-                const promoInfo = row.promo_code ? `<p class="promo-info-text">Mã KM: ${escapeHtml(row.promo_code)} (giảm ${disc}% cho 1 suất)</p>` : '';
-                const originalQuantity = Number(row.originalQuantity || row.quantity || 0);
-                const quantityNote = originalQuantity > Number(row.quantity || 0)
-                    ? ` <span class="payment-partial-note">(đơn gốc ${originalQuantity} suất)</span>`
-                    : '';
-                html += `
-                    <div class="order-item payment-detail-item ${disc > 0 ? 'order-item-discounted' : ''}">
-                        <div class="order-info">
-                            <h4>Còn nợ ${row.quantity} suất từ đơn ngày ${formatDateTime(row.createdAt)}${quantityNote} ${discBadge}</h4>
-                            <h4>Còn phải thanh toán ${AppUtils.formatCurrency(row.amount)}</h4>
-                            ${row.description ? `<p><strong>Ghi chú:</strong> ${escapeHtml(row.description)}</p>` : ''}
-                            ${promoInfo}
-                        </div>
-                    </div>
-                `;
-            });
-
-            html += '</div>';
-            container.innerHTML = html;
-        })
-        .catch((error) => {
-            container.innerHTML = `<div style="padding:16px;color:#9b3f3f">Lỗi tải chi tiết: ${error.message}</div>`;
-        });
-}
+function loadPaymentList() { return window.PaymentHub.loadDebtList(); }
+function formatDateTime(value) { return AppUtils.formatDateTime(value); }
+function openPaymentDetail(name) { return window.PaymentHub.showCustomerOrders(name); }
 
 document.getElementById('paymentList').addEventListener('click', (event) => {
     const detailBtn = event.target.closest('.payment-detail-btn');
@@ -985,7 +881,7 @@ window.openPayQr = async function(name) {
 
         if (data.paid) {
             await showPopup(data.message || 'Đơn này đã được thanh toán đủ.');
-            loadPaymentList();
+            window.PaymentHub.open();
             return;
         }
         if (!data.payos?.checkoutUrl) {
@@ -1006,155 +902,6 @@ window.openPayQr = async function(name) {
 };
 
 
-function togglePaymentHistoryInputs() {
-    const period = document.getElementById('historyPeriodFilter').value;
-    const dateInput = document.getElementById('historyDateFilter');
-    const weekInput = document.getElementById('historyWeekFilter');
-    const monthInput = document.getElementById('historyMonthFilter');
-
-    dateInput.style.display = period === 'date' ? 'block' : 'none';
-    weekInput.style.display = period === 'week' ? 'block' : 'none';
-    monthInput.style.display = period === 'month' ? 'block' : 'none';
-}
-
-function getWeekDateRange(weekValue) {
-    if (!weekValue || !weekValue.includes('-W')) {
-        return null;
-    }
-
-    const [yearPart, weekPart] = weekValue.split('-W');
-    const year = Number(yearPart);
-    const week = Number(weekPart);
-    if (!Number.isFinite(year) || !Number.isFinite(week)) {
-        return null;
-    }
-
-    const simple = new Date(Date.UTC(year, 0, 1 + (week - 1) * 7));
-    const dayOfWeek = simple.getUTCDay();
-    const monday = new Date(simple);
-    if (dayOfWeek <= 4) {
-        monday.setUTCDate(simple.getUTCDate() - simple.getUTCDay() + 1);
-    } else {
-        monday.setUTCDate(simple.getUTCDate() + (8 - simple.getUTCDay()));
-    }
-
-    const sunday = new Date(monday);
-    sunday.setUTCDate(monday.getUTCDate() + 6);
-
-    const toIsoDate = (date) => {
-        const y = date.getUTCFullYear();
-        const m = String(date.getUTCMonth() + 1).padStart(2, '0');
-        const d = String(date.getUTCDate()).padStart(2, '0');
-        return `${y}-${m}-${d}`;
-    };
-
-    return {
-        fromDate: toIsoDate(monday),
-        toDate: toIsoDate(sunday)
-    };
-}
-
-function resetPaymentHistoryFilter() {
-    document.getElementById('historyNameSearch').value = '';
-    document.getElementById('historyPeriodFilter').value = 'all';
-    document.getElementById('historyDateFilter').value = '';
-    document.getElementById('historyWeekFilter').value = '';
-    document.getElementById('historyMonthFilter').value = '';
-    togglePaymentHistoryInputs();
-    loadPaymentHistory();
-}
-
-function loadPaymentHistory() {
-    const keyword = document.getElementById('historyNameSearch').value.trim();
-    const period = document.getElementById('historyPeriodFilter').value;
-    const selectedDate = document.getElementById('historyDateFilter').value;
-    const selectedWeek = document.getElementById('historyWeekFilter').value;
-    const selectedMonth = document.getElementById('historyMonthFilter').value;
-    const historyBox = document.getElementById('paymentHistoryList');
-
-    const params = new URLSearchParams();
-    params.set('status', 'PAID');
-    if (keyword) params.set('search', keyword);
-
-    if (period === 'date') {
-        if (!selectedDate) {
-            historyBox.innerHTML = '<div style="padding:16px">Vui lòng chọn ngày cần lọc.</div>';
-            paymentHistoryModal.style.display = 'flex';
-            return;
-        }
-        params.set('period', 'date');
-        params.set('date', selectedDate);
-    } else if (period === 'month') {
-        if (!selectedMonth) {
-            historyBox.innerHTML = '<div style="padding:16px">Vui lòng chọn tháng cần lọc.</div>';
-            paymentHistoryModal.style.display = 'flex';
-            return;
-        }
-        params.set('period', 'month');
-        params.set('month', selectedMonth);
-    } else if (period === 'week') {
-        const weekRange = getWeekDateRange(selectedWeek);
-        if (!weekRange) {
-            historyBox.innerHTML = '<div style="padding:16px">Vui lòng chọn tuần cần lọc.</div>';
-            paymentHistoryModal.style.display = 'flex';
-            return;
-        }
-        params.set('period', 'all');
-        params.set('fromDate', weekRange.fromDate);
-        params.set('toDate', weekRange.toDate);
-    } else {
-        params.set('period', 'all');
-    }
-
-    const url = `${API_BASE}/api/payments/history?${params.toString()}`;
-    historyBox.innerHTML = '<div style="padding: 16px">Đang tải...</div>';
-    paymentHistoryModal.style.display = 'flex';
-
-    fetch(url)
-        .then(res => res.json())
-        .then(rows => {
-            if (!rows || rows.length === 0) {
-                historyBox.innerHTML = '<div style="padding:16px">Không tìm thấy lịch sử thanh toán phù hợp bộ lọc.</div>';
-                return;
-            }
-
-            const toDateOnly = (value) => {
-                if (!value) return '-';
-                const s = String(value).replace(' ', 'T');
-                const d = new Date(/[Zz]$|[+\-]\d{2}:\d{2}$/.test(s) ? s : s + 'Z');
-                return isNaN(d) ? String(value) : d.toLocaleDateString('vi-VN');
-            };
-            const statusMap = {
-                PAID:      { cls: 'paid',      label: '✓ Đã thanh toán' },
-                PENDING:   { cls: 'pending',   label: '⏳ Đang chờ' },
-                CANCELLED: { cls: 'cancelled', label: '✗ Đã huỷ' },
-                EXPIRED:   { cls: 'expired',   label: '⌛ Hết hạn' }
-            };
-            let html = '<div class="history-simple-list">';
-            rows.forEach((row) => {
-                const paidDate = toDateOnly(row.latest_paid_at || row.request_updated_at || row.request_created_at);
-                const amount = AppUtils.formatCurrency(row.paid_amount || row.request_amount || 0);
-                const statusKey = String(row.request_status || 'PENDING').toUpperCase();
-                const { cls, label } = statusMap[statusKey] || { cls: 'pending', label: statusKey };
-                html += `
-                    <div class="history-simple-item">
-                        <div class="history-simple-top">
-                            <span class="history-simple-name">${escapeHtml(row.customer_name)}</span>
-                            <span class="history-simple-status hss-${cls}">${label}</span>
-                        </div>
-                        <div class="history-simple-bottom">
-                            <span class="history-simple-meta">${paidDate}</span>
-                            <span class="history-simple-amount">${amount}</span>
-                        </div>
-                    </div>`;
-            });
-            html += '</div>';
-            historyBox.innerHTML = html;
-        })
-        .catch(err => {
-            historyBox.innerHTML = `<div style="padding:16px;color:#9b3f3f">Lỗi tải lịch sử: ${err.message}</div>`;
-        });
-}
 
 // =============================================
 // Promo Code Check
@@ -1316,9 +1063,6 @@ window.addEventListener('click', (e) => {
     }
     if (e.target === paymentQrModal) {
         paymentQrModal.style.display = 'none';
-    }
-    if (e.target === paymentHistoryModal) {
-        paymentHistoryModal.style.display = 'none';
     }
     if (e.target === feedbackModal) {
         feedbackModal.style.display = 'none';
@@ -1567,10 +1311,10 @@ function renderCustomerOrderList() {
             : action === 'deleted' ? `<p class="order-change-note order-change-deleted">Đã xóa lúc ${escapeHtml(AppUtils.formatDateTime(order.change_at))}</p>` : '';
         return `<div class="order-item customer-order-row ${deleted ? 'order-item-deleted' : ''} ${action === 'edited' ? 'order-item-edited' : ''}">
             <span class="customer-order-number">${number}</span>
-            <div class="order-info"><div class="customer-order-heading"><h4>${escapeHtml(order.name)}</h4><span class="customer-order-quantity">${Number(order.quantity)} suất</span></div>
+            <div class="order-info"><div class="customer-order-heading"><h4>${escapeHtml(order.name)}</h4><span class="customer-order-quantity ${Number(order.quantity) > 1 ? 'quantity-multiple' : ''}">${Number(order.quantity)} suất</span></div>
                 ${disc > 0 ? `<span class="discount-badge">Giảm ${disc}% / 1 suất</span>` : ''}
                 ${order.description ? `<p class="customer-order-note">${escapeHtml(order.description)}</p>` : ''}
-                ${changeNote}<p class="order-time">${escapeHtml(AppUtils.formatDateTime(order.created_at))}</p>
+                ${changeNote || `<p class="order-time">${escapeHtml(AppUtils.formatDateTime(order.created_at))}</p>`}
                 ${owner ? `<div class="order-actions"><button class="btn-edit-order" data-id="${order.id}" data-quantity="${order.quantity}" data-description="${escapeAttr(order.description || '')}">Sửa</button><button class="btn-delete-order" data-id="${order.id}">Xóa</button></div>` : ''}
             </div></div>`;
     }).join('') : '<div class="customer-list-empty">Không có suất cơm phù hợp.</div>';
@@ -1692,7 +1436,6 @@ document.getElementById('ordersList').addEventListener('click', async (e) => {
 checkUserAuth();
 handlePaymentReturn();
 loadTodayInfo();
-togglePaymentHistoryInputs();
 loadCustomerNameSuggestions();
 updateFeedbackCounter();
 setInterval(loadTodayInfo, 5000); // Refresh every 5 seconds

@@ -1843,6 +1843,37 @@ class Database {
     );
   }
 
+  getCustomerPaymentOverview(name, callback) {
+    this.resolveCustomerName(name, (resolveErr, customerName) => {
+      if (resolveErr) return callback(resolveErr);
+      this.getCustomerFullOrderHistory(customerName, (historyErr, history) => {
+        if (historyErr) return callback(historyErr);
+        this.db.all(`SELECT o.id, d.date, o.quantity, o.description, o.promo_code, o.discount_percent
+          FROM orders o JOIN days d ON d.id = o.day_id WHERE LOWER(o.name) = LOWER(?)
+          ORDER BY d.date DESC, o.id DESC`, [customerName], (ordersErr, orders = []) => {
+          if (ordersErr) return callback(ordersErr);
+          this.db.all(`SELECT id, amount, transaction_date, created_at FROM payment_transactions
+            WHERE LOWER(customer_name) = LOWER(?) AND status = 'PAID'
+            ORDER BY created_at DESC, id DESC`, [customerName], (paymentsErr, payments = []) => {
+            if (paymentsErr) return callback(paymentsErr);
+            const paid = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+            const byDate = new Map();
+            for (const order of orders) {
+              if (!byDate.has(order.date)) byDate.set(order.date, []);
+              byDate.get(order.date).push(order);
+            }
+            callback(null, { name: customerName,
+              summary: { totalServings: history.totalOrders, totalAmount: history.totalAmount,
+                paidAmount: paid, remainingAmount: history.totalRemaining, creditAmount: Math.max(0, paid - history.totalAmount) },
+              orders: history.rows.map((row) => ({ ...row, items: byDate.get(row.date) || [] })),
+              payments: payments.map((row) => ({ id: row.id, amount: Number(row.amount), date: row.transaction_date || row.created_at }))
+            });
+          });
+        });
+      });
+    });
+  }
+
   getPaymentHistory(filters, callback) {
     let normalizedFilters = filters;
     if (typeof normalizedFilters === 'function') {

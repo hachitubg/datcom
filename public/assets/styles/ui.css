@@ -1,5 +1,6 @@
 /* Corrections shared by the existing public and admin layouts. */
 :root { --radius-md: 8px; --radius-xl: 8px; --radius-full: 8px; --ui-border: #ded2cb; --ui-focus: #a87e68; }
+[hidden] { display: none !important; }
 button, input, select, textarea { font-family: inherit; }
 button, a { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 h1, h2, h3, button, label, .hero-title, .section-subtitle { letter-spacing: 0; }
@@ -248,6 +249,8 @@ body.ui-modal-open { overflow: hidden; }
 .customer-order-row:hover { background: #fff; box-shadow: none; }
 .customer-order-row.order-item-edited { border-left: 3px solid #ac7f4e; background: #fffaf3; }
 .customer-order-row.order-item-deleted { border-left: 3px solid #ab6659; background: #fff4f1; }
+.customer-order-row.order-item-edited, .customer-order-row.order-item-deleted { border-left: 1px solid var(--ui-border); }
+.quantity-multiple, .kitchen-quantity.quantity-multiple { display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 5px; background: var(--secondary-container); color: var(--primary); font-weight: 700; }
 .customer-order-number { width: 25px; height: 25px; flex: 0 0 25px; display: grid; place-items: center; border-radius: 5px; background: var(--surface-container-low); color: var(--on-surface-variant); font-size: .7rem; }
 .customer-order-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .customer-order-row .order-info { flex: 1 1 0; min-width: 0; text-align: left; }
@@ -312,4 +315,54 @@ body.ui-modal-open { overflow: hidden; }
     #paymentModal .payment-toolbar-actions { width: 100%; }
     #paymentModal .payment-toolbar-actions button { flex: 1; }
     .promo-picker-button { font-size: 16px; }
+}
+
+#paymentAccountPanel { margin-bottom: 14px; font-weight: 600; color: var(--primary); font-size: .9rem; }
+.payment-hub-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-bottom: 18px; }
+.payment-hub-tabs button { border: 1px solid var(--ui-border); background: #fff; border-radius: 6px; padding: 9px 6px; min-height: 42px; font-size: .75rem; color: var(--primary); line-height: 1.4; }
+.payment-hub-tabs button.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.payment-balance { text-align: center; padding: 18px 12px; background: var(--surface-container-low); border-radius: 8px; }
+.payment-balance > span { display: block; font-size: .8rem; color: var(--on-surface-variant); }
+.payment-balance > strong { display: block; margin-top: 4px; color: var(--primary); font-size: 1.8rem; }
+.payment-balance p { font-size: .8rem; color: #406343; margin-top: 6px; }
+.payment-totals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding: 18px 0; border-bottom: 1px solid var(--ui-border); }
+.payment-totals > span { font-size: .7rem; color: var(--on-surface-variant); text-align: center; }
+.payment-totals strong { display: block; color: var(--primary); margin-top: 5px; font-size: .85rem; overflow-wrap: anywhere; }
+.payment-account-actions { padding: 18px 0 5px; text-align: center; }
+.payment-account-actions button { width: 100%; min-height: 46px; font-size: .88rem; border: 0; border-radius: 8px; }
+.payment-help { font-size: .73rem; color: var(--on-surface-variant); line-height: 1.6; margin: 12px 0; }
+.payment-customer-title { font-size: 1rem; margin: 0 0 14px; color: var(--primary); }
+.payment-history-filter { display: flex; align-items: flex-end; gap: 8px; margin: 0 0 14px; }
+.payment-history-filter label { flex: 1; min-width: 0; text-transform: none; font-size: .75rem; }
+.payment-history-filter input { display: block; margin-top: 6px; width: 100%; padding: 10px; }
+.payment-history-filter button { font-size: .75rem; padding: 9px 14px; flex-shrink: 0; }
+.payment-day-row { padding: 14px 0; border-bottom: 1px solid var(--ui-border); }
+.payment-day-heading, .payment-day-money { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.payment-day-heading { font-size: .85rem; }
+.payment-day-money { margin-top: 9px; font-size: .74rem; align-items: flex-start; flex-wrap: wrap; }
+.payment-day-note { color: var(--on-surface-variant); line-height: 1.6; font-size: .74rem; margin-top: 7px; overflow-wrap: anywhere; }
+.payment-day-debt { color: var(--primary); font-size: .74rem; margin-top: 7px; }
+.settled { color: #406343; font-size: .8rem; }
+.has-debt { color: #9b4738; }
+.payment-history-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; padding: 15px 0; border-bottom: 1px solid var(--ui-border); font-size: .8rem; }
+.payment-history-row small { display: block; margin-top: 5px; color: #406343; }
+.payment-history-row > strong { white-space: nowrap; color: var(--primary); }
+.payment-paging { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 16px 0 0; }
+.payment-paging span { font-size: .72rem; color: var(--on-surface-variant); }
+.payment-paging button { min-height: 38px; padding: 8px 13px; font-size: .75rem; }
+#promos .promo-create-grid { display: grid; grid-template-columns: 140px minmax(0, 1fr); align-items: start; gap: 16px; }
+#promos .promo-discount-field, #promos .promo-recipient-field { grid-area: auto; min-width: 0; width: auto; }
+.recipient-picker { min-width: 0; }
+.recipient-dropdown { padding: 8px; margin-top: 6px; background: #fff; border: 1px solid var(--ui-border); border-radius: 8px; }
+.recipient-dropdown[hidden] { display: none !important; }
+.recipient-dropdown input { width: 100%; padding: 10px; margin-bottom: 6px; }
+.recipient-options { max-height: 230px; overflow-y: auto; }
+.recipient-option { display: block; width: 100%; text-align: left; min-height: 44px; padding: 10px; border: 0; border-radius: 5px; background: #fff; font-size: .8rem; line-height: 1.5; }
+.recipient-option strong, .recipient-option small { display: block; }
+.recipient-option small { color: var(--on-surface-variant); margin-top: 3px; font-size: .72rem; }
+.recipient-option:hover, .recipient-option.selected { background: var(--secondary-container); color: var(--primary); }
+@media (max-width: 600px) {
+    #promos .promo-create-grid { grid-template-columns: 1fr; gap: 14px; }
+    .payment-hub-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .payment-totals strong { font-size: .78rem; }
 }
