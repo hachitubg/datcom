@@ -2108,10 +2108,9 @@ app.post('/api/game/score', (req, res) => {
   getUserSessionInfo(req, (err, user) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!user) return res.status(401).json({ error: 'Chưa đăng nhập' });
-    const score = parseInt(req.body.score, 10) || 0;
-    const level = parseInt(req.body.level, 10) || 1;
-    const caught = parseInt(req.body.caught, 10) || 0;
-    if (score < 0 || level < 1 || level > 10 || caught < 0) {
+    const { score, level, caught } = req.body;
+    if (![score, level, caught].every(Number.isSafeInteger) ||
+        score < 0 || level < 1 || level > 10 || caught < 0) {
       return res.status(400).json({ error: 'Dữ liệu không hợp lệ' });
     }
     db.saveGameScore(user.id, score, level, caught, (err2, result) => {
