@@ -52,14 +52,21 @@
 
   // SQLite lưu CURRENT_TIMESTAMP theo UTC (không có ký hiệu timezone).
   // PayOS có thể trả về chuỗi đã có timezone (+07:00 hoặc Z).
-  // Hàm này xử lý cả hai trường hợp: nếu chưa có timezone thì coi là UTC rồi convert sang giờ địa phương.
+  // Timestamps are stored as UTC and always displayed in Vietnam time.
+  function getVietnamDate(date = new Date()) {
+    const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit'
+    }).formatToParts(date).map((part) => [part.type, part.value]));
+    return `${parts.year}-${parts.month}-${parts.day}`;
+  }
   function formatDateTime(value) {
     if (!value) return '-';
     const normalized = String(value).replace(' ', 'T');
     const hasTimezone = /[Zz]$|[+\-]\d{2}:\d{2}$/.test(normalized);
     const date = new Date(hasTimezone ? normalized : normalized + 'Z');
     if (Number.isNaN(date.getTime())) return String(value);
-    return date.toLocaleDateString('vi-VN') + ' ' + date.toLocaleTimeString('vi-VN');
+    return date.toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) + ' '
+      + date.toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour12: false });
   }
 
   // Custom Popup System (replaces alert/confirm/prompt)
@@ -143,6 +150,7 @@
   global.showPopup = showPopup;
 
   global.AppUtils = {
+    getVietnamDate,
     normalizeName,
     fetchJson,
     formatCurrency,

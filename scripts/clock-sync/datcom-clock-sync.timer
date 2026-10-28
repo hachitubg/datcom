@@ -1,0 +1,11 @@
+[Unit]
+Description=Check Datcom server clock every five minutes
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=5min
+AccuracySec=5s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

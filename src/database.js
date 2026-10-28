@@ -1,6 +1,7 @@
 const sqlite3 = require('sqlite3').verbose();
 const fs = require('fs');
 const path = require('path');
+const { vietnamDate } = require('./time');
 
 class Database {
   constructor(dbPath = path.join(__dirname, '../datcom.db'), options = {}) {
@@ -216,10 +217,7 @@ class Database {
   }
 
   getDateString(date = new Date()) {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    return vietnamDate(date);
   }
 
   getSearchKey(value) {
@@ -1910,7 +1908,8 @@ class Database {
     const params = [];
 
     if (period === 'today') {
-      whereClauses.push("d.date = DATE('now', 'localtime')");
+      whereClauses.push('d.date = ?');
+      params.push(this.getDateString());
     } else if (period === 'date' && selectedDate) {
       whereClauses.push('d.date = ?');
       params.push(selectedDate);
@@ -3347,8 +3346,7 @@ class Database {
     }
 
     if (!/^\d{4}-\d{2}$/.test(selectedMonth)) {
-      const now = new Date();
-      selectedMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      selectedMonth = this.getDateString().slice(0, 7);
     }
 
     // Đếm số ngày phân biệt (distinct) mà mỗi người đặt cơm trong tháng đã chọn

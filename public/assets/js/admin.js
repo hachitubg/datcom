@@ -29,10 +29,7 @@ const escapeHtml = AppUtils.escapeHtml;
 const escapeAttr = AppUtils.escapeAttribute;
 
 function getLocalDateInputValue(date = new Date()) {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    return AppUtils.getVietnamDate(date);
 }
 
 // ===== Tìm kiếm lịch sử theo tên =====
@@ -740,7 +737,7 @@ function switchPaymentView(view) {
         const periodFilter = document.getElementById('paymentPeriodFilter');
         if (periodFilter.value === 'all') {
             const now = new Date();
-            const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+            const currentMonth = AppUtils.getVietnamDate(now).slice(0, 7);
             periodFilter.value = 'month';
             document.getElementById('paymentMonthFilter').value = currentMonth;
             togglePaymentDateInputs();
@@ -1195,8 +1192,9 @@ function closeDayModal() {
 }
 
 function formatDate(dateString) {
-    const date = new Date(dateString + 'T00:00:00');
+    const date = new Date(dateString + 'T00:00:00+07:00');
     return date.toLocaleDateString('vi-VN', { 
+        timeZone: 'Asia/Ho_Chi_Minh',
         weekday: 'long', 
         year: 'numeric', 
         month: 'long', 
@@ -1642,8 +1640,8 @@ function openShopClosureAddModal() {
     const startInput = document.getElementById('closureStartDate');
     const endInput = document.getElementById('closureEndDate');
     if (!startInput.value || !endInput.value) {
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterday = new Date(`${AppUtils.getVietnamDate()}T12:00:00+07:00`);
+        yesterday.setUTCDate(yesterday.getUTCDate() - 1);
         const defaultDate = getLocalDateInputValue(yesterday);
         startInput.value = defaultDate;
         endInput.value = defaultDate;

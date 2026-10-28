@@ -8,6 +8,7 @@ const { AsyncLocalStorage } = require('async_hooks');
 const Database = require('./database');
 const PayOSService = require('./payos');
 const SiteRegistry = require('./site-registry');
+const { TIME_ZONE, getOrderCutoffInfo } = require('./time');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -398,21 +399,6 @@ function normalizeName(name) {
 function normalizeCutoffTime(value) {
   const raw = String(value || '').trim();
   return /^([01]\d|2[0-3]):([0-5]\d)$/.test(raw) ? raw : '10:45';
-}
-
-function getOrderCutoffInfo(cutoffTime, now = new Date()) {
-  const normalized = normalizeCutoffTime(cutoffTime);
-  const [hours, minutes] = normalized.split(':').map(Number);
-  const cutoff = new Date(now);
-  cutoff.setHours(hours, minutes, 0, 0);
-
-  const remainingSeconds = Math.max(0, Math.floor((cutoff.getTime() - now.getTime()) / 1000));
-  return {
-    cutoffTime: normalized,
-    cutoffAt: cutoff.toISOString(),
-    isOrderClosed: now.getTime() >= cutoff.getTime(),
-    remainingSeconds
-  };
 }
 
 function buildOrderCode() {
@@ -828,6 +814,8 @@ app.get('/api/today', (req, res) => {
         res.json({
           ...data,
           orderCutoffTime: cutoffTime,
+          timeZone: TIME_ZONE,
+          serverTime: new Date().toISOString(),
           orderCutoff: getOrderCutoffInfo(cutoffTime),
           shopClosed
         });

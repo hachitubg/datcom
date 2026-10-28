@@ -1,0 +1,15 @@
+[Unit]
+Description=Datcom HTTPS clock synchronization fallback
+Wants=network-online.target
+After=network-online.target chrony.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/node /usr/local/lib/datcom-clock/sync-system-clock.cjs
+TimeoutStartSec=30
+User=root
+NoNewPrivileges=true
+CapabilityBoundingSet=CAP_SYS_TIME
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true

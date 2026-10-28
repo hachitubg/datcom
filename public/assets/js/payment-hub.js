@@ -39,7 +39,7 @@
         const raw = String(value || '').replace(' ', 'T');
         const date = new Date(/[Zz]$|[+\-]\d{2}:\d{2}$/.test(raw) ? raw : `${raw}Z`);
         if (Number.isNaN(date.getTime())) return raw;
-        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        return AppUtils.getVietnamDate(date);
     }
     function orderRow(row) {
         const label = row.paymentStatus === 'PAID' ? 'Đã thanh toán' : row.paymentStatus === 'PARTIAL' ? 'Thanh toán một phần' : 'Chưa thanh toán';
